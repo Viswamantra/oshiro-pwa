@@ -1,0 +1,7 @@
+{
+  "name": "Oshiro PWA",
+  "short_name": "Oshiro",
+  "start_url": "/",
+  "display": "standalone",
+  "icons": []
+}
