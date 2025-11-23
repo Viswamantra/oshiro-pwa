@@ -4,12 +4,12 @@ importScripts("https://www.gstatic.com/firebasejs/9.6.10/firebase-messaging-comp
 
 // Your Firebase config
 firebase.initializeApp({
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID",
+  apiKey: "AIzaSyBekN6ULTaosrBQzv-JvBlnMcCOMXZ-_JU",
+  authDomain: "oshiro-app.firebaseapp.com",
+  projectId: "oshiro-app",
+  storageBucket: "oshiro-app.firebasestorage.app",
+  messagingSenderId: "1066886336420",
+  appId: "1:1066886336420:web:458379909954c206917b31",
 });
 
 // Background message handler
@@ -18,6 +18,6 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   self.registration.showNotification(payload.notification.title, {
     body: payload.notification.body,
-    icon: "/icons/icon-192x192.png",
+    icon: "/icons/icon-192.png", // make sure this file exists
   });
 });
