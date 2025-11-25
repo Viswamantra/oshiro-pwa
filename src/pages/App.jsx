@@ -1,9 +1,10 @@
-function App() {
-  return (
-    <div>
-      <h1>Oshiro PWA Running</h1>
-         </div>
-  );
-}
+import NotificationPanel from "../NotificationPanel";
 
-export default App;
+export default function App(){
+  return (
+    <div style={{padding:20}}>
+      <h1>Oshiro PWA Running</h1>
+      <NotificationPanel />
+    </div>
+  )
+}
