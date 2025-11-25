@@ -1,5 +1,3 @@
-import NotificationPanel from "./NotificationPanel";
-
 function App() {
   return (
     <div>
