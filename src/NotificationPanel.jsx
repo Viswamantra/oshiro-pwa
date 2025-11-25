@@ -14,9 +14,8 @@ export default function NotificationPanel() {
         return;
       }
 
-      const fcmToken = await getToken(messaging, {
-        vapidKey: "BB9KB-W0ATzZVQ9maQa4K5N6YvoM-ijK9FP0v-lF_vgFasPRL-3twJ8u9fomV3saPkFTY_Iz6QtfJOEnLFXwhQk",
-      });
+      const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY || "";
+      const fcmToken = await getToken(messaging, { vapidKey });
 
       if (!fcmToken) {
         setError("No FCM token generated");
@@ -26,14 +25,16 @@ export default function NotificationPanel() {
       setToken(fcmToken);
       console.log("FCM Token:", fcmToken);
     } catch (err) {
-      setError("Error getting token: " + err.message);
+      setError("Error getting token: " + (err?.message || String(err)));
     }
   };
 
   useEffect(() => {
     onMessage(messaging, (payload) => {
       console.log("Foreground message:", payload);
-      alert("Notification: " + payload.notification.title);
+      if (payload?.notification?.title) {
+        alert("Notification: " + payload.notification.title);
+      }
     });
   }, []);
 
@@ -59,11 +60,7 @@ export default function NotificationPanel() {
       {token && (
         <>
           <h3>Your FCM Token:</h3>
-          <textarea
-            value={token}
-            readOnly
-            style={{ width: "100%", height: "150px" }}
-          />
+          <textarea value={token} readOnly style={{ width: "100%", height: "150px" }} />
         </>
       )}
 
