@@ -1,13 +1,12 @@
-import { useEffect, useState } from "react";
-import { requestFirebaseToken, onMessageListener } from "./firebase";
-export default function App() {
-  return <h1>Oshiro PWA Running</h1>;
+import NotificationPanel from "./NotificationPanel";
+
+function App() {
+  return (
+    <div>
+      <h1>Oshiro PWA Running</h1>
+      <NotificationPanel />
+    </div>
+  );
 }
-<button
-  onClick={async () => {
-    const token = await requestFirebaseToken();
-    alert("Your token:\n" + token);
-  }}
->
-  Enable Notifications
-</button>
+
+export default App;
