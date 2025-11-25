@@ -1,33 +1,23 @@
-import { initializeApp } from "firebase/app";
-import { getMessaging, getToken, onMessage } from "firebase/messaging";
+importScripts('https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/9.6.10/firebase-messaging-compat.js');
 
-const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID",
-};
+// Initialize Firebase in SW
+firebase.initializeApp({
+  apiKey: "AIzaSyBekN6ULTaosrBQzv-JvBlnMcCOMXZ-_JU",
+  authDomain: "oshiro-app.firebaseapp.com",
+  projectId: "oshiro-app",
+  storageBucket: "oshiro-app.firebasestorage.app",
+  messagingSenderId: "1066886336420",
+  appId: "1:1066886336420:web:458379909954c206917b31"
+});
 
-const app = initializeApp(firebaseConfig);
-const messaging = getMessaging(app);
+const messaging = firebase.messaging();
 
-export const requestFirebaseToken = async () => {
-  try {
-    const token = await getToken(messaging, {
-      vapidKey: "YOUR_VAPID_KEY",
-    });
-    console.log("FCM Token:", token);
-    return token;
-  } catch (err) {
-    console.error("Token Error:", err);
-  }
-};
-
-export const onMessageListener = () =>
-  new Promise((resolve) => {
-    onMessage(messaging, (payload) => {
-      resolve(payload);
-    });
-  });
+messaging.onBackgroundMessage((payload) => {
+  const title = (payload && payload.notification && payload.notification.title) || 'Oshiro';
+  const options = {
+    body: (payload && payload.notification && payload.notification.body) || '',
+    icon: '/icons/icon-192.png'
+  };
+  self.registration.showNotification(title, options);
+});
