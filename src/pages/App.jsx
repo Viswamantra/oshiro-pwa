@@ -2,8 +2,7 @@ function App() {
   return (
     <div>
       <h1>Oshiro PWA Running</h1>
-      <NotificationPanel />
-    </div>
+         </div>
   );
 }
 
