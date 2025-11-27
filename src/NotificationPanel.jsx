@@ -1,70 +1,66 @@
-import { useState, useEffect } from "react";
-import { getToken, onMessage } from "firebase/messaging";
-import { messaging } from "./firebase";
+// src/NotificationPanel.jsx
+import React, { useState, useEffect } from "react";
+import { getMessaging, getToken, onMessage } from "firebase/messaging";
+import { initializeApp } from "firebase/app";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBekN6ULTaosrBQzv-JvBlnMcCOMXZ-_JU",
+  authDomain: "oshiro-app.firebaseapp.com",
+  projectId: "oshiro-app",
+  storageBucket: "oshiro-app.firebasestorage.app",
+  messagingSenderId: "1066886336420",
+  appId: "1:1066886336420:web:458379909954c206917b31"
+};
+
+const app = initializeApp(firebaseConfig);
+const messaging = getMessaging(app);
 
 export default function NotificationPanel() {
   const [token, setToken] = useState("");
-  const [error, setError] = useState("");
-
-  const requestPermission = async () => {
-    try {
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") {
-        setError("Notification permission denied");
-        return;
-      }
-
-      const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY || "";
-      const fcmToken = await getToken(messaging, { vapidKey });
-
-      if (!fcmToken) {
-        setError("No FCM token generated");
-        return;
-      }
-
-      setToken(fcmToken);
-      console.log("FCM Token:", fcmToken);
-    } catch (err) {
-      setError("Error getting token: " + (err?.message || String(err)));
-    }
-  };
+  const [messages, setMessages] = useState([]);
 
   useEffect(() => {
-    onMessage(messaging, (payload) => {
-      console.log("Foreground message:", payload);
-      if (payload?.notification?.title) {
-        alert("Notification: " + payload.notification.title);
+    // Request permission
+    Notification.requestPermission().then(async (status) => {
+      if (status === "granted") {
+        try {
+          const currentToken = await getToken(messaging, {
+            vapidKey:
+              "BDWXe8Zg_7QgJT8l6m-ZB9P0F3TrchdNVUOmWM1qfH0hFgezGOKiDqV6XT4FnGCFNXpE51Q8KiOkW1pEMRkEo8g",
+          });
+          setToken(currentToken);
+        } catch (error) {
+          console.error("Token error:", error);
+        }
       }
+    });
+
+    // Foreground messages
+    onMessage(messaging, (payload) => {
+      setMessages((prev) => [...prev, payload.notification]);
     });
   }, []);
 
   return (
     <div style={{ padding: 20 }}>
-      <h2>Enable Notifications</h2>
+      <h2>Firebase Push Notifications</h2>
 
-      <button
-        onClick={requestPermission}
-        style={{
-          padding: "10px 20px",
-          background: "#0084ff",
-          color: "white",
-          border: "none",
-          borderRadius: "6px",
-          cursor: "pointer",
-          marginBottom: "20px",
-        }}
-      >
-        Get Notification Token
-      </button>
+      <h4>Your FCM Token:</h4>
+      <textarea
+        value={token}
+        readOnly
+        rows={3}
+        style={{ width: "100%" }}
+      />
 
-      {token && (
-        <>
-          <h3>Your FCM Token:</h3>
-          <textarea value={token} readOnly style={{ width: "100%", height: "150px" }} />
-        </>
-      )}
-
-      {error && <p style={{ color: "red" }}>{error}</p>}
+      <h4>Incoming Messages:</h4>
+      <ul>
+        {messages.map((msg, i) => (
+          <li key={i}>
+            <b>{msg.title}</b> — {msg.body}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
