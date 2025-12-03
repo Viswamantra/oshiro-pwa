@@ -1,26 +1,57 @@
 // src/App.jsx
-import React from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+
+import Login from "./pages/Login.jsx";
 import HomeScreen from "./pages/HomeScreen.jsx";
 import MerchantDashboard from "./pages/MerchantDashboard.jsx";
-import HeaderBar from "./components/layout/HeaderBar.jsx";
-import BottomNav from "./components/layout/BottomNav.jsx";
+import AdminDashboard from "./pages/AdminDashboard.jsx";
+
+// Simple helper
+const getRole = () => localStorage.getItem("logged_role");
 
 function App() {
+  const role = getRole();
+
   return (
-    <Router>
-      <div className="app-shell">
-        <HeaderBar />
-        <main className="app-main">
-          <Routes>
-            <Route path="/" element={<HomeScreen />} />
-            <Route path="/merchant" element={<MerchantDashboard />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </main>
-        <BottomNav />
-      </div>
-    </Router>
+    <BrowserRouter>
+      <Routes>
+        {/* Default → Login */}
+        <Route path="/" element={<Navigate to="/login" />} />
+
+        <Route path="/login" element={<Login />} />
+
+        {/* Customer Home */}
+        <Route
+          path="/home"
+          element={
+            role === "customer" ? <HomeScreen /> : <Navigate to="/login" />
+          }
+        />
+
+        {/* Merchant */}
+        <Route
+          path="/merchant"
+          element={
+            role === "merchant" ? (
+              <MerchantDashboard />
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+
+        {/* Admin */}
+        <Route
+          path="/admin"
+          element={
+            role === "admin" ? <AdminDashboard /> : <Navigate to="/login" />
+          }
+        />
+
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/login" />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 
