@@ -1,10 +1,19 @@
-import NotificationPanel from "../NotificationPanel";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import HomeScreen from "./pages/HomeScreen.jsx";
+import MerchantDashboard from "./pages/MerchantDashboard.jsx";
 
-export default function App(){
+function App() {
   return (
-    <div style={{padding:20}}>
-      <h1>Oshiro PWA Running</h1>
-      <NotificationPanel />
-    </div>
-  )
+    <BrowserRouter>
+      <Routes>
+        {/* Customer side homepage */}
+        <Route path="/" element={<HomeScreen />} />
+
+        {/* Merchant side */}
+        <Route path="/merchant" element={<MerchantDashboard />} />
+      </Routes>
+    </BrowserRouter>
+  );
 }
+
+export default App;
