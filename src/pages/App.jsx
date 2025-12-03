@@ -6,38 +6,51 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login.jsx";
 import HomeScreen from "./pages/HomeScreen.jsx";
 import MerchantDashboard from "./pages/MerchantDashboard.jsx";
-
-// Optional: simple login check
-function isLoggedIn() {
-  return localStorage.getItem("customer_logged_in") === "true";
-}
+import AdminDashboard from "./pages/AdminDashboard.jsx";
 
 function App() {
+  const role = localStorage.getItem("logged_role");
+
   return (
     <BrowserRouter>
       <Routes>
-        {/* Default route → Login */}
-        <Route path="/" element={<Navigate to="/login" />} />
 
-        {/* Customer Login */}
+        {/* LOGIN */}
         <Route path="/login" element={<Login />} />
 
-        {/* Customer Home (only after login) */}
+        {/* CUSTOMER HOME */}
         <Route
           path="/home"
           element={
-            isLoggedIn() ? (
-              <HomeScreen />
+            role === "customer" ? <HomeScreen /> : <Navigate to="/login" />
+          }
+        />
+
+        {/* MERCHANT DASHBOARD */}
+        <Route
+          path="/merchant"
+          element={
+            role === "merchant" ? (
+              <MerchantDashboard />
             ) : (
-              <Navigate to="/login" replace />
+              <Navigate to="/login" />
             )
           }
         />
 
-        {/* Merchant Panel */}
-        <Route path="/merchant" element={<MerchantDashboard />} />
+        {/* ADMIN DASHBOARD */}
+        <Route
+          path="/admin"
+          element={
+            role === "admin" ? (
+              <AdminDashboard />
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
 
-        {/* If unknown route → send to login */}
+        {/* DEFAULT ROUTE */}
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
     </BrowserRouter>
