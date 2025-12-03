@@ -11,6 +11,9 @@
   "react-dom": "^18.2.0",
   "firebase": "^10.11.0",
   "firebase-admin": "^11.11.1"
+  "leaflet": "^1.9.4",
+  "react-leaflet": "^4.2.1",
+  "react-router-dom": "^6.28.0"
   },
   "devDependencies": {
     "vite": "^5.0.0",
