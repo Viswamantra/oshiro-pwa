@@ -1,43 +1,23 @@
-import { useEffect, useState } from "react";
+// src/pages/AdminDashboard.jsx
 
 function AdminDashboard() {
-  const [customers, setCustomers] = useState([]);
-  const [merchants, setMerchants] = useState([]);
+  const mobile = localStorage.getItem("mobile");
+  const role = localStorage.getItem("role");
 
-  useEffect(() => {
-    // Simulated data
-    setCustomers([
-      { mobile: "8888888888", lastVisit: "02-Dec" },
-      { mobile: "7777777777", lastVisit: "01-Dec" },
-    ]);
-
-    setMerchants([
-      { mobile: "9876543210", shop: "Meghana Textiles" },
-      { mobile: "9123456789", shop: "Sai Tiffins Center" },
-    ]);
-  }, []);
+  if (mobile !== "7386361725" || role !== "admin") {
+    return <h3>Access Denied</h3>;
+  }
 
   return (
-    <div style={{ padding: 16 }}>
+    <div style={{ padding: "20px", fontFamily: "Arial" }}>
       <h2>Admin Dashboard</h2>
+      <p>Logged in as Admin: <b>{mobile}</b></p>
 
       <h3>Customer Records</h3>
-      {customers.map((c, i) => (
-        <div key={i} style={{ borderBottom: "1px solid #ccc" }}>
-          Mobile: {c.mobile} <br />
-          Last Visit: {c.lastVisit}
-        </div>
-      ))}
-
-      <hr />
+      <p>Coming Soon...</p>
 
       <h3>Merchant Records</h3>
-      {merchants.map((m, i) => (
-        <div key={i} style={{ borderBottom: "1px solid #ccc" }}>
-          Merchant Mobile: {m.mobile} <br />
-          Shop Name: {m.shop}
-        </div>
-      ))}
+      <p>Coming Soon...</p>
     </div>
   );
 }
