@@ -1,249 +1,328 @@
 // src/pages/MerchantDashboard.jsx
-import React, { useState } from "react";
 
-const DEFAULT_OTP = "2345";
+import { useEffect, useState } from "react";
+import LogoutBtn from "../components/LogoutBtn";
+import axios from "axios";
+
+import { db } from "../firebase";
+import { collection, addDoc, getDocs, query, where } from "firebase/firestore";
 
 export default function MerchantDashboard() {
   const [mobile, setMobile] = useState("");
-  const [otp, setOtp] = useState("");
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [merchant, setMerchant] = useState(null);
+  const [loading, setLoading] = useState(true);
 
+  // Merchant form fields
+  const [shopName, setShopName] = useState("");
+  const [address, setAddress] = useState("");
+  const [pincode, setPincode] = useState("");
+  const [city, setCity] = useState("");
+  const [stateName, setStateName] = useState("");
   const [radius, setRadius] = useState(300);
+
+  // Offer
   const [offerTitle, setOfferTitle] = useState("");
   const [offerDesc, setOfferDesc] = useState("");
+
   const [log, setLog] = useState([]);
 
-  const handleLogin = (e) => {
-    e.preventDefault();
-    if (mobile.length !== 10) {
-      alert("Enter 10-digit mobile number.");
+  // ----------------------------
+  // SECURITY: Merchant only page
+  // ----------------------------
+  useEffect(() => {
+    const role = localStorage.getItem("logged_role");
+    if (role !== "merchant") {
+      alert("Please login as Merchant");
+      window.location.href = "/";
       return;
     }
-    if (otp !== DEFAULT_OTP) {
-      alert("Invalid OTP. Use 2345 for now.");
-      return;
-    }
-    setIsLoggedIn(true);
-  };
+    const mob = localStorage.getItem("mobile");
+    setMobile(mob);
+    fetchMerchant(mob);
+  }, []);
 
-  const handleCreateOffer = (e) => {
-    e.preventDefault();
-    if (!offerTitle) return;
-    // TODO: send to Firebase
+  // ----------------------------
+  // Fetch merchant record by mobile
+  // ----------------------------
+  async function fetchMerchant(mob) {
+    const qSnap = await getDocs(
+      query(collection(db, "merchants"), where("mobile", "==", mob))
+    );
+
+    if (qSnap.empty) {
+      setMerchant(null);
+      setLoading(false);
+      return;
+    }
+
+    const data = qSnap.docs[0].data();
+    setMerchant({ id: qSnap.docs[0].id, ...data });
+
+    setShopName(data.shopName);
+    setAddress(data.address);
+    setPincode(data.pincode);
+    setCity(data.city);
+    setStateName(data.state);
+    setRadius(data.radius);
+
+    setLoading(false);
+  }
+
+  // ----------------------------
+  // Save Merchant Info
+  // ----------------------------
+  async function saveMerchant() {
+    if (!shopName || !address || !pincode || !city || !stateName) {
+      alert("Fill all fields");
+      return;
+    }
+
+    const fullAddr = `${address}, ${city}, ${stateName}, ${pincode}`;
+
+    try {
+      // Convert Address → GPS
+      const url =
+        "https://nominatim.openstreetmap.org/search?format=json&q=" +
+        encodeURIComponent(fullAddr);
+
+      const res = await axios.get(url);
+
+      if (res.data.length === 0) {
+        alert("Address not found. Try again.");
+        return;
+      }
+
+      const { lat, lon } = res.data[0];
+
+      // Save merchant
+      await addDoc(collection(db, "merchants"), {
+        mobile,
+        shopName,
+        address,
+        pincode,
+        city,
+        state: stateName,
+        lat: parseFloat(lat),
+        lng: parseFloat(lon),
+        radius,
+        offerTitle,
+        offerDesc,
+        createdAt: new Date(),
+      });
+
+      alert("Merchant saved successfully!");
+      fetchMerchant(mobile);
+    } catch (err) {
+      console.error(err);
+      alert("Error while geocoding or saving data.");
+    }
+  }
+
+  // ----------------------------
+  // Save offer to LOG (local only)
+  // ----------------------------
+  function saveOffer() {
+    if (!offerTitle) return alert("Enter offer title");
+
     setLog((prev) => [
       {
         id: Date.now(),
         type: "offer",
         title: offerTitle,
         desc: offerDesc,
-        createdAt: new Date().toLocaleString(),
+        time: new Date().toLocaleString(),
       },
       ...prev,
     ]);
+
+    alert("Offer saved. Will sync to Firebase soon.");
+
     setOfferTitle("");
     setOfferDesc("");
-  };
+  }
 
-  const simulateCustomerEntry = () => {
+  // ----------------------------
+  // Simulate customer geofence entry
+  // ----------------------------
+  function simulateEntry() {
     setLog((prev) => [
       {
         id: Date.now(),
         type: "entry",
-        title: "Customer entered geofence",
-        createdAt: new Date().toLocaleString(),
+        title: "Customer entered your geofence!",
+        time: new Date().toLocaleString(),
       },
       ...prev,
     ]);
-    // TODO: trigger push via /api/sendPush + Firebase
-  };
 
-  if (!isLoggedIn) {
-    return (
-      <div style={{ padding: "0.75rem" }}>
-        <h2 style={{ marginTop: 0 }}>Merchant Login</h2>
-        <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-          <div>
-            <label style={{ fontSize: "0.85rem" }}>Mobile Number</label>
-            <input
-              type="tel"
-              value={mobile}
-              onChange={(e) => setMobile(e.target.value.replace(/\D/g, ""))}
-              maxLength={10}
-              placeholder="10-digit mobile"
-              style={{
-                width: "100%",
-                padding: "0.5rem",
-                borderRadius: "6px",
-                border: "1px solid #ccc",
-              }}
-            />
-          </div>
-          <div>
-            <label style={{ fontSize: "0.85rem" }}>OTP (demo)</label>
-            <input
-              type="password"
-              value={otp}
-              onChange={(e) => setOtp(e.target.value)}
-              maxLength={4}
-              placeholder="Use 2345"
-              style={{
-                width: "100%",
-                padding: "0.5rem",
-                borderRadius: "6px",
-                border: "1px solid #ccc",
-              }}
-            />
-          </div>
-          <button
-            type="submit"
-            style={{
-              padding: "0.6rem",
-              borderRadius: "6px",
-              border: "none",
-              background: "#007AFF",
-              color: "#fff",
-              fontWeight: 600,
-            }}
-          >
-            Login
-          </button>
-        </form>
-      </div>
-    );
+    alert("⚡ Simulated customer geofence entry");
   }
 
+  if (loading) return <p>Loading Dashboard...</p>;
+
   return (
-    <div style={{ padding: "0.75rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-      <h2 style={{ marginTop: 0 }}>Merchant Dashboard</h2>
-      <p style={{ fontSize: "0.85rem", color: "#555" }}>
-        Set your geofence, create instant offers, and see who enters your zone.
+    <div style={{ padding: 14, maxWidth: 520, margin: "0 auto" }}>
+      <LogoutBtn />
+
+      <h2 style={{ marginBottom: 4 }}>Merchant Dashboard</h2>
+      <p style={{ color: "#555" }}>
+        Logged in as <b>{mobile}</b>
       </p>
 
-      {/* Geofence radius */}
+      <hr style={{ margin: "10px 0" }} />
+
+      <h3>Merchant Profile</h3>
+
+      {/* Merchant Form */}
       <div
         style={{
-          padding: "0.75rem",
-          borderRadius: "8px",
-          border: "1px solid #eee",
+          border: "1px solid #ddd",
+          padding: 10,
+          borderRadius: 8,
+          marginBottom: 14,
           background: "#fff",
         }}
       >
-        <div style={{ fontWeight: 600, marginBottom: "0.5rem" }}>Home Boundary Radius</div>
         <input
-          type="range"
-          min={100}
-          max={1000}
-          step={50}
-          value={radius}
-          onChange={(e) => setRadius(Number(e.target.value))}
-          style={{ width: "100%" }}
+          placeholder="Shop Name"
+          value={shopName}
+          onChange={(e) => setShopName(e.target.value)}
+          style={inputStyle}
         />
-        <div style={{ fontSize: "0.85rem", marginTop: "0.25rem" }}>{radius} meters</div>
-        <div style={{ fontSize: "0.75rem", color: "#777", marginTop: "0.25rem" }}>
-          (Map integration to show circle can be wired to this radius.)
+
+        <textarea
+          placeholder="Full Address"
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          style={inputStyle}
+        />
+
+        <input
+          placeholder="City"
+          value={city}
+          onChange={(e) => setCity(e.target.value)}
+          style={inputStyle}
+        />
+
+        <input
+          placeholder="State"
+          value={stateName}
+          onChange={(e) => setStateName(e.target.value)}
+          style={inputStyle}
+        />
+
+        <input
+          placeholder="Pincode"
+          value={pincode}
+          maxLength={6}
+          onChange={(e) => setPincode(e.target.value.replace(/\D/g, ""))}
+          style={inputStyle}
+        />
+
+        {/* Geofence slider */}
+        <div>
+          <label>
+            Geofence Radius: <b>{radius} m</b>
+          </label>
+          <input
+            type="range"
+            min="100"
+            max="1000"
+            step="50"
+            value={radius}
+            style={{ width: "100%" }}
+            onChange={(e) => setRadius(Number(e.target.value))}
+          />
         </div>
+
+        <button style={saveBtn} onClick={saveMerchant}>
+          Save Merchant Details & Location
+        </button>
       </div>
 
       {/* Offer creation */}
-      <form
-        onSubmit={handleCreateOffer}
-        style={{
-          padding: "0.75rem",
-          borderRadius: "8px",
-          border: "1px solid #eee",
-          background: "#fff",
-          display: "flex",
-          flexDirection: "column",
-          gap: "0.5rem",
-        }}
-      >
-        <div style={{ fontWeight: 600 }}>Create Instant Offer</div>
-        <input
-          type="text"
-          value={offerTitle}
-          onChange={(e) => setOfferTitle(e.target.value)}
-          placeholder="Offer title (e.g., 30% off lunch)"
-          style={{
-            width: "100%",
-            padding: "0.5rem",
-            borderRadius: "6px",
-            border: "1px solid #ccc",
-          }}
-        />
-        <textarea
-          value={offerDesc}
-          onChange={(e) => setOfferDesc(e.target.value)}
-          placeholder="Offer details"
-          rows={3}
-          style={{
-            width: "100%",
-            padding: "0.5rem",
-            borderRadius: "6px",
-            border: "1px solid #ccc",
-            resize: "vertical",
-          }}
-        />
-        <button
-          type="submit"
-          style={{
-            padding: "0.6rem",
-            borderRadius: "6px",
-            border: "none",
-            background: "#28A745",
-            color: "#fff",
-            fontWeight: 600,
-          }}
-        >
-          Save & Push Offer (hook to Firebase later)
-        </button>
-      </form>
+      <h3>Create Offer</h3>
 
-      {/* Simulate geofence entry + push */}
-      <button
-        type="button"
-        onClick={simulateCustomerEntry}
-        style={{
-          padding: "0.6rem",
-          borderRadius: "6px",
-          border: "none",
-          background: "#FF9500",
-          color: "#fff",
-          fontWeight: 600,
-        }}
-      >
-        Simulate Customer Entering Geofence
-      </button>
-
-      {/* Activity log */}
       <div
         style={{
-          padding: "0.75rem",
-          borderRadius: "8px",
-          border: "1px solid #eee",
+          border: "1px solid #ddd",
+          padding: 10,
+          borderRadius: 8,
+          marginBottom: 12,
           background: "#fff",
         }}
       >
-        <div style={{ fontWeight: 600, marginBottom: "0.5rem" }}>Activity</div>
-        {log.length === 0 && (
-          <div style={{ fontSize: "0.85rem", color: "#777" }}>No activity yet.</div>
-        )}
-        {log.map((item) => (
-          <div
-            key={item.id}
-            style={{
-              padding: "0.4rem 0",
-              borderBottom: "1px solid #f5f5f5",
-              fontSize: "0.85rem",
-            }}
-          >
-            <strong>[{item.type}]</strong> {item.title}
-            <div style={{ fontSize: "0.75rem", color: "#777" }}>{item.createdAt}</div>
-            {item.desc && (
-              <div style={{ fontSize: "0.8rem", color: "#555" }}>{item.desc}</div>
-            )}
-          </div>
-        ))}
+        <input
+          placeholder="Offer Title"
+          value={offerTitle}
+          onChange={(e) => setOfferTitle(e.target.value)}
+          style={inputStyle}
+        />
+
+        <textarea
+          placeholder="Offer Description"
+          rows={3}
+          value={offerDesc}
+          onChange={(e) => setOfferDesc(e.target.value)}
+          style={inputStyle}
+        />
+
+        <button style={offerBtn} onClick={saveOffer}>
+          Save Offer
+        </button>
       </div>
+
+      <button onClick={simulateEntry} style={entryBtn}>
+        Simulate Customer Entry
+      </button>
+
+      {/* Activity Log */}
+      <h3 style={{ marginTop: 18 }}>Activity Log</h3>
+      {!log.length && <p>No logs yet</p>}
+
+      {log.map((l) => (
+        <div
+          key={l.id}
+          style={{
+            background: "#fafafa",
+            border: "1px solid #eee",
+            padding: 8,
+            borderRadius: 6,
+            marginBottom: 6,
+          }}
+        >
+          <b>[{l.type}]</b> {l.title}
+          <div style={{ fontSize: 12, color: "#666" }}>{l.time}</div>
+          {l.desc && <div style={{ fontSize: 13 }}>{l.desc}</div>}
+        </div>
+      ))}
     </div>
   );
 }
+
+// STYLES
+const inputStyle = {
+  padding: 8,
+  borderRadius: 6,
+  width: "100%",
+  marginBottom: 8,
+  border: "1px solid #ccc",
+};
+
+const saveBtn = {
+  padding: "8px 14px",
+  background: "#007AFF",
+  color: "#fff",
+  borderRadius: 6,
+  border: "none",
+  width: "100%",
+  marginTop: 8,
+};
+
+const offerBtn = {
+  padding: "8px 14px",
+  background: "green",
+  color: "#fff",
+  borderRadius: 6,
+  border: "none",
+  width
