@@ -219,5 +219,22 @@ function HomeScreen() {
     </div>
   );
 }
+<button
+  style={{
+    padding: "6px 12px",
+    margin: "10px 0",
+    background: "#ff4d4d",
+    color: "#fff",
+    borderRadius: "6px",
+    border: "none",
+    cursor: "pointer"
+  }}
+  onClick={() => {
+    localStorage.clear();
+    window.location.href = "/";
+  }}
+>
+  Logout
+</button>
 
 export default HomeScreen;
