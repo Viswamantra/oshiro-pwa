@@ -325,4 +325,17 @@ const offerBtn = {
   color: "#fff",
   borderRadius: 6,
   border: "none",
-  width
+  width: "100%",
+  marginTop: 8,
+};
+
+const entryBtn = {
+  padding: "10px",
+  background: "#FF8800",
+  border: "none",
+  width: "100%",
+  marginTop: 8,
+  color: "#fff",
+  fontWeight: 600,
+  borderRadius: 6,
+};
