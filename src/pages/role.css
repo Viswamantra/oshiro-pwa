@@ -1,0 +1,22 @@
+.role-box {
+  text-align: center;
+  margin-top: 80px;
+  font-family: Arial, sans-serif;
+}
+
+.role-box button {
+  display: block;
+  margin: 15px auto;
+  width: 220px;
+  padding: 12px;
+  background: royalblue;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+}
+
+.role-box button:hover {
+  opacity: 0.8;
+  cursor: pointer;
+}
