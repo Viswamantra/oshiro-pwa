@@ -1,28 +1,29 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
-import HomeScreen from "./pages/HomeScreen.jsx";
-import MerchantDashboard from "./pages/MerchantDashboard.jsx";
-import AdminDashboard from "./pages/AdminDashboard.jsx";
-import Login from "./pages/Login.jsx";
-import SelectRole from "./pages/SelectRole.jsx";
+import RoleSelect from "./pages/RoleSelect";
+import CustomerLogin from "./pages/CustomerLogin";
+import MerchantLogin from "./pages/MerchantLogin";
+import AdminLogin from "./pages/AdminLogin";
+
+import HomeScreen from "./pages/HomeScreen";
+import MerchantDashboard from "./pages/MerchantDashboard";
+import AdminDashboard from "./pages/AdminDashboard";
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Login */}
-        <Route path="/" element={<Login />} />
+        {/* Step 1: Ask User Role */}
+        <Route path="/" element={<RoleSelect />} />
 
-        {/* Role Select */}
-        <Route path="/select-role" element={<SelectRole />} />
+        {/* Logins */}
+        <Route path="/customer-login" element={<CustomerLogin />} />
+        <Route path="/merchant-login" element={<MerchantLogin />} />
+        <Route path="/admin-login" element={<AdminLogin />} />
 
-        {/* Customer Side */}
+        {/* After login */}
         <Route path="/home" element={<HomeScreen />} />
-
-        {/* Merchant Side */}
         <Route path="/merchant" element={<MerchantDashboard />} />
-
-        {/* Admin Side */}
         <Route path="/admin" element={<AdminDashboard />} />
       </Routes>
     </BrowserRouter>
