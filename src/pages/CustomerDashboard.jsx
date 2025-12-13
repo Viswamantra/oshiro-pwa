@@ -4,7 +4,7 @@ import { db } from "../firebase";
 import { collection, onSnapshot } from "firebase/firestore";
 import { MapContainer, TileLayer, Marker, Popup, Circle } from "react-leaflet";
 import L from "leaflet";
-import { Box, Typography, TextField, MenuItem, Button } from "@mui/material";
+import { Box, Typography, TextField, MenuItem } from "@mui/material";
 
 /* =========================
    CATEGORY DROPDOWN WITH ICONS
@@ -19,9 +19,9 @@ const CATEGORY_LIST = [
 ];
 
 /* =========================
-   DEFAULT CITY — KAKINADA
+   FALLBACK CITY — KAKINADA
 ========================= */
-const DEFAULT_CITY = {
+const FALLBACK_CITY = {
   name: "Kakinada",
   lat: 16.989064,
   lng: 82.247467,
@@ -56,6 +56,26 @@ function haversineKm(lat1, lon1, lat2, lon2) {
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
+/* =========================
+   REVERSE GEOCODING (OSM)
+========================= */
+async function getCityFromLatLng(lat, lng) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+    );
+    const data = await res.json();
+    return (
+      data.address?.city ||
+      data.address?.town ||
+      data.address?.village ||
+      "Unknown"
+    );
+  } catch {
+    return "Unknown";
+  }
+}
+
 export default function CustomerDashboard() {
   const { user } = useAuth();
 
@@ -64,17 +84,38 @@ export default function CustomerDashboard() {
   const [radius, setRadius] = useState(5000);
   const [search, setSearch] = useState("");
 
-  /* 🔒 FORCE LOCATION TO KAKINADA */
-  const custLoc = DEFAULT_CITY;
+  const [custLoc, setCustLoc] = useState(FALLBACK_CITY);
+  const [city, setCity] = useState(FALLBACK_CITY.name);
 
   /* =========================
-     LIVE OFFERS FROM FIRESTORE
+     LIVE OFFERS
   ========================= */
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "offers"), (snap) =>
       setOffers(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
     return () => unsub();
+  }, []);
+
+  /* =========================
+     GPS + OSM CITY DETECTION
+  ========================= */
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setCustLoc({ lat, lng });
+        const detectedCity = await getCityFromLatLng(lat, lng);
+        setCity(detectedCity);
+      },
+      () => {
+        // fallback already set
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
   }, []);
 
   /* =========================
@@ -99,7 +140,7 @@ export default function CustomerDashboard() {
         };
       })
       .filter(Boolean);
-  }, [offers]);
+  }, [offers, custLoc]);
 
   /* =========================
      FILTERING
@@ -111,10 +152,7 @@ export default function CustomerDashboard() {
       .filter((o) => {
         if (category !== "All" && o.category !== category) return false;
         if (o.distanceMeters > radius) return false;
-        if (
-          q &&
-          !(`${o.shopName} ${o.title}`.toLowerCase().includes(q))
-        )
+        if (q && !(`${o.shopName} ${o.title}`.toLowerCase().includes(q)))
           return false;
         return true;
       })
@@ -125,7 +163,7 @@ export default function CustomerDashboard() {
     <Box sx={{ p: 3 }}>
       <Typography variant="h5">Customer Dashboard</Typography>
       <Typography sx={{ mb: 2 }}>
-        {user?.mobile} • City: <b>Kakinada</b>
+        {user?.mobile} • 📍 <b>{city}</b>
       </Typography>
 
       {/* FILTER BAR */}
@@ -168,7 +206,7 @@ export default function CustomerDashboard() {
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
           <Marker position={[custLoc.lat, custLoc.lng]}>
-            <Popup>You are in Kakinada</Popup>
+            <Popup>You are here</Popup>
           </Marker>
 
           {filtered.map((o) => (
