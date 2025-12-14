@@ -62,7 +62,8 @@ function haversineKm(lat1, lon1, lat2, lon2) {
 async function getCityFromLatLng(lat, lng) {
   try {
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
+      { headers: { "Accept-Language": "en" } }
     );
     const data = await res.json();
     return (
@@ -84,6 +85,7 @@ export default function CustomerDashboard() {
   const [radius, setRadius] = useState(5000);
   const [search, setSearch] = useState("");
 
+  /* ✅ LOCATION STATE */
   const [custLoc, setCustLoc] = useState(FALLBACK_CITY);
   const [city, setCity] = useState(FALLBACK_CITY.name);
 
@@ -98,23 +100,36 @@ export default function CustomerDashboard() {
   }, []);
 
   /* =========================
-     GPS + OSM CITY DETECTION
+     GPS + FALLBACK LOGIC (FIXED)
   ========================= */
   useEffect(() => {
-    if (!navigator.geolocation) return;
+    if (!navigator.geolocation) {
+      console.warn("Geolocation not supported, using fallback");
+      return;
+    }
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
+
+        console.log("GPS SUCCESS:", lat, lng);
+
         setCustLoc({ lat, lng });
+
         const detectedCity = await getCityFromLatLng(lat, lng);
         setCity(detectedCity);
       },
-      () => {
-        // fallback already set
+      (err) => {
+        console.warn("GPS FAILED:", err.message);
+        setCustLoc(FALLBACK_CITY);
+        setCity(FALLBACK_CITY.name);
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      }
     );
   }, []);
 
