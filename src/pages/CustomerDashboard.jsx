@@ -86,7 +86,7 @@ export default function CustomerDashboard() {
   /* =========================
      LIVE LOCATION
   ========================= */
-  const [custLoc, setCustLoc] = useState(FALLBACK_CITY);
+  const [custLoc, setCustLoc] = useState(null);
   const [city] = useState(FALLBACK_CITY.name);
 
   const [notified, setNotified] = useState(new Set());
