@@ -35,9 +35,9 @@ import {
 } from "firebase/firestore";
 import { sendNotification } from "../../utils/sendNotification";
 
-/* ===============================
-   OPENSTREETMAP GEOCODING
-================================ */
+/* =====================================
+   STEP 3 — OPENSTREETMAP GEOCODING
+===================================== */
 async function geocodeAddress(address) {
   if (!address) return null;
 
@@ -50,7 +50,6 @@ async function geocodeAddress(address) {
   });
 
   const data = await res.json();
-
   if (!data || data.length === 0) return null;
 
   return {
@@ -69,6 +68,9 @@ export default function OfferManager() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
 
+  /* =====================================
+     STEP 1 — FORM STATE (WITH ADDRESS)
+  ===================================== */
   const emptyForm = {
     merchantId: "",
     merchantMobile: "",
@@ -83,9 +85,9 @@ export default function OfferManager() {
 
   const [form, setForm] = useState(emptyForm);
 
-  /* ===============================
+  /* =====================================
      REALTIME DATA
-  ================================ */
+  ===================================== */
   useEffect(() => {
     const unsubOffers = onSnapshot(collection(db, "offers"), (snap) =>
       setOffers(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
@@ -101,9 +103,9 @@ export default function OfferManager() {
     };
   }, []);
 
-  /* ===============================
+  /* =====================================
      SEARCH
-  ================================ */
+  ===================================== */
   const filtered = offers.filter((o) => {
     const q = search.toLowerCase().trim();
     if (!q) return true;
@@ -151,19 +153,18 @@ export default function OfferManager() {
     }));
   };
 
-  /* ===============================
-     SAVE OFFER — CORE FIX
-  ================================ */
+  /* =====================================
+     STEP 4 — SAVE OFFER (GEOCODING)
+  ===================================== */
   const handleSave = async () => {
     if (!form.merchantId || !form.title || !form.address) {
-      alert("Merchant, title, and address are required");
+      alert("Merchant, title and address are required");
       return;
     }
 
     const geo = await geocodeAddress(form.address);
-
     if (!geo) {
-      alert("Unable to detect location from address");
+      alert("Address not found. Please enter full address");
       return;
     }
 
@@ -186,7 +187,6 @@ export default function OfferManager() {
       await updateDoc(doc(db, "offers", editing), payload);
     } else {
       await addDoc(collection(db, "offers"), payload);
-
       try {
         await sendNotification(
           `merchant_${form.merchantMobile}`,
@@ -194,17 +194,15 @@ export default function OfferManager() {
           "New Offer Created",
           `Your offer "${payload.title}" is live`
         );
-      } catch (e) {
-        console.log("Notification failed", e);
-      }
+      } catch {}
     }
 
     setOpen(false);
   };
 
-  /* ===============================
+  /* =====================================
      UI
-  ================================ */
+  ===================================== */
   return (
     <Box>
       <Grid container justifyContent="space-between">
@@ -266,7 +264,7 @@ export default function OfferManager() {
         />
       </Paper>
 
-      {/* ADD / EDIT DIALOG */}
+      {/* ADD / EDIT */}
       <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>{editing ? "Edit Offer" : "Add Offer"}</DialogTitle>
 
@@ -275,7 +273,6 @@ export default function OfferManager() {
             <InputLabel>Merchant</InputLabel>
             <Select
               value={form.merchantId}
-              label="Merchant"
               onChange={(e) => handleMerchantSelect(e.target.value)}
             >
               <MenuItem value="">
@@ -305,8 +302,9 @@ export default function OfferManager() {
             onChange={(e) => setForm({ ...form, discount: e.target.value })}
           />
 
+          {/* STEP 2 — ADDRESS INPUT */}
           <TextField
-            label="Shop Address"
+            label="Shop Address (Full)"
             fullWidth
             sx={{ mt: 2 }}
             value={form.address}
@@ -317,7 +315,6 @@ export default function OfferManager() {
             <InputLabel>Category</InputLabel>
             <Select
               value={form.category}
-              label="Category"
               onChange={(e) =>
                 setForm({ ...form, category: e.target.value })
               }
