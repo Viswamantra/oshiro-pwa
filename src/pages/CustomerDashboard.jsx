@@ -57,23 +57,21 @@ function haversineKm(lat1, lon1, lat2, lon2) {
 }
 
 /* =========================
-   REVERSE GEOCODING (OSM)
+   LOCAL NOTIFICATION
 ========================= */
-async function getCityFromLatLng(lat, lng) {
-  try {
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
-      { headers: { "Accept-Language": "en" } }
+function showLocalNotification(offer) {
+  if (!("Notification" in window)) return;
+
+  const fire = () =>
+    new Notification(`🔥 Offer Nearby at ${offer.shopName}`, {
+      body: `${offer.title} — ${offer.discount}% off`,
+    });
+
+  if (Notification.permission === "granted") fire();
+  else if (Notification.permission !== "denied") {
+    Notification.requestPermission().then(
+      (p) => p === "granted" && fire()
     );
-    const data = await res.json();
-    return (
-      data.address?.city ||
-      data.address?.town ||
-      data.address?.village ||
-      "Unknown"
-    );
-  } catch {
-    return "Unknown";
   }
 }
 
@@ -82,15 +80,19 @@ export default function CustomerDashboard() {
 
   const [offers, setOffers] = useState([]);
   const [category, setCategory] = useState("Food");
-  const [radius, setRadius] = useState(5000);
+  const [radius, setRadius] = useState(500); // meters
   const [search, setSearch] = useState("");
 
-  /* ✅ LOCATION STATE */
+  /* =========================
+     LIVE LOCATION STATE
+  ========================= */
   const [custLoc, setCustLoc] = useState(FALLBACK_CITY);
   const [city, setCity] = useState(FALLBACK_CITY.name);
 
+  const [notified, setNotified] = useState(new Set());
+
   /* =========================
-     LIVE OFFERS
+     FIRESTORE — LIVE OFFERS
   ========================= */
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "offers"), (snap) =>
@@ -100,41 +102,33 @@ export default function CustomerDashboard() {
   }, []);
 
   /* =========================
-     GPS + FALLBACK LOGIC (FIXED)
+     GPS WATCH — REAL TIME
   ========================= */
   useEffect(() => {
-    if (!navigator.geolocation) {
-      console.warn("Geolocation not supported, using fallback");
-      return;
-    }
+    if (!navigator.geolocation) return;
 
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
-
-        console.log("GPS SUCCESS:", lat, lng);
-
         setCustLoc({ lat, lng });
-
-        const detectedCity = await getCityFromLatLng(lat, lng);
-        setCity(detectedCity);
       },
-      (err) => {
-        console.warn("GPS FAILED:", err.message);
+      () => {
         setCustLoc(FALLBACK_CITY);
         setCity(FALLBACK_CITY.name);
       },
       {
         enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
+        maximumAge: 5000,
+        timeout: 10000,
       }
     );
+
+    return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
   /* =========================
-     PRE-PROCESS OFFERS
+     PROCESS OFFERS
   ========================= */
   const processed = useMemo(() => {
     return offers
@@ -173,6 +167,18 @@ export default function CustomerDashboard() {
       })
       .sort((a, b) => a.distanceKm - b.distanceKm);
   }, [processed, category, radius, search]);
+
+  /* =========================
+     REAL-TIME GEOFENCING 🔔
+  ========================= */
+  useEffect(() => {
+    filtered.forEach((o) => {
+      if (!notified.has(o.id)) {
+        showLocalNotification(o);
+        setNotified((prev) => new Set(prev).add(o.id));
+      }
+    });
+  }, [filtered]);
 
   return (
     <Box sx={{ p: 3 }}>
@@ -215,7 +221,7 @@ export default function CustomerDashboard() {
       <Box sx={{ height: 360 }}>
         <MapContainer
           center={[custLoc.lat, custLoc.lng]}
-          zoom={13}
+          zoom={14}
           style={{ height: "100%", width: "100%" }}
         >
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
