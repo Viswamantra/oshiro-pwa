@@ -41,7 +41,7 @@ L.Icon.Default.mergeOptions({
 });
 
 /* =========================
-   DISTANCE CALC
+   DISTANCE CALC (CORRECT)
 ========================= */
 function haversineKm(lat1, lon1, lat2, lon2) {
   const toRad = (v) => (v * Math.PI) / 180;
@@ -79,15 +79,15 @@ export default function CustomerDashboard() {
   const { user } = useAuth();
 
   const [offers, setOffers] = useState([]);
-  const [category, setCategory] = useState("Food");
+  const [category, setCategory] = useState("All");
   const [radius, setRadius] = useState(500); // meters
   const [search, setSearch] = useState("");
 
   /* =========================
-     LIVE LOCATION STATE
+     LIVE LOCATION
   ========================= */
   const [custLoc, setCustLoc] = useState(FALLBACK_CITY);
-  const [city, setCity] = useState(FALLBACK_CITY.name);
+  const [city] = useState(FALLBACK_CITY.name);
 
   const [notified, setNotified] = useState(new Set());
 
@@ -102,24 +102,24 @@ export default function CustomerDashboard() {
   }, []);
 
   /* =========================
-     GPS WATCH — REAL TIME
+     REAL-TIME GPS TRACKING
   ========================= */
   useEffect(() => {
     if (!navigator.geolocation) return;
 
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        setCustLoc({ lat, lng });
+        setCustLoc({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        });
       },
       () => {
         setCustLoc(FALLBACK_CITY);
-        setCity(FALLBACK_CITY.name);
       },
       {
         enableHighAccuracy: true,
-        maximumAge: 5000,
+        maximumAge: 3000,
         timeout: 10000,
       }
     );
@@ -128,12 +128,12 @@ export default function CustomerDashboard() {
   }, []);
 
   /* =========================
-     PROCESS OFFERS
+     PROCESS OFFERS (FIXED)
   ========================= */
   const processed = useMemo(() => {
     return offers
       .map((o) => {
-        if (!o.lat || !o.lng) return null;
+        if (o.lat == null || o.lng == null) return null;
 
         const dKm = haversineKm(
           custLoc.lat,
@@ -169,7 +169,7 @@ export default function CustomerDashboard() {
   }, [processed, category, radius, search]);
 
   /* =========================
-     REAL-TIME GEOFENCING 🔔
+     REAL-TIME GEOFENCE ALERTS
   ========================= */
   useEffect(() => {
     filtered.forEach((o) => {
@@ -178,7 +178,7 @@ export default function CustomerDashboard() {
         setNotified((prev) => new Set(prev).add(o.id));
       }
     });
-  }, [filtered]);
+  }, [filtered, notified]);
 
   return (
     <Box sx={{ p: 3 }}>
