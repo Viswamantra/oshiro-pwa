@@ -24,6 +24,10 @@ import {
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+
+import { MapContainer, TileLayer, Marker } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+
 import { db } from "../../firebase";
 import {
   collection,
@@ -35,9 +39,9 @@ import {
 } from "firebase/firestore";
 import { sendNotification } from "../../utils/sendNotification";
 
-/* =====================================
-   STEP 3 — OPENSTREETMAP GEOCODING
-===================================== */
+/* ===============================
+   OPENSTREETMAP GEOCODING
+================================ */
 async function geocodeAddress(address) {
   if (!address) return null;
 
@@ -68,9 +72,11 @@ export default function OfferManager() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
 
-  /* =====================================
-     STEP 1 — FORM STATE (WITH ADDRESS)
-  ===================================== */
+  const [previewLoc, setPreviewLoc] = useState(null);
+
+  /* ===============================
+     FORM STATE
+  ================================ */
   const emptyForm = {
     merchantId: "",
     merchantMobile: "",
@@ -85,9 +91,9 @@ export default function OfferManager() {
 
   const [form, setForm] = useState(emptyForm);
 
-  /* =====================================
+  /* ===============================
      REALTIME DATA
-  ===================================== */
+  ================================ */
   useEffect(() => {
     const unsubOffers = onSnapshot(collection(db, "offers"), (snap) =>
       setOffers(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
@@ -103,9 +109,9 @@ export default function OfferManager() {
     };
   }, []);
 
-  /* =====================================
+  /* ===============================
      SEARCH
-  ===================================== */
+  ================================ */
   const filtered = offers.filter((o) => {
     const q = search.toLowerCase().trim();
     if (!q) return true;
@@ -115,6 +121,7 @@ export default function OfferManager() {
   const handleOpenNew = () => {
     setEditing(null);
     setForm(emptyForm);
+    setPreviewLoc(null);
     setOpen(true);
   };
 
@@ -131,6 +138,11 @@ export default function OfferManager() {
       category: o.category || "",
       address: o.address || "",
     });
+
+    if (o.lat && o.lng) {
+      setPreviewLoc({ lat: o.lat, lng: o.lng });
+    }
+
     setOpen(true);
   };
 
@@ -153,9 +165,9 @@ export default function OfferManager() {
     }));
   };
 
-  /* =====================================
-     STEP 4 — SAVE OFFER (GEOCODING)
-  ===================================== */
+  /* ===============================
+     SAVE OFFER (WITH GEO)
+  ================================ */
   const handleSave = async () => {
     if (!form.merchantId || !form.title || !form.address) {
       alert("Merchant, title and address are required");
@@ -164,7 +176,7 @@ export default function OfferManager() {
 
     const geo = await geocodeAddress(form.address);
     if (!geo) {
-      alert("Address not found. Please enter full address");
+      alert("Address not found on OpenStreetMap");
       return;
     }
 
@@ -200,9 +212,9 @@ export default function OfferManager() {
     setOpen(false);
   };
 
-  /* =====================================
+  /* ===============================
      UI
-  ===================================== */
+  ================================ */
   return (
     <Box>
       <Grid container justifyContent="space-between">
@@ -264,7 +276,7 @@ export default function OfferManager() {
         />
       </Paper>
 
-      {/* ADD / EDIT */}
+      {/* ADD / EDIT DIALOG */}
       <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>{editing ? "Edit Offer" : "Add Offer"}</DialogTitle>
 
@@ -302,7 +314,6 @@ export default function OfferManager() {
             onChange={(e) => setForm({ ...form, discount: e.target.value })}
           />
 
-          {/* STEP 2 — ADDRESS INPUT */}
           <TextField
             label="Shop Address (Full)"
             fullWidth
@@ -310,6 +321,44 @@ export default function OfferManager() {
             value={form.address}
             onChange={(e) => setForm({ ...form, address: e.target.value })}
           />
+
+          {/* GPS BUTTON */}
+          <Button
+            variant="outlined"
+            sx={{ mt: 1 }}
+            onClick={() => {
+              navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                  const loc = {
+                    lat: pos.coords.latitude,
+                    lng: pos.coords.longitude,
+                  };
+                  setPreviewLoc(loc);
+                  setForm({
+                    ...form,
+                    address: `${loc.lat}, ${loc.lng}`,
+                  });
+                },
+                () => alert("GPS permission denied")
+              );
+            }}
+          >
+            Use My Current Location
+          </Button>
+
+          {/* MAP PREVIEW */}
+          {previewLoc && (
+            <Box sx={{ mt: 2, height: 200 }}>
+              <MapContainer
+                center={[previewLoc.lat, previewLoc.lng]}
+                zoom={15}
+                style={{ height: "100%", width: "100%" }}
+              >
+                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                <Marker position={[previewLoc.lat, previewLoc.lng]} />
+              </MapContainer>
+            </Box>
+          )}
 
           <FormControl fullWidth sx={{ mt: 2 }}>
             <InputLabel>Category</InputLabel>
