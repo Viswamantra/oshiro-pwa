@@ -1,26 +1,10 @@
 import React, { useEffect, useState } from "react";
 import {
-  Box,
-  Paper,
-  Grid,
-  TextField,
-  Button,
-  Typography,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  IconButton,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  TablePagination,
-  Select,
-  MenuItem,
-  InputLabel,
-  FormControl,
+  Box, Paper, Grid, TextField, Button, Typography,
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  IconButton, Table, TableBody, TableCell,
+  TableHead, TableRow, TablePagination,
+  Select, MenuItem, InputLabel, FormControl,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -30,39 +14,25 @@ import "leaflet/dist/leaflet.css";
 
 import { db } from "../../firebase";
 import {
-  collection,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-  onSnapshot,
+  collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot,
 } from "firebase/firestore";
 import { sendNotification } from "../../utils/sendNotification";
 
-/* =====================================
-   IMPROVED OPENSTREETMAP GEOCODING
-===================================== */
+/* ---------- OSM GEOCODING ---------- */
 async function geocodeAddress(address) {
   if (!address) return null;
-
-  const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q=${encodeURIComponent(
-    address
-  )}`;
-
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent": "oshiro-pwa/1.0 (admin@oshiro.app)",
-      "Accept-Language": "en",
-    },
-  });
-
+  const res = await fetch(
+    `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address)}`,
+    {
+      headers: {
+        "User-Agent": "oshiro-pwa/1.0",
+        "Accept-Language": "en",
+      },
+    }
+  );
   const data = await res.json();
-  if (!data || data.length === 0) return null;
-
-  return {
-    lat: parseFloat(data[0].lat),
-    lng: parseFloat(data[0].lon),
-  };
+  if (!data?.length) return null;
+  return { lat: +data[0].lat, lng: +data[0].lon };
 }
 
 export default function OfferManager() {
@@ -76,9 +46,6 @@ export default function OfferManager() {
   const [editing, setEditing] = useState(null);
   const [previewLoc, setPreviewLoc] = useState(null);
 
-  /* ===============================
-     FORM STATE
-  ================================ */
   const emptyForm = {
     merchantId: "",
     merchantMobile: "",
@@ -89,77 +56,32 @@ export default function OfferManager() {
     expiryDate: "",
     category: "",
     address: "",
+    radius: 1000,
   };
 
   const [form, setForm] = useState(emptyForm);
 
-  /* ===============================
-     REALTIME DATA
-  ================================ */
+  /* ---------- DATA ---------- */
   useEffect(() => {
-    const unsubOffers = onSnapshot(collection(db, "offers"), (snap) =>
-      setOffers(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    const u1 = onSnapshot(collection(db, "offers"), s =>
+      setOffers(s.docs.map(d => ({ id: d.id, ...d.data() })))
     );
-
-    const unsubMerchants = onSnapshot(collection(db, "merchants"), (snap) =>
-      setMerchants(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    const u2 = onSnapshot(collection(db, "merchants"), s =>
+      setMerchants(s.docs.map(d => ({ id: d.id, ...d.data() })))
     );
-
-    return () => {
-      unsubOffers();
-      unsubMerchants();
-    };
+    return () => { u1(); u2(); };
   }, []);
 
-  /* ===============================
-     SEARCH
-  ================================ */
-  const filtered = offers.filter((o) => {
-    const q = search.toLowerCase().trim();
-    if (!q) return true;
-    return `${o.shopName} ${o.title}`.toLowerCase().includes(q);
-  });
+  const filtered = offers.filter(o =>
+    `${o.shopName} ${o.title}`.toLowerCase().includes(search.toLowerCase())
+  );
 
-  const handleOpenNew = () => {
-    setEditing(null);
-    setForm(emptyForm);
-    setPreviewLoc(null);
-    setOpen(true);
-  };
-
-  const handleEdit = (o) => {
-    setEditing(o.id);
-    setForm({
-      merchantId: o.merchantId || "",
-      merchantMobile: o.merchantMobile || "",
-      shopName: o.shopName || "",
-      title: o.title || "",
-      discount: o.discount || "",
-      couponCode: o.couponCode || "",
-      expiryDate: o.expiryDate || "",
-      category: o.category || "",
-      address: o.address || "",
-    });
-
-    if (o.lat && o.lng) {
-      setPreviewLoc({ lat: o.lat, lng: o.lng });
-    }
-
-    setOpen(true);
-  };
-
-  const handleDelete = async (id) => {
-    if (!confirm("Delete this offer?")) return;
-    await deleteDoc(doc(db, "offers", id));
-  };
-
-  const handleMerchantSelect = (merchantId) => {
-    const m = merchants.find((x) => x.id === merchantId);
+  const handleMerchantSelect = (id) => {
+    const m = merchants.find(x => x.id === id);
     if (!m) return;
-
-    setForm((f) => ({
+    setForm(f => ({
       ...f,
-      merchantId,
+      merchantId: id,
       merchantMobile: m.mobile || "",
       shopName: m.shopName || "",
       category: m.category || "",
@@ -167,33 +89,22 @@ export default function OfferManager() {
     }));
   };
 
-  /* ===============================
-     SAVE OFFER (FINAL FIX)
-  ================================ */
   const handleSave = async () => {
     if (!form.merchantId || !form.title || !form.address) {
-      alert("Merchant, title and full address are required");
+      alert("Merchant, title & address required");
       return;
     }
 
     const geo = await geocodeAddress(form.address);
     if (!geo) {
-      alert(
-        "Address not found.\nPlease enter full address:\nShop name, Area, City, State"
-      );
+      alert("Address not found. Please add full address.");
       return;
     }
 
     const payload = {
-      merchantId: form.merchantId,
-      merchantMobile: form.merchantMobile,
-      shopName: form.shopName,
-      title: form.title,
+      ...form,
       discount: Number(form.discount || 0),
-      couponCode: form.couponCode || "",
-      expiryDate: form.expiryDate || "",
-      category: form.category || "",
-      address: form.address,
+      radius: Number(form.radius || 1000),
       lat: geo.lat,
       lng: geo.lng,
       createdAt: new Date(),
@@ -207,33 +118,27 @@ export default function OfferManager() {
         await sendNotification(
           `merchant_${form.merchantMobile}`,
           "merchant",
-          "New Offer Created",
-          `Your offer "${payload.title}" is live`
+          "New Offer Live",
+          payload.title
         );
       } catch {}
     }
-
     setOpen(false);
   };
 
-  /* ===============================
-     UI
-  ================================ */
   return (
     <Box>
       <Grid container justifyContent="space-between">
         <Typography variant="h6">Offers</Typography>
-        <Button variant="contained" onClick={handleOpenNew}>
+        <Button variant="contained" onClick={() => { setForm(emptyForm); setOpen(true); }}>
           Add Offer
         </Button>
       </Grid>
 
-      <TextField
-        label="Search by shop or title"
+      <TextField fullWidth sx={{ mt: 2, mb: 2 }}
+        label="Search"
         value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        fullWidth
-        sx={{ mt: 2, mb: 2 }}
+        onChange={e => setSearch(e.target.value)}
       />
 
       <Paper>
@@ -242,26 +147,25 @@ export default function OfferManager() {
             <TableRow>
               <TableCell>Shop</TableCell>
               <TableCell>Title</TableCell>
-              <TableCell>Discount</TableCell>
-              <TableCell>Category</TableCell>
+              <TableCell>Radius (m)</TableCell>
               <TableCell>Actions</TableCell>
             </TableRow>
           </TableHead>
-
           <TableBody>
-            {filtered
-              .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-              .map((o) => (
+            {filtered.slice(page*rowsPerPage, page*rowsPerPage+rowsPerPage)
+              .map(o => (
                 <TableRow key={o.id}>
                   <TableCell>{o.shopName}</TableCell>
                   <TableCell>{o.title}</TableCell>
-                  <TableCell>{o.discount}%</TableCell>
-                  <TableCell>{o.category}</TableCell>
+                  <TableCell>{o.radius}</TableCell>
                   <TableCell>
-                    <IconButton onClick={() => handleEdit(o)}>
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton onClick={() => handleDelete(o.id)}>
+                    <IconButton onClick={() => {
+                      setEditing(o.id);
+                      setForm(o);
+                      setPreviewLoc({ lat: o.lat, lng: o.lng });
+                      setOpen(true);
+                    }}><EditIcon /></IconButton>
+                    <IconButton onClick={() => deleteDoc(doc(db,"offers",o.id))}>
                       <DeleteIcon color="error" />
                     </IconButton>
                   </TableCell>
@@ -269,105 +173,59 @@ export default function OfferManager() {
               ))}
           </TableBody>
         </Table>
-
         <TablePagination
           component="div"
           count={filtered.length}
           page={page}
           rowsPerPage={rowsPerPage}
-          onPageChange={(e, p) => setPage(p)}
+          onPageChange={(e,p)=>setPage(p)}
           rowsPerPageOptions={[10]}
         />
       </Paper>
 
-      {/* ADD / EDIT */}
-      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle>{editing ? "Edit Offer" : "Add Offer"}</DialogTitle>
-
+      {/* ---------- DIALOG ---------- */}
+      <Dialog open={open} onClose={()=>setOpen(false)} fullWidth>
+        <DialogTitle>{editing?"Edit Offer":"Add Offer"}</DialogTitle>
         <DialogContent>
-          <FormControl fullWidth sx={{ mt: 1 }}>
-            <InputLabel id="merchant-label">Merchant</InputLabel>
-            <Select
-              labelId="merchant-label"
-              label="Merchant"
-              value={form.merchantId}
-              onChange={(e) => handleMerchantSelect(e.target.value)}
-            >
-              <MenuItem value="">
-                <em>Select Merchant</em>
-              </MenuItem>
-              {merchants.map((m) => (
-                <MenuItem key={m.id} value={m.id}>
-                  {m.shopName} — {m.mobile}
-                </MenuItem>
+          <FormControl fullWidth sx={{ mt:1 }}>
+            <InputLabel>Merchant</InputLabel>
+            <Select value={form.merchantId}
+              onChange={e=>handleMerchantSelect(e.target.value)}>
+              {merchants.map(m=>(
+                <MenuItem key={m.id} value={m.id}>{m.shopName}</MenuItem>
               ))}
             </Select>
           </FormControl>
 
-          <TextField
-            label="Offer Title"
-            fullWidth
-            sx={{ mt: 2 }}
+          <TextField fullWidth sx={{ mt:2 }} label="Offer Title"
             value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
+            onChange={e=>setForm({...form,title:e.target.value})}
           />
 
-          <TextField
-            label="Discount %"
-            fullWidth
-            sx={{ mt: 2 }}
-            value={form.discount}
-            onChange={(e) => setForm({ ...form, discount: e.target.value })}
+          <TextField fullWidth sx={{ mt:2 }} label="Radius (meters)"
+            type="number"
+            value={form.radius}
+            onChange={e=>setForm({...form,radius:+e.target.value})}
           />
 
-          <TextField
-            label="Shop Address (House, Area, City, State)"
-            fullWidth
-            sx={{ mt: 2 }}
+          <TextField fullWidth sx={{ mt:2 }} label="Full Address"
             value={form.address}
-            onChange={(e) => setForm({ ...form, address: e.target.value })}
+            onChange={e=>setForm({...form,address:e.target.value})}
           />
 
           {previewLoc && (
-            <Box sx={{ mt: 2, height: 200 }}>
-              <MapContainer
-                center={[previewLoc.lat, previewLoc.lng]}
-                zoom={15}
-                style={{ height: "100%", width: "100%" }}
-              >
-                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                <Marker position={[previewLoc.lat, previewLoc.lng]} />
+            <Box sx={{ mt:2, height:200 }}>
+              <MapContainer center={[previewLoc.lat,previewLoc.lng]} zoom={15}
+                style={{ height:"100%" }}>
+                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"/>
+                <Marker position={[previewLoc.lat,previewLoc.lng]} />
               </MapContainer>
             </Box>
           )}
-
-          {/* ✅ CATEGORY — FIXED */}
-          <FormControl fullWidth sx={{ mt: 2 }}>
-            <InputLabel id="category-label">Category</InputLabel>
-            <Select
-              labelId="category-label"
-              label="Category"
-              value={form.category || ""}
-              onChange={(e) =>
-                setForm({ ...form, category: e.target.value })
-              }
-            >
-              <MenuItem value="Food">Food</MenuItem>
-              <MenuItem value="Fashion & Clothing">
-                Fashion & Clothing
-              </MenuItem>
-              <MenuItem value="Beauty & Spa">Beauty & Spa</MenuItem>
-              <MenuItem value="Hospitals">Hospitals</MenuItem>
-              <MenuItem value="Medicals">Medicals</MenuItem>
-            </Select>
-          </FormControl>
         </DialogContent>
-
         <DialogActions>
-          <Button onClick={() => setOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleSave}>
-            Save
-          </Button>
+          <Button onClick={()=>setOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleSave}>Save</Button>
         </DialogActions>
       </Dialog>
     </Box>
