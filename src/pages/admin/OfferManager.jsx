@@ -39,26 +39,29 @@ import {
 } from "firebase/firestore";
 import { sendNotification } from "../../utils/sendNotification";
 
-/* ===============================
-   OPENSTREETMAP GEOCODING
-================================ */
+/* =====================================
+   IMPROVED OPENSTREETMAP GEOCODING
+===================================== */
 async function geocodeAddress(address) {
   if (!address) return null;
 
-  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+  const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q=${encodeURIComponent(
     address
   )}`;
 
   const res = await fetch(url, {
-    headers: { "User-Agent": "oshiro-app/1.0" },
+    headers: {
+      "User-Agent": "oshiro-pwa/1.0 (admin@oshiro.app)",
+      "Accept-Language": "en",
+    },
   });
 
   const data = await res.json();
   if (!data || data.length === 0) return null;
 
   return {
-    lat: Number(data[0].lat),
-    lng: Number(data[0].lon),
+    lat: parseFloat(data[0].lat),
+    lng: parseFloat(data[0].lon),
   };
 }
 
@@ -71,7 +74,6 @@ export default function OfferManager() {
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
-
   const [previewLoc, setPreviewLoc] = useState(null);
 
   /* ===============================
@@ -166,17 +168,19 @@ export default function OfferManager() {
   };
 
   /* ===============================
-     SAVE OFFER (WITH GEO)
+     SAVE OFFER (FINAL FIX)
   ================================ */
   const handleSave = async () => {
     if (!form.merchantId || !form.title || !form.address) {
-      alert("Merchant, title and address are required");
+      alert("Merchant, title and full address are required");
       return;
     }
 
     const geo = await geocodeAddress(form.address);
     if (!geo) {
-      alert("Address not found on OpenStreetMap");
+      alert(
+        "Address not found.\nPlease enter full address:\nShop name, Area, City, State"
+      );
       return;
     }
 
@@ -276,14 +280,16 @@ export default function OfferManager() {
         />
       </Paper>
 
-      {/* ADD / EDIT DIALOG */}
+      {/* ADD / EDIT */}
       <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>{editing ? "Edit Offer" : "Add Offer"}</DialogTitle>
 
         <DialogContent>
           <FormControl fullWidth sx={{ mt: 1 }}>
-            <InputLabel>Merchant</InputLabel>
+            <InputLabel id="merchant-label">Merchant</InputLabel>
             <Select
+              labelId="merchant-label"
+              label="Merchant"
               value={form.merchantId}
               onChange={(e) => handleMerchantSelect(e.target.value)}
             >
@@ -315,38 +321,13 @@ export default function OfferManager() {
           />
 
           <TextField
-            label="Shop Address (Full)"
+            label="Shop Address (House, Area, City, State)"
             fullWidth
             sx={{ mt: 2 }}
             value={form.address}
             onChange={(e) => setForm({ ...form, address: e.target.value })}
           />
 
-          {/* GPS BUTTON */}
-          <Button
-            variant="outlined"
-            sx={{ mt: 1 }}
-            onClick={() => {
-              navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                  const loc = {
-                    lat: pos.coords.latitude,
-                    lng: pos.coords.longitude,
-                  };
-                  setPreviewLoc(loc);
-                  setForm({
-                    ...form,
-                    address: `${loc.lat}, ${loc.lng}`,
-                  });
-                },
-                () => alert("GPS permission denied")
-              );
-            }}
-          >
-            Use My Current Location
-          </Button>
-
-          {/* MAP PREVIEW */}
           {previewLoc && (
             <Box sx={{ mt: 2, height: 200 }}>
               <MapContainer
@@ -360,10 +341,13 @@ export default function OfferManager() {
             </Box>
           )}
 
+          {/* ✅ CATEGORY — FIXED */}
           <FormControl fullWidth sx={{ mt: 2 }}>
-            <InputLabel>Category</InputLabel>
+            <InputLabel id="category-label">Category</InputLabel>
             <Select
-              value={form.category}
+              labelId="category-label"
+              label="Category"
+              value={form.category || ""}
               onChange={(e) =>
                 setForm({ ...form, category: e.target.value })
               }
