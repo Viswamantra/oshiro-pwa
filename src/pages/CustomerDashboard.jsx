@@ -7,7 +7,7 @@ import L from "leaflet";
 import { Box, Typography, TextField, MenuItem } from "@mui/material";
 
 /* =========================
-   CATEGORY DROPDOWN WITH ICONS
+   CATEGORY DROPDOWN
 ========================= */
 const CATEGORY_LIST = [
   { value: "All", label: "All", icon: "🌍" },
@@ -19,7 +19,7 @@ const CATEGORY_LIST = [
 ];
 
 /* =========================
-   FALLBACK CITY — KAKINADA
+   FALLBACK LOCATION
 ========================= */
 const FALLBACK_CITY = {
   name: "Kakinada",
@@ -41,7 +41,7 @@ L.Icon.Default.mergeOptions({
 });
 
 /* =========================
-   DISTANCE CALC (CORRECT)
+   DISTANCE CALC (HAVERSINE)
 ========================= */
 function haversineKm(lat1, lon1, lat2, lon2) {
   const toRad = (v) => (v * Math.PI) / 180;
@@ -57,21 +57,22 @@ function haversineKm(lat1, lon1, lat2, lon2) {
 }
 
 /* =========================
-   LOCAL NOTIFICATION
+   SAFE LOCAL NOTIFICATION
 ========================= */
 function showLocalNotification(offer) {
-  if (!("Notification" in window)) return;
+  if (
+    typeof window === "undefined" ||
+    !("Notification" in window) ||
+    Notification.permission !== "granted"
+  )
+    return;
 
-  const fire = () =>
+  try {
     new Notification(`🔥 Offer Nearby at ${offer.shopName}`, {
       body: `${offer.title} — ${offer.discount}% off`,
     });
-
-  if (Notification.permission === "granted") fire();
-  else if (Notification.permission !== "denied") {
-    Notification.requestPermission().then(
-      (p) => p === "granted" && fire()
-    );
+  } catch (e) {
+    console.warn("Notification blocked:", e);
   }
 }
 
@@ -84,11 +85,9 @@ export default function CustomerDashboard() {
   const [search, setSearch] = useState("");
 
   /* =========================
-     LIVE LOCATION
+     LOCATION STATE (SAFE)
   ========================= */
   const [custLoc, setCustLoc] = useState(null);
-  const [city] = useState(FALLBACK_CITY.name);
-
   const [notified, setNotified] = useState(new Set());
 
   /* =========================
@@ -102,35 +101,39 @@ export default function CustomerDashboard() {
   }, []);
 
   /* =========================
-     REAL-TIME GPS TRACKING
+     GPS — MOBILE SAFE
   ========================= */
   useEffect(() => {
-    if (!navigator.geolocation) return;
+    if (!navigator.geolocation) {
+      setCustLoc(FALLBACK_CITY);
+      return;
+    }
 
-    const watchId = navigator.geolocation.watchPosition(
+    navigator.geolocation.getCurrentPosition(
       (pos) => {
         setCustLoc({
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
         });
       },
-      () => {
+      (err) => {
+        console.warn("GPS denied:", err.message);
         setCustLoc(FALLBACK_CITY);
       },
       {
         enableHighAccuracy: true,
-        maximumAge: 3000,
-        timeout: 10000,
+        timeout: 15000,
+        maximumAge: 0,
       }
     );
-
-    return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
   /* =========================
-     PROCESS OFFERS (FIXED)
+     PROCESS OFFERS (SAFE)
   ========================= */
   const processed = useMemo(() => {
+    if (!custLoc) return [];
+
     return offers
       .map((o) => {
         if (o.lat == null || o.lng == null) return null;
@@ -169,7 +172,7 @@ export default function CustomerDashboard() {
   }, [processed, category, radius, search]);
 
   /* =========================
-     REAL-TIME GEOFENCE ALERTS
+     GEOFENCE ALERTS
   ========================= */
   useEffect(() => {
     filtered.forEach((o) => {
@@ -184,11 +187,11 @@ export default function CustomerDashboard() {
     <Box sx={{ p: 3 }}>
       <Typography variant="h5">Customer Dashboard</Typography>
       <Typography sx={{ mb: 2 }}>
-        {user?.mobile} • 📍 <b>{city}</b>
+        {user?.mobile} • 📍 <b>Nearby Offers</b>
       </Typography>
 
       {/* FILTER BAR */}
-      <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+      <Box sx={{ display: "flex", gap: 2, mb: 2, flexWrap: "wrap" }}>
         <TextField
           select
           label="Category"
@@ -197,8 +200,7 @@ export default function CustomerDashboard() {
         >
           {CATEGORY_LIST.map((c) => (
             <MenuItem key={c.value} value={c.value}>
-              <span style={{ marginRight: 8 }}>{c.icon}</span>
-              {c.label}
+              {c.icon} {c.label}
             </MenuItem>
           ))}
         </TextField>
@@ -217,36 +219,42 @@ export default function CustomerDashboard() {
         />
       </Box>
 
-      {/* MAP */}
-      <Box sx={{ height: 360 }}>
-        <MapContainer
-          center={[custLoc.lat, custLoc.lng]}
-          zoom={14}
-          style={{ height: "100%", width: "100%" }}
-        >
-          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-
-          <Marker position={[custLoc.lat, custLoc.lng]}>
-            <Popup>You are here</Popup>
-          </Marker>
-
-          {filtered.map((o) => (
-            <Marker key={o.id} position={[o.lat, o.lng]}>
-              <Popup>
-                <b>{o.shopName}</b>
-                <div>{o.title}</div>
-                <div>{o.discount}%</div>
-              </Popup>
-            </Marker>
-          ))}
-
-          <Circle
+      {/* MAP — RENDER ONLY WHEN GPS READY */}
+      {custLoc ? (
+        <Box sx={{ height: 360 }}>
+          <MapContainer
             center={[custLoc.lat, custLoc.lng]}
-            radius={radius}
-            pathOptions={{ color: "blue", fillOpacity: 0.1 }}
-          />
-        </MapContainer>
-      </Box>
+            zoom={14}
+            style={{ height: "100%", width: "100%" }}
+          >
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+
+            <Marker position={[custLoc.lat, custLoc.lng]}>
+              <Popup>You are here</Popup>
+            </Marker>
+
+            {filtered.map((o) => (
+              <Marker key={o.id} position={[o.lat, o.lng]}>
+                <Popup>
+                  <b>{o.shopName}</b>
+                  <div>{o.title}</div>
+                  <div>{o.discount}%</div>
+                </Popup>
+              </Marker>
+            ))}
+
+            <Circle
+              center={[custLoc.lat, custLoc.lng]}
+              radius={radius}
+              pathOptions={{ color: "blue", fillOpacity: 0.1 }}
+            />
+          </MapContainer>
+        </Box>
+      ) : (
+        <Typography sx={{ mt: 2 }}>
+          📍 Detecting your location…
+        </Typography>
+      )}
 
       {/* OFFER LIST */}
       <Box sx={{ mt: 3 }}>
@@ -272,7 +280,9 @@ export default function CustomerDashboard() {
             <Typography>
               {o.category} • {o.discount}%
             </Typography>
-            <Typography>{o.distanceKm.toFixed(2)} km away</Typography>
+            <Typography>
+              {o.distanceKm.toFixed(2)} km away
+            </Typography>
           </Box>
         ))}
       </Box>
