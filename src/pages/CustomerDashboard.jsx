@@ -14,7 +14,6 @@ import { db } from "../firebase";
 
 /* =========================
    DISTANCE (HAVERSINE)
-   SINGLE SOURCE OF TRUTH
 ========================= */
 function distanceKm(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -28,33 +27,49 @@ function distanceKm(lat1, lon1, lat2, lon2) {
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
+const GPS_BUFFER_KM = 0.5; // 500m tolerance for mobile GPS
+
 export default function CustomerDashboard() {
   const [offers, setOffers] = useState([]);
   const [merchantsMap, setMerchantsMap] = useState({});
   const [customerLoc, setCustomerLoc] = useState(null);
+  const [gpsAccuracy, setGpsAccuracy] = useState(null);
+
   const [radiusKm, setRadiusKm] = useState(1);
+  const [category, setCategory] = useState("All"); // ✅ NEW
 
   /* =========================
-     GET LIVE CUSTOMER LOCATION
+     LIVE CUSTOMER GPS (MOBILE SAFE)
   ========================= */
   useEffect(() => {
-    navigator.geolocation.getCurrentPosition(
+    if (!("geolocation" in navigator)) {
+      alert("Location not supported on this device");
+      return;
+    }
+
+    const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         setCustomerLoc({
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
         });
+        setGpsAccuracy(pos.coords.accuracy);
       },
-      () => {
-        alert("Please enable location to view nearby offers");
+      (err) => {
+        console.warn("GPS error:", err.message);
       },
-      { enableHighAccuracy: true }
+      {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 10000,
+      }
     );
+
+    return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
   /* =========================
-     FETCH OFFERS
-     (NO LOCATION DATA HERE)
+     FETCH OFFERS (NO GPS HERE)
   ========================= */
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "offers"), (snap) => {
@@ -62,14 +77,13 @@ export default function CustomerDashboard() {
         id: d.id,
         ...d.data(),
       }));
-      setOffers(list.filter(o => o.active !== false));
+      setOffers(list.filter((o) => o.active !== false));
     });
     return () => unsub();
   }, []);
 
   /* =========================
-     FETCH MERCHANTS
-     (GPS LIVES HERE)
+     FETCH MERCHANTS (GPS SOURCE)
   ========================= */
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "merchants"), (snap) => {
@@ -83,7 +97,9 @@ export default function CustomerDashboard() {
   }, []);
 
   /* =========================
-     MERCHANT-BASED DISTANCE LOGIC
+     MERCHANT-BASED DISTANCE
+     + CATEGORY FILTER
+     + MOBILE GPS BUFFER
   ========================= */
   const nearbyOffers = useMemo(() => {
     if (!customerLoc) return [];
@@ -93,6 +109,11 @@ export default function CustomerDashboard() {
         const merchant = merchantsMap[offer.merchantId];
         if (!merchant?.lat || !merchant?.lng) return null;
 
+        // ✅ CATEGORY FILTER
+        if (category !== "All" && offer.category !== category) {
+          return null;
+        }
+
         const d = distanceKm(
           customerLoc.lat,
           customerLoc.lng,
@@ -100,7 +121,7 @@ export default function CustomerDashboard() {
           merchant.lng
         );
 
-        if (d > radiusKm) return null;
+        if (d > radiusKm + GPS_BUFFER_KM) return null;
 
         return {
           ...offer,
@@ -114,7 +135,7 @@ export default function CustomerDashboard() {
       })
       .filter(Boolean)
       .sort((a, b) => a.distanceValue - b.distanceValue);
-  }, [offers, merchantsMap, customerLoc, radiusKm]);
+  }, [offers, merchantsMap, customerLoc, radiusKm, category]);
 
   return (
     <Box sx={{ p: 2 }}>
@@ -123,20 +144,55 @@ export default function CustomerDashboard() {
       </Typography>
 
       {/* =========================
-          RADIUS SELECTOR
+          GPS STATUS
       ========================= */}
-      <TextField
-        select
-        label="Show offers within"
-        value={radiusKm}
-        onChange={(e) => setRadiusKm(Number(e.target.value))}
-        sx={{ mb: 2, width: 220 }}
-      >
-        <MenuItem value={0.5}>500 meters</MenuItem>
-        <MenuItem value={1}>1 km</MenuItem>
-        <MenuItem value={2}>2 km</MenuItem>
-        <MenuItem value={5}>5 km</MenuItem>
-      </TextField>
+      {!customerLoc && (
+        <Typography color="text.secondary" sx={{ mb: 1 }}>
+          📍 Locating you…
+        </Typography>
+      )}
+
+      {gpsAccuracy && (
+        <Typography variant="caption" color="text.secondary" sx={{ mb: 1 }}>
+          GPS accuracy: ~{Math.round(gpsAccuracy)} meters
+        </Typography>
+      )}
+
+      {/* =========================
+          FILTER CONTROLS
+      ========================= */}
+      <Box sx={{ display: "flex", gap: 2, mb: 2, flexWrap: "wrap" }}>
+        {/* CATEGORY SELECT */}
+        <TextField
+          select
+          label="Category"
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          sx={{ width: 220 }}
+        >
+          <MenuItem value="All">All</MenuItem>
+          <MenuItem value="Food">Food</MenuItem>
+          <MenuItem value="Fashion & Clothing">Fashion & Clothing</MenuItem>
+          <MenuItem value="Beauty & Spa">Beauty & Spa</MenuItem>
+          <MenuItem value="Hospitals">Hospitals</MenuItem>
+          <MenuItem value="Medical">Medical</MenuItem>
+          <MenuItem value="Others">Others</MenuItem>
+        </TextField>
+
+        {/* RADIUS SELECT */}
+        <TextField
+          select
+          label="Show offers within"
+          value={radiusKm}
+          onChange={(e) => setRadiusKm(Number(e.target.value))}
+          sx={{ width: 220 }}
+        >
+          <MenuItem value={0.5}>500 meters</MenuItem>
+          <MenuItem value={1}>1 km</MenuItem>
+          <MenuItem value={2}>2 km</MenuItem>
+          <MenuItem value={5}>5 km</MenuItem>
+        </TextField>
+      </Box>
 
       {/* =========================
           MAP VIEW
@@ -154,7 +210,7 @@ export default function CustomerDashboard() {
             <Popup>You are here</Popup>
           </Marker>
 
-          {/* Merchant markers (via offers) */}
+          {/* Merchant markers */}
           {nearbyOffers.map((o) => (
             <Marker
               key={o.id}
@@ -188,9 +244,9 @@ export default function CustomerDashboard() {
         </Card>
       ))}
 
-      {!nearbyOffers.length && (
+      {customerLoc && !nearbyOffers.length && (
         <Typography color="text.secondary">
-          No offers within selected radius.
+          No offers found for selected filters.
         </Typography>
       )}
     </Box>
