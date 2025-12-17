@@ -14,7 +14,7 @@ import { db } from "../firebase";
 
 /* =========================
    DISTANCE (HAVERSINE)
-   SAME LOGIC AS CLOUD FUNCTION
+   SINGLE SOURCE OF TRUTH
 ========================= */
 function distanceKm(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -30,6 +30,7 @@ function distanceKm(lat1, lon1, lat2, lon2) {
 
 export default function CustomerDashboard() {
   const [offers, setOffers] = useState([]);
+  const [merchantsMap, setMerchantsMap] = useState({});
   const [customerLoc, setCustomerLoc] = useState(null);
   const [radiusKm, setRadiusKm] = useState(1);
 
@@ -53,6 +54,7 @@ export default function CustomerDashboard() {
 
   /* =========================
      FETCH OFFERS
+     (NO LOCATION DATA HERE)
   ========================= */
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "offers"), (snap) => {
@@ -60,40 +62,59 @@ export default function CustomerDashboard() {
         id: d.id,
         ...d.data(),
       }));
-      setOffers(list);
+      setOffers(list.filter(o => o.active !== false));
     });
     return () => unsub();
   }, []);
 
   /* =========================
-     FILTER + CALCULATE DISTANCE
+     FETCH MERCHANTS
+     (GPS LIVES HERE)
+  ========================= */
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "merchants"), (snap) => {
+      const map = {};
+      snap.forEach((d) => {
+        map[d.id] = d.data();
+      });
+      setMerchantsMap(map);
+    });
+    return () => unsub();
+  }, []);
+
+  /* =========================
+     MERCHANT-BASED DISTANCE LOGIC
   ========================= */
   const nearbyOffers = useMemo(() => {
     if (!customerLoc) return [];
 
     return offers
       .map((offer) => {
-        if (!offer.lat || !offer.lng) return null;
+        const merchant = merchantsMap[offer.merchantId];
+        if (!merchant?.lat || !merchant?.lng) return null;
 
         const d = distanceKm(
           customerLoc.lat,
           customerLoc.lng,
-          offer.lat,
-          offer.lng
+          merchant.lat,
+          merchant.lng
         );
 
         if (d > radiusKm) return null;
 
         return {
           ...offer,
+          shopName: merchant.shopName,
           distanceValue: d,
           distanceLabel:
             d < 1 ? `${Math.round(d * 1000)} m` : `${d.toFixed(2)} km`,
+          merchantLat: merchant.lat,
+          merchantLng: merchant.lng,
         };
       })
       .filter(Boolean)
       .sort((a, b) => a.distanceValue - b.distanceValue);
-  }, [offers, customerLoc, radiusKm]);
+  }, [offers, merchantsMap, customerLoc, radiusKm]);
 
   return (
     <Box sx={{ p: 2 }}>
@@ -133,9 +154,12 @@ export default function CustomerDashboard() {
             <Popup>You are here</Popup>
           </Marker>
 
-          {/* Offer markers */}
+          {/* Merchant markers (via offers) */}
           {nearbyOffers.map((o) => (
-            <Marker key={o.id} position={[o.lat, o.lng]}>
+            <Marker
+              key={o.id}
+              position={[o.merchantLat, o.merchantLng]}
+            >
               <Popup>
                 <strong>{o.shopName}</strong>
                 <br />
