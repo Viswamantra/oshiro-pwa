@@ -12,14 +12,7 @@ import {
   DialogActions,
   Button,
 } from "@mui/material";
-import {
-  collection,
-  onSnapshot,
-  doc,
-  setDoc,
-  query,
-  where,
-} from "firebase/firestore";
+import { collection, onSnapshot, doc, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../auth/AuthContext";
 
@@ -124,15 +117,18 @@ export default function CustomerDashboard() {
   }, []);
 
   /* =========================
-     FETCH CATEGORIES (DYNAMIC)
+     FETCH CATEGORIES (SAFE)
   ========================= */
   useEffect(() => {
-    return onSnapshot(
-      query(collection(db, "categories"), where("active", "==", true)),
-      (snap) => {
-        setCategories(snap.docs.map((d) => d.data()));
-      }
-    );
+    return onSnapshot(collection(db, "categories"), (snap) => {
+      const list = snap.docs
+        .map((d) => d.data())
+        .filter((c) => c.active === true && c.name);
+
+      console.log("Loaded categories:", list); // 🔍 DEBUG
+
+      setCategories(list);
+    });
   }, []);
 
   /* =========================
@@ -170,21 +166,22 @@ export default function CustomerDashboard() {
   }, [offers, merchantsMap, customerLoc, radiusKm, category]);
 
   /* =========================
-     AUTO-EXPAND RADIUS IF EMPTY
+     AUTO-EXPAND RADIUS
   ========================= */
   useEffect(() => {
     if (!customerLoc) return;
     if (nearbyOffers.length > 0) return;
 
     const idx = RADIUS_STEPS.indexOf(radiusKm);
-    if (idx === -1) return;
-
     const next = RADIUS_STEPS[idx + 1];
     if (next) setRadiusKm(next);
   }, [nearbyOffers, customerLoc]);
 
+  /* =========================
+     ICON HELPER (SAFE)
+  ========================= */
   const getCategoryIcon = (name) =>
-    categories.find((c) => c.name === name)?.icon || "";
+    categories.find((c) => c.name === name)?.icon || "🏷️";
 
   return (
     <Box sx={{ p: 2 }}>
@@ -208,7 +205,7 @@ export default function CustomerDashboard() {
           <MenuItem value="All">All</MenuItem>
           {categories.map((c) => (
             <MenuItem key={c.name} value={c.name}>
-              {c.icon} {c.name}
+              {c.icon || "🏷️"} {c.name}
             </MenuItem>
           ))}
         </TextField>
