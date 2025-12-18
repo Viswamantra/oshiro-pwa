@@ -22,8 +22,8 @@ function distanceKm(lat1, lon1, lat2, lon2) {
 /* =========================
    CONFIG
 ========================= */
-const GEOFENCE_KM = 1;                 // 1 km entry zone
-const COOLDOWN_MINUTES = 30;           // anti-spam
+const GEOFENCE_KM = 1;           // 1 km radius
+const COOLDOWN_MINUTES = 30;     // anti-spam
 
 exports.notifyOnGeofenceEnter = functions.firestore
   .document("users/{userId}")
@@ -32,7 +32,9 @@ exports.notifyOnGeofenceEnter = functions.firestore
     const after = change.after.data();
     const userId = context.params.userId;
 
-    // Basic validation
+    /* =========================
+       BASIC VALIDATION
+    ========================= */
     if (!after?.lat || !after?.lng) return null;
     if (!after?.fcmToken) return null;
     if (after.pushEnabled === false) return null;
@@ -55,7 +57,13 @@ exports.notifyOnGeofenceEnter = functions.firestore
       return null;
     }
 
-    // Load approved merchants
+    const userCategories = Array.isArray(after.categories)
+      ? after.categories
+      : [];
+
+    /* =========================
+       LOAD MERCHANTS & OFFERS
+    ========================= */
     const merchantsSnap = await db
       .collection("merchants")
       .where("status", "==", "approved")
@@ -63,7 +71,6 @@ exports.notifyOnGeofenceEnter = functions.firestore
 
     if (merchantsSnap.empty) return null;
 
-    // Load active offers
     const offersSnap = await db
       .collection("offers")
       .where("active", "==", true)
@@ -71,10 +78,23 @@ exports.notifyOnGeofenceEnter = functions.firestore
 
     if (offersSnap.empty) return null;
 
-    // Build merchant → offers map
+    /* =========================
+       GROUP OFFERS BY MERCHANT
+       + CATEGORY FILTER
+    ========================= */
     const offersByMerchant = {};
-    offersSnap.forEach((d) => {
-      const o = d.data();
+
+    offersSnap.forEach((doc) => {
+      const o = doc.data();
+
+      // Category preference filter
+      if (
+        userCategories.length > 0 &&
+        !userCategories.includes(o.category)
+      ) {
+        return;
+      }
+
       if (!offersByMerchant[o.merchantId]) {
         offersByMerchant[o.merchantId] = [];
       }
@@ -84,12 +104,18 @@ exports.notifyOnGeofenceEnter = functions.firestore
     let notifiedMerchantId = null;
     let notificationPayload = null;
 
+    /* =========================
+       GEOFENCE CHECK
+    ========================= */
     for (const mDoc of merchantsSnap.docs) {
       const merchant = mDoc.data();
       const merchantId = mDoc.id;
 
       if (!merchant.lat || !merchant.lng) continue;
       if (!offersByMerchant[merchantId]) continue;
+
+      // Avoid repeat notification for same merchant
+      if (after.lastNotifiedMerchantId === merchantId) continue;
 
       const dist = distanceKm(
         after.lat,
@@ -110,22 +136,27 @@ exports.notifyOnGeofenceEnter = functions.firestore
         };
 
         notifiedMerchantId = merchantId;
-        break; // notify only once
+        break; // 🔒 send only ONE notification
       }
     }
 
     if (!notificationPayload) return null;
 
-    // Send push
+    /* =========================
+       SEND PUSH
+    ========================= */
     await admin.messaging().send({
       token: after.fcmToken,
       notification: notificationPayload,
+      android: { priority: "high" },
       data: {
         merchantId: notifiedMerchantId,
       },
     });
 
-    // Update cooldown info
+    /* =========================
+       UPDATE COOLDOWN STATE
+    ========================= */
     await db.doc(`users/${userId}`).update({
       lastPushAt: now,
       lastNotifiedMerchantId: notifiedMerchantId,
