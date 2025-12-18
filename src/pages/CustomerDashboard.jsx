@@ -7,11 +7,16 @@ import {
   MenuItem,
   Card,
   CardContent,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
 } from "@mui/material";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import { collection, onSnapshot, doc, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
-import { useAuth } from "../auth/AuthContext"; // 🔴 adjust path if needed
+import { useAuth } from "../auth/AuthContext";
 
 /* =========================
    DISTANCE (HAVERSINE)
@@ -28,11 +33,11 @@ function distanceKm(lat1, lon1, lat2, lon2) {
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-const GPS_BUFFER_KM = 0.5;           // UI tolerance
-const LOCATION_WRITE_KM = 0.05;      // 50 meters write threshold
+const GPS_BUFFER_KM = 0.5;
+const LOCATION_WRITE_KM = 0.05;
 
 export default function CustomerDashboard() {
-  const { user } = useAuth(); // 🔑 authenticated customer
+  const { user } = useAuth();
 
   const [offers, setOffers] = useState([]);
   const [merchantsMap, setMerchantsMap] = useState({});
@@ -42,14 +47,14 @@ export default function CustomerDashboard() {
   const [radiusKm, setRadiusKm] = useState(1);
   const [category, setCategory] = useState("All");
 
+  const [selectedOffer, setSelectedOffer] = useState(null); // 🆕
   const lastWrittenLoc = useRef(null);
 
   /* =========================
-     LIVE CUSTOMER GPS
-     + FIRESTORE LOCATION WRITE
+     LIVE GPS + FIRESTORE WRITE
   ========================= */
   useEffect(() => {
-    if (!("geolocation" in navigator)) return;
+    if (!navigator.geolocation) return;
 
     const watchId = navigator.geolocation.watchPosition(
       async (pos) => {
@@ -59,7 +64,6 @@ export default function CustomerDashboard() {
         setCustomerLoc({ lat, lng });
         setGpsAccuracy(pos.coords.accuracy);
 
-        // 🔔 WRITE LOCATION ONLY IF MOVED SIGNIFICANTLY
         if (user?.uid) {
           if (lastWrittenLoc.current) {
             const moved = distanceKm(
@@ -75,58 +79,41 @@ export default function CustomerDashboard() {
 
           await setDoc(
             doc(db, "users", user.uid),
-            {
-              lat,
-              lng,
-              updatedAt: Date.now(),
-            },
+            { lat, lng, updatedAt: Date.now() },
             { merge: true }
           );
         }
       },
-      (err) => console.warn("GPS error:", err.message),
-      {
-        enableHighAccuracy: true,
-        maximumAge: 0,
-        timeout: 10000,
-      }
+      () => {},
+      { enableHighAccuracy: true }
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
   }, [user]);
 
   /* =========================
-     FETCH OFFERS
+     FETCH DATA
   ========================= */
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "offers"), (snap) => {
-      const list = snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
-      setOffers(list.filter((o) => o.active !== false));
+    return onSnapshot(collection(db, "offers"), (snap) => {
+      setOffers(
+        snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .filter((o) => o.active !== false)
+      );
     });
-    return () => unsub();
   }, []);
 
-  /* =========================
-     FETCH MERCHANTS (GPS SOURCE)
-  ========================= */
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "merchants"), (snap) => {
+    return onSnapshot(collection(db, "merchants"), (snap) => {
       const map = {};
-      snap.forEach((d) => {
-        map[d.id] = d.data();
-      });
+      snap.forEach((d) => (map[d.id] = d.data()));
       setMerchantsMap(map);
     });
-    return () => unsub();
   }, []);
 
   /* =========================
-     MERCHANT-BASED DISTANCE
-     + CATEGORY FILTER
-     + MOBILE GPS BUFFER
+     FILTER + DISTANCE
   ========================= */
   const nearbyOffers = useMemo(() => {
     if (!customerLoc) return [];
@@ -135,7 +122,6 @@ export default function CustomerDashboard() {
       .map((offer) => {
         const merchant = merchantsMap[offer.merchantId];
         if (!merchant?.lat || !merchant?.lng) return null;
-
         if (category !== "All" && offer.category !== category) return null;
 
         const d = distanceKm(
@@ -144,17 +130,13 @@ export default function CustomerDashboard() {
           merchant.lat,
           merchant.lng
         );
-
         if (d > radiusKm + GPS_BUFFER_KM) return null;
 
         return {
           ...offer,
-          shopName: merchant.shopName,
-          distanceValue: d,
+          merchant,
           distanceLabel:
             d < 1 ? `${Math.round(d * 1000)} m` : `${d.toFixed(2)} km`,
-          merchantLat: merchant.lat,
-          merchantLng: merchant.lng,
         };
       })
       .filter(Boolean)
@@ -165,84 +147,16 @@ export default function CustomerDashboard() {
     <Box sx={{ p: 2 }}>
       <Typography variant="h6">Nearby Offers</Typography>
 
-      {!customerLoc && (
-        <Typography sx={{ mb: 1 }}>📍 Locating you…</Typography>
-      )}
-
-      {gpsAccuracy && (
-        <Typography variant="caption">
-          GPS accuracy ~{Math.round(gpsAccuracy)} m
-        </Typography>
-      )}
-
-      {/* FILTER CONTROLS */}
-      <Box sx={{ display: "flex", gap: 2, my: 2, flexWrap: "wrap" }}>
-        <TextField
-          select
-          label="Category"
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          sx={{ width: 220 }}
-        >
-          <MenuItem value="All">All</MenuItem>
-          <MenuItem value="Food">Food</MenuItem>
-          <MenuItem value="Fashion & Clothing">Fashion & Clothing</MenuItem>
-          <MenuItem value="Beauty & Spa">Beauty & Spa</MenuItem>
-          <MenuItem value="Hospitals">Hospitals</MenuItem>
-          <MenuItem value="Medical">Medical</MenuItem>
-          <MenuItem value="Others">Others</MenuItem>
-        </TextField>
-
-        <TextField
-          select
-          label="Show offers within"
-          value={radiusKm}
-          onChange={(e) => setRadiusKm(Number(e.target.value))}
-          sx={{ width: 220 }}
-        >
-          <MenuItem value={0.5}>500 meters</MenuItem>
-          <MenuItem value={1}>1 km</MenuItem>
-          <MenuItem value={2}>2 km</MenuItem>
-          <MenuItem value={5}>5 km</MenuItem>
-        </TextField>
-      </Box>
-
-      {/* MAP */}
-      {customerLoc && (
-        <MapContainer
-          center={[customerLoc.lat, customerLoc.lng]}
-          zoom={14}
-          style={{ height: 260, marginBottom: 16 }}
-        >
-          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-
-          <Marker position={[customerLoc.lat, customerLoc.lng]}>
-            <Popup>You are here</Popup>
-          </Marker>
-
-          {nearbyOffers.map((o) => (
-            <Marker
-              key={o.id}
-              position={[o.merchantLat, o.merchantLng]}
-            >
-              <Popup>
-                <strong>{o.shopName}</strong>
-                <br />
-                {o.title}
-                <br />
-                {o.distanceLabel} away
-              </Popup>
-            </Marker>
-          ))}
-        </MapContainer>
-      )}
-
       {/* OFFER LIST */}
       {nearbyOffers.map((o) => (
-        <Card key={o.id} sx={{ mb: 1 }}>
+        <Card
+          key={o.id}
+          sx={{ mb: 1, cursor: "pointer" }}
+          onClick={() => setSelectedOffer(o)}
+        >
           <CardContent>
             <Typography variant="subtitle1">
-              <strong>{o.shopName}</strong> — {o.title}
+              <strong>{o.merchant.shopName}</strong> — {o.title}
             </Typography>
             <Typography variant="body2">
               {o.category} • {o.discount}% • {o.distanceLabel} away
@@ -251,9 +165,54 @@ export default function CustomerDashboard() {
         </Card>
       ))}
 
-      {customerLoc && !nearbyOffers.length && (
-        <Typography>No offers found for selected filters.</Typography>
-      )}
+      {/* =========================
+          OFFER DETAIL DIALOG
+      ========================= */}
+      <Dialog
+        open={Boolean(selectedOffer)}
+        onClose={() => setSelectedOffer(null)}
+        fullWidth
+      >
+        {selectedOffer && (
+          <>
+            <DialogTitle>{selectedOffer.title}</DialogTitle>
+            <DialogContent dividers>
+              <Typography>
+                <strong>Merchant:</strong>{" "}
+                {selectedOffer.merchant.shopName}
+              </Typography>
+              <Typography sx={{ mt: 1 }}>
+                <strong>Category:</strong> {selectedOffer.category}
+              </Typography>
+              <Typography sx={{ mt: 1 }}>
+                <strong>Discount:</strong> {selectedOffer.discount}%
+              </Typography>
+              <Typography sx={{ mt: 1 }}>
+                <strong>Distance:</strong>{" "}
+                {selectedOffer.distanceLabel}
+              </Typography>
+              <Typography sx={{ mt: 1 }}>
+                <strong>Address:</strong>{" "}
+                {selectedOffer.merchant.addressCombined || "N/A"}
+              </Typography>
+            </DialogContent>
+            <DialogActions>
+              <Button
+                onClick={() => {
+                  const { lat, lng } = selectedOffer.merchant;
+                  window.open(
+                    `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
+                    "_blank"
+                  );
+                }}
+              >
+                Navigate
+              </Button>
+              <Button onClick={() => setSelectedOffer(null)}>Close</Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
     </Box>
   );
 }
