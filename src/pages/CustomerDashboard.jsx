@@ -3,8 +3,6 @@ import React, { useEffect, useState, useMemo, useRef } from "react";
 import {
   Box,
   Typography,
-  TextField,
-  MenuItem,
   Card,
   CardContent,
   Dialog,
@@ -33,8 +31,8 @@ function distanceKm(lat1, lon1, lat2, lon2) {
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-const GPS_BUFFER_KM = 0.5;
-const LOCATION_WRITE_KM = 0.05;
+const GPS_BUFFER_KM = 0.5;        // mobile tolerance
+const LOCATION_WRITE_KM = 0.05;   // 50 meters
 
 export default function CustomerDashboard() {
   const { user } = useAuth();
@@ -44,10 +42,9 @@ export default function CustomerDashboard() {
   const [customerLoc, setCustomerLoc] = useState(null);
   const [gpsAccuracy, setGpsAccuracy] = useState(null);
 
-  const [radiusKm, setRadiusKm] = useState(1);
-  const [category, setCategory] = useState("All");
+  const radiusKm = 2; // 🔒 FIXED RADIUS (NO USER CONTROL)
 
-  const [selectedOffer, setSelectedOffer] = useState(null); // 🆕
+  const [selectedOffer, setSelectedOffer] = useState(null);
   const lastWrittenLoc = useRef(null);
 
   /* =========================
@@ -79,7 +76,11 @@ export default function CustomerDashboard() {
 
           await setDoc(
             doc(db, "users", user.uid),
-            { lat, lng, updatedAt: Date.now() },
+            {
+              lat,
+              lng,
+              updatedAt: Date.now(),
+            },
             { merge: true }
           );
         }
@@ -92,7 +93,7 @@ export default function CustomerDashboard() {
   }, [user]);
 
   /* =========================
-     FETCH DATA
+     FETCH OFFERS
   ========================= */
   useEffect(() => {
     return onSnapshot(collection(db, "offers"), (snap) => {
@@ -104,6 +105,9 @@ export default function CustomerDashboard() {
     });
   }, []);
 
+  /* =========================
+     FETCH MERCHANTS
+  ========================= */
   useEffect(() => {
     return onSnapshot(collection(db, "merchants"), (snap) => {
       const map = {};
@@ -113,7 +117,7 @@ export default function CustomerDashboard() {
   }, []);
 
   /* =========================
-     FILTER + DISTANCE
+     DISTANCE FILTER (MERCHANT GPS)
   ========================= */
   const nearbyOffers = useMemo(() => {
     if (!customerLoc) return [];
@@ -122,7 +126,6 @@ export default function CustomerDashboard() {
       .map((offer) => {
         const merchant = merchantsMap[offer.merchantId];
         if (!merchant?.lat || !merchant?.lng) return null;
-        if (category !== "All" && offer.category !== category) return null;
 
         const d = distanceKm(
           customerLoc.lat,
@@ -130,6 +133,7 @@ export default function CustomerDashboard() {
           merchant.lat,
           merchant.lng
         );
+
         if (d > radiusKm + GPS_BUFFER_KM) return null;
 
         return {
@@ -141,17 +145,27 @@ export default function CustomerDashboard() {
       })
       .filter(Boolean)
       .sort((a, b) => a.distanceValue - b.distanceValue);
-  }, [offers, merchantsMap, customerLoc, radiusKm, category]);
+  }, [offers, merchantsMap, customerLoc]);
 
   return (
     <Box sx={{ p: 2 }}>
-      <Typography variant="h6">Nearby Offers</Typography>
+      <Typography variant="h6">Offers near you (within 2 km)</Typography>
+
+      {!customerLoc && (
+        <Typography sx={{ mt: 1 }}>📍 Locating you…</Typography>
+      )}
+
+      {gpsAccuracy && (
+        <Typography variant="caption" color="text.secondary">
+          GPS accuracy ~{Math.round(gpsAccuracy)} m
+        </Typography>
+      )}
 
       {/* OFFER LIST */}
       {nearbyOffers.map((o) => (
         <Card
           key={o.id}
-          sx={{ mb: 1, cursor: "pointer" }}
+          sx={{ mt: 1, cursor: "pointer" }}
           onClick={() => setSelectedOffer(o)}
         >
           <CardContent>
@@ -159,11 +173,17 @@ export default function CustomerDashboard() {
               <strong>{o.merchant.shopName}</strong> — {o.title}
             </Typography>
             <Typography variant="body2">
-              {o.category} • {o.discount}% • {o.distanceLabel} away
+              {o.discount}% OFF • {o.distanceLabel} away
             </Typography>
           </CardContent>
         </Card>
       ))}
+
+      {!nearbyOffers.length && customerLoc && (
+        <Typography sx={{ mt: 2 }} color="text.secondary">
+          No offers found within 2 km.
+        </Typography>
+      )}
 
       {/* =========================
           OFFER DETAIL DIALOG
@@ -180,9 +200,6 @@ export default function CustomerDashboard() {
               <Typography>
                 <strong>Merchant:</strong>{" "}
                 {selectedOffer.merchant.shopName}
-              </Typography>
-              <Typography sx={{ mt: 1 }}>
-                <strong>Category:</strong> {selectedOffer.category}
               </Typography>
               <Typography sx={{ mt: 1 }}>
                 <strong>Discount:</strong> {selectedOffer.discount}%
