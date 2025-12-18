@@ -1,4 +1,3 @@
-// src/pages/CustomerDashboard.jsx
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import {
   Box,
@@ -13,7 +12,14 @@ import {
   DialogActions,
   Button,
 } from "@mui/material";
-import { collection, onSnapshot, doc, setDoc } from "firebase/firestore";
+import {
+  collection,
+  onSnapshot,
+  doc,
+  setDoc,
+  query,
+  where,
+} from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../auth/AuthContext";
 
@@ -32,18 +38,20 @@ function distanceKm(lat1, lon1, lat2, lon2) {
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-const GPS_BUFFER_KM = 0.5;        // Mobile GPS tolerance
-const LOCATION_WRITE_KM = 0.05;   // 50 meters
+const GPS_BUFFER_KM = 0.5;
+const LOCATION_WRITE_KM = 0.05;
+const RADIUS_STEPS = [1, 2, 3, 5];
 
 export default function CustomerDashboard() {
   const { user } = useAuth();
 
   const [offers, setOffers] = useState([]);
   const [merchantsMap, setMerchantsMap] = useState({});
+  const [categories, setCategories] = useState([]);
+
   const [customerLoc, setCustomerLoc] = useState(null);
   const [gpsAccuracy, setGpsAccuracy] = useState(null);
 
-  // ✅ CUSTOMER CONTROLS
   const [radiusKm, setRadiusKm] = useState(1);
   const [category, setCategory] = useState("All");
 
@@ -116,7 +124,19 @@ export default function CustomerDashboard() {
   }, []);
 
   /* =========================
-     FILTER + DISTANCE (CUSTOMER CHOICE)
+     FETCH CATEGORIES (DYNAMIC)
+  ========================= */
+  useEffect(() => {
+    return onSnapshot(
+      query(collection(db, "categories"), where("active", "==", true)),
+      (snap) => {
+        setCategories(snap.docs.map((d) => d.data()));
+      }
+    );
+  }, []);
+
+  /* =========================
+     FILTER + DISTANCE
   ========================= */
   const nearbyOffers = useMemo(() => {
     if (!customerLoc) return [];
@@ -126,7 +146,6 @@ export default function CustomerDashboard() {
         const merchant = merchantsMap[offer.merchantId];
         if (!merchant?.lat || !merchant?.lng) return null;
 
-        // CATEGORY FILTER
         if (category !== "All" && offer.category !== category) return null;
 
         const d = distanceKm(
@@ -141,6 +160,7 @@ export default function CustomerDashboard() {
         return {
           ...offer,
           merchant,
+          distanceValue: d,
           distanceLabel:
             d < 1 ? `${Math.round(d * 1000)} m` : `${d.toFixed(2)} km`,
         };
@@ -149,15 +169,26 @@ export default function CustomerDashboard() {
       .sort((a, b) => a.distanceValue - b.distanceValue);
   }, [offers, merchantsMap, customerLoc, radiusKm, category]);
 
+  /* =========================
+     AUTO-EXPAND RADIUS IF EMPTY
+  ========================= */
+  useEffect(() => {
+    if (!customerLoc) return;
+    if (nearbyOffers.length > 0) return;
+
+    const idx = RADIUS_STEPS.indexOf(radiusKm);
+    if (idx === -1) return;
+
+    const next = RADIUS_STEPS[idx + 1];
+    if (next) setRadiusKm(next);
+  }, [nearbyOffers, customerLoc]);
+
+  const getCategoryIcon = (name) =>
+    categories.find((c) => c.name === name)?.icon || "";
+
   return (
     <Box sx={{ p: 2 }}>
-      <Typography variant="h6" gutterBottom>
-        Nearby Offers
-      </Typography>
-
-      {!customerLoc && (
-        <Typography sx={{ mb: 1 }}>📍 Locating you…</Typography>
-      )}
+      <Typography variant="h6">Nearby Offers</Typography>
 
       {gpsAccuracy && (
         <Typography variant="caption" color="text.secondary">
@@ -165,11 +196,8 @@ export default function CustomerDashboard() {
         </Typography>
       )}
 
-      {/* =========================
-          CUSTOMER FILTER CONTROLS
-      ========================= */}
+      {/* FILTER CONTROLS */}
       <Box sx={{ display: "flex", gap: 2, my: 2, flexWrap: "wrap" }}>
-        {/* CATEGORY */}
         <TextField
           select
           label="Category"
@@ -178,15 +206,13 @@ export default function CustomerDashboard() {
           sx={{ width: 220 }}
         >
           <MenuItem value="All">All</MenuItem>
-          <MenuItem value="Food">Food</MenuItem>
-          <MenuItem value="Fashion & Clothing">Fashion & Clothing</MenuItem>
-          <MenuItem value="Beauty & Spa">Beauty & Spa</MenuItem>
-          <MenuItem value="Hospitals">Hospitals</MenuItem>
-          <MenuItem value="Medical">Medical</MenuItem>
-          <MenuItem value="Others">Others</MenuItem>
+          {categories.map((c) => (
+            <MenuItem key={c.name} value={c.name}>
+              {c.icon} {c.name}
+            </MenuItem>
+          ))}
         </TextField>
 
-        {/* RADIUS */}
         <TextField
           select
           label="Show offers within"
@@ -201,9 +227,7 @@ export default function CustomerDashboard() {
         </TextField>
       </Box>
 
-      {/* =========================
-          OFFER LIST
-      ========================= */}
+      {/* OFFER LIST */}
       {nearbyOffers.map((o) => (
         <Card
           key={o.id}
@@ -215,21 +239,20 @@ export default function CustomerDashboard() {
               <strong>{o.merchant.shopName}</strong> — {o.title}
             </Typography>
             <Typography variant="body2">
-              {o.category} • {o.discount}% • {o.distanceLabel} away
+              {getCategoryIcon(o.category)} {o.category} • {o.discount}% •{" "}
+              {o.distanceLabel}
             </Typography>
           </CardContent>
         </Card>
       ))}
 
-      {customerLoc && !nearbyOffers.length && (
-        <Typography color="text.secondary" sx={{ mt: 2 }}>
-          No offers found for selected category and radius.
+      {!nearbyOffers.length && customerLoc && (
+        <Typography color="text.secondary">
+          Expanding radius to find nearby offers…
         </Typography>
       )}
 
-      {/* =========================
-          OFFER DETAIL DIALOG
-      ========================= */}
+      {/* OFFER DETAILS */}
       <Dialog
         open={Boolean(selectedOffer)}
         onClose={() => setSelectedOffer(null)}
@@ -244,7 +267,9 @@ export default function CustomerDashboard() {
                 {selectedOffer.merchant.shopName}
               </Typography>
               <Typography sx={{ mt: 1 }}>
-                <strong>Category:</strong> {selectedOffer.category}
+                <strong>Category:</strong>{" "}
+                {getCategoryIcon(selectedOffer.category)}{" "}
+                {selectedOffer.category}
               </Typography>
               <Typography sx={{ mt: 1 }}>
                 <strong>Discount:</strong> {selectedOffer.discount}%
