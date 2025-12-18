@@ -1,5 +1,5 @@
 // src/pages/CustomerDashboard.jsx
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import {
   Box,
   Typography,
@@ -9,8 +9,9 @@ import {
   CardContent,
 } from "@mui/material";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot, doc, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
+import { useAuth } from "../auth/AuthContext"; // 🔴 adjust path if needed
 
 /* =========================
    DISTANCE (HAVERSINE)
@@ -27,37 +28,63 @@ function distanceKm(lat1, lon1, lat2, lon2) {
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-const GPS_BUFFER_KM = 0.5; // 500m tolerance for mobile GPS
+const GPS_BUFFER_KM = 0.5;           // UI tolerance
+const LOCATION_WRITE_KM = 0.05;      // 50 meters write threshold
 
 export default function CustomerDashboard() {
+  const { user } = useAuth(); // 🔑 authenticated customer
+
   const [offers, setOffers] = useState([]);
   const [merchantsMap, setMerchantsMap] = useState({});
   const [customerLoc, setCustomerLoc] = useState(null);
   const [gpsAccuracy, setGpsAccuracy] = useState(null);
 
   const [radiusKm, setRadiusKm] = useState(1);
-  const [category, setCategory] = useState("All"); // ✅ NEW
+  const [category, setCategory] = useState("All");
+
+  const lastWrittenLoc = useRef(null);
 
   /* =========================
-     LIVE CUSTOMER GPS (MOBILE SAFE)
+     LIVE CUSTOMER GPS
+     + FIRESTORE LOCATION WRITE
   ========================= */
   useEffect(() => {
-    if (!("geolocation" in navigator)) {
-      alert("Location not supported on this device");
-      return;
-    }
+    if (!("geolocation" in navigator)) return;
 
     const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        setCustomerLoc({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-        });
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+
+        setCustomerLoc({ lat, lng });
         setGpsAccuracy(pos.coords.accuracy);
+
+        // 🔔 WRITE LOCATION ONLY IF MOVED SIGNIFICANTLY
+        if (user?.uid) {
+          if (lastWrittenLoc.current) {
+            const moved = distanceKm(
+              lastWrittenLoc.current.lat,
+              lastWrittenLoc.current.lng,
+              lat,
+              lng
+            );
+            if (moved < LOCATION_WRITE_KM) return;
+          }
+
+          lastWrittenLoc.current = { lat, lng };
+
+          await setDoc(
+            doc(db, "users", user.uid),
+            {
+              lat,
+              lng,
+              updatedAt: Date.now(),
+            },
+            { merge: true }
+          );
+        }
       },
-      (err) => {
-        console.warn("GPS error:", err.message);
-      },
+      (err) => console.warn("GPS error:", err.message),
       {
         enableHighAccuracy: true,
         maximumAge: 0,
@@ -66,10 +93,10 @@ export default function CustomerDashboard() {
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
+  }, [user]);
 
   /* =========================
-     FETCH OFFERS (NO GPS HERE)
+     FETCH OFFERS
   ========================= */
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "offers"), (snap) => {
@@ -109,10 +136,7 @@ export default function CustomerDashboard() {
         const merchant = merchantsMap[offer.merchantId];
         if (!merchant?.lat || !merchant?.lng) return null;
 
-        // ✅ CATEGORY FILTER
-        if (category !== "All" && offer.category !== category) {
-          return null;
-        }
+        if (category !== "All" && offer.category !== category) return null;
 
         const d = distanceKm(
           customerLoc.lat,
@@ -139,30 +163,20 @@ export default function CustomerDashboard() {
 
   return (
     <Box sx={{ p: 2 }}>
-      <Typography variant="h6" gutterBottom>
-        Nearby Offers
-      </Typography>
+      <Typography variant="h6">Nearby Offers</Typography>
 
-      {/* =========================
-          GPS STATUS
-      ========================= */}
       {!customerLoc && (
-        <Typography color="text.secondary" sx={{ mb: 1 }}>
-          📍 Locating you…
-        </Typography>
+        <Typography sx={{ mb: 1 }}>📍 Locating you…</Typography>
       )}
 
       {gpsAccuracy && (
-        <Typography variant="caption" color="text.secondary" sx={{ mb: 1 }}>
-          GPS accuracy: ~{Math.round(gpsAccuracy)} meters
+        <Typography variant="caption">
+          GPS accuracy ~{Math.round(gpsAccuracy)} m
         </Typography>
       )}
 
-      {/* =========================
-          FILTER CONTROLS
-      ========================= */}
-      <Box sx={{ display: "flex", gap: 2, mb: 2, flexWrap: "wrap" }}>
-        {/* CATEGORY SELECT */}
+      {/* FILTER CONTROLS */}
+      <Box sx={{ display: "flex", gap: 2, my: 2, flexWrap: "wrap" }}>
         <TextField
           select
           label="Category"
@@ -179,7 +193,6 @@ export default function CustomerDashboard() {
           <MenuItem value="Others">Others</MenuItem>
         </TextField>
 
-        {/* RADIUS SELECT */}
         <TextField
           select
           label="Show offers within"
@@ -194,23 +207,19 @@ export default function CustomerDashboard() {
         </TextField>
       </Box>
 
-      {/* =========================
-          MAP VIEW
-      ========================= */}
+      {/* MAP */}
       {customerLoc && (
         <MapContainer
           center={[customerLoc.lat, customerLoc.lng]}
           zoom={14}
-          style={{ height: 260, width: "100%", marginBottom: 16 }}
+          style={{ height: 260, marginBottom: 16 }}
         >
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
-          {/* Customer marker */}
           <Marker position={[customerLoc.lat, customerLoc.lng]}>
             <Popup>You are here</Popup>
           </Marker>
 
-          {/* Merchant markers */}
           {nearbyOffers.map((o) => (
             <Marker
               key={o.id}
@@ -228,9 +237,7 @@ export default function CustomerDashboard() {
         </MapContainer>
       )}
 
-      {/* =========================
-          OFFER LIST
-      ========================= */}
+      {/* OFFER LIST */}
       {nearbyOffers.map((o) => (
         <Card key={o.id} sx={{ mb: 1 }}>
           <CardContent>
@@ -245,9 +252,7 @@ export default function CustomerDashboard() {
       ))}
 
       {customerLoc && !nearbyOffers.length && (
-        <Typography color="text.secondary">
-          No offers found for selected filters.
-        </Typography>
+        <Typography>No offers found for selected filters.</Typography>
       )}
     </Box>
   );
