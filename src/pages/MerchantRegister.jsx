@@ -7,6 +7,7 @@ import {
   Typography,
   Grid,
   MenuItem,
+  InputAdornment,
 } from "@mui/material";
 import { addDoc, collection } from "firebase/firestore";
 import { db } from "../firebase";
@@ -27,8 +28,8 @@ const CATEGORY_LIST = [
 
 export default function MerchantRegister() {
   const [form, setForm] = useState({
-    mobile: "",
-    contactPhone: "+91", // ✅ NEW
+    mobile: "",            // login mobile (10 digits)
+    contactPhone: "",      // customer call number (10 digits only)
     shopName: "",
     doorNo: "",
     street: "",
@@ -130,13 +131,12 @@ export default function MerchantRegister() {
     e.preventDefault();
 
     if (!/^\d{10}$/.test(form.mobile)) {
-      setMsg("Login mobile must be 10 digits.");
+      setMsg("Login mobile must be exactly 10 digits.");
       return;
     }
 
-    // ✅ CONTACT NUMBER VALIDATION
-    if (!/^\+91\d{10}$/.test(form.contactPhone)) {
-      setMsg("Contact number must be in +91XXXXXXXXXX format.");
+    if (!/^\d{10}$/.test(form.contactPhone)) {
+      setMsg("Contact number must be exactly 10 digits.");
       return;
     }
 
@@ -151,6 +151,7 @@ export default function MerchantRegister() {
     try {
       await addDoc(collection(db, "merchants"), {
         ...form,
+        contactPhone: `+91${form.contactPhone}`, // ✅ stored correctly
         addressCombined: form.addressCombined || buildCombinedAddress(form),
         status: "pending",
         createdAt: Date.now(),
@@ -160,7 +161,7 @@ export default function MerchantRegister() {
 
       setForm({
         mobile: "",
-        contactPhone: "+91",
+        contactPhone: "",
         shopName: "",
         doorNo: "",
         street: "",
@@ -192,7 +193,7 @@ export default function MerchantRegister() {
           {/* LOGIN MOBILE */}
           <Grid item xs={12} sm={6}>
             <TextField
-              label="Login Mobile"
+              label="Login Mobile *"
               value={form.mobile}
               onChange={(e) =>
                 setForm({
@@ -200,6 +201,8 @@ export default function MerchantRegister() {
                   mobile: e.target.value.replace(/\D/g, "").slice(0, 10),
                 })
               }
+              inputProps={{ maxLength: 10 }}
+              helperText="10-digit login number"
               fullWidth
               required
             />
@@ -208,22 +211,27 @@ export default function MerchantRegister() {
           {/* CONTACT PHONE */}
           <Grid item xs={12} sm={6}>
             <TextField
-              label="Contact Number (for customers)"
-              placeholder="+91 9876543210"
+              label="Contact Number (for customers) *"
               value={form.contactPhone}
               onChange={(e) =>
                 setForm({
                   ...form,
-                  contactPhone: e.target.value.replace(/[^\d+]/g, ""),
+                  contactPhone: e.target.value.replace(/\D/g, "").slice(0, 10),
                 })
               }
+              inputProps={{ maxLength: 10 }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">+91</InputAdornment>
+                ),
+              }}
               helperText="Customers can call this number"
               fullWidth
               required
             />
           </Grid>
 
-          {/* SHOP */}
+          {/* SHOP NAME */}
           <Grid item xs={12}>
             <TextField
               label="Shop Name"
@@ -241,21 +249,25 @@ export default function MerchantRegister() {
               onChange={(e) => setForm({ ...form, doorNo: e.target.value })}
               fullWidth />
           </Grid>
+
           <Grid item xs={12} sm={8}>
             <TextField label="Street" value={form.street}
               onChange={(e) => setForm({ ...form, street: e.target.value })}
               fullWidth />
           </Grid>
+
           <Grid item xs={12} sm={6}>
             <TextField label="Area" value={form.area}
               onChange={(e) => setForm({ ...form, area: e.target.value })}
               fullWidth />
           </Grid>
+
           <Grid item xs={12} sm={4}>
             <TextField label="City" value={form.city}
               onChange={(e) => setForm({ ...form, city: e.target.value })}
               fullWidth />
           </Grid>
+
           <Grid item xs={12} sm={2}>
             <TextField label="Pincode" value={form.pincode}
               onChange={(e) =>
@@ -277,7 +289,7 @@ export default function MerchantRegister() {
           <Grid item xs={12} sm={6}>
             <TextField
               select
-              label="Category"
+              label="Category *"
               value={form.category}
               onChange={(e) =>
                 setForm({ ...form, category: e.target.value })
