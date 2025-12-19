@@ -250,54 +250,82 @@ export default function CustomerDashboard() {
         </Typography>
       )}
 
-      {/* OFFER DETAILS */}
-      <Dialog
-        open={Boolean(selectedOffer)}
-        onClose={() => setSelectedOffer(null)}
-        fullWidth
-      >
-        {selectedOffer && (
-          <>
-            <DialogTitle>{selectedOffer.title}</DialogTitle>
-            <DialogContent dividers>
-              <Typography>
-                <strong>Merchant:</strong>{" "}
-                {selectedOffer.merchant.shopName}
-              </Typography>
-              <Typography sx={{ mt: 1 }}>
-                <strong>Category:</strong>{" "}
-                {getCategoryIcon(selectedOffer.category)}{" "}
-                {selectedOffer.category}
-              </Typography>
-              <Typography sx={{ mt: 1 }}>
-                <strong>Discount:</strong> {selectedOffer.discount}%
-              </Typography>
-              <Typography sx={{ mt: 1 }}>
-                <strong>Distance:</strong>{" "}
-                {selectedOffer.distanceLabel}
-              </Typography>
-              <Typography sx={{ mt: 1 }}>
-                <strong>Address:</strong>{" "}
-                {selectedOffer.merchant.addressCombined || "N/A"}
-              </Typography>
-            </DialogContent>
-            <DialogActions>
-              <Button
-                onClick={() => {
-                  const { lat, lng } = selectedOffer.merchant;
-                  window.open(
-                    `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
-                    "_blank"
-                  );
-                }}
-              >
-                Navigate
-              </Button>
-              <Button onClick={() => setSelectedOffer(null)}>Close</Button>
-            </DialogActions>
-          </>
+     {/* OFFER DETAILS */}
+<Dialog
+  open={Boolean(selectedOffer)}
+  onClose={() => setSelectedOffer(null)}
+  fullWidth
+>
+  {selectedOffer && (
+    <>
+      <DialogTitle>{selectedOffer.title}</DialogTitle>
+
+      <DialogContent dividers>
+        <Typography>
+          <strong>Merchant:</strong>{" "}
+          {selectedOffer.merchant.shopName}
+        </Typography>
+
+        <Typography sx={{ mt: 1 }}>
+          <strong>Category:</strong>{" "}
+          {getCategoryIcon(selectedOffer.category)}{" "}
+          {selectedOffer.category}
+        </Typography>
+
+        <Typography sx={{ mt: 1 }}>
+          <strong>Discount:</strong> {selectedOffer.discount}%
+        </Typography>
+
+        <Typography sx={{ mt: 1 }}>
+          <strong>Distance:</strong>{" "}
+          {selectedOffer.distanceLabel}
+        </Typography>
+
+        <Typography sx={{ mt: 1 }}>
+          <strong>Address:</strong>{" "}
+          {selectedOffer.merchant.addressCombined || "N/A"}
+        </Typography>
+
+        {/* ✅ CONTACT NUMBER DISPLAY */}
+        {selectedOffer.merchant.contactPhone && (
+          <Typography sx={{ mt: 1 }}>
+            <strong>Contact:</strong>{" "}
+            {selectedOffer.merchant.contactPhone}
+          </Typography>
         )}
-      </Dialog>
+      </DialogContent>
+
+      <DialogActions>
+        {/* ✅ CALL MERCHANT BUTTON */}
+        {selectedOffer.merchant.contactPhone && (
+          <Button
+            color="success"
+            onClick={() => {
+              window.location.href = `tel:${selectedOffer.merchant.contactPhone}`;
+            }}
+          >
+            📞 Call Merchant
+          </Button>
+        )}
+
+        {/* NAVIGATE */}
+        <Button
+          onClick={() => {
+            const { lat, lng } = selectedOffer.merchant;
+            window.open(
+              `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
+              "_blank"
+            );
+          }}
+        >
+          Navigate
+        </Button>
+
+        <Button onClick={() => setSelectedOffer(null)}>Close</Button>
+      </DialogActions>
+    </>
+  )}
+</Dialog>
     </Box>
   );
 }
