@@ -40,7 +40,6 @@ export default function CustomerDashboard() {
 
   const [offers, setOffers] = useState([]);
   const [merchantsMap, setMerchantsMap] = useState({});
-  const [categories, setCategories] = useState([]);
 
   const [customerLoc, setCustomerLoc] = useState(null);
   const [gpsAccuracy, setGpsAccuracy] = useState(null);
@@ -100,7 +99,7 @@ export default function CustomerDashboard() {
       setOffers(
         snap.docs
           .map((d) => ({ id: d.id, ...d.data() }))
-          .filter((o) => o.active !== false)
+          .filter((o) => o.active !== false && o.category)
       );
     });
   }, []);
@@ -117,19 +116,15 @@ export default function CustomerDashboard() {
   }, []);
 
   /* =========================
-     FETCH CATEGORIES (SAFE)
+     DERIVED CATEGORIES (FIX)
   ========================= */
-  useEffect(() => {
-    return onSnapshot(collection(db, "categories"), (snap) => {
-      const list = snap.docs
-        .map((d) => d.data())
-        .filter((c) => c.active === true && c.name);
-
-      console.log("Loaded categories:", list); // 🔍 DEBUG
-
-      setCategories(list);
+  const derivedCategories = useMemo(() => {
+    const set = new Set();
+    offers.forEach((o) => {
+      if (o.category) set.add(o.category);
     });
-  }, []);
+    return Array.from(set);
+  }, [offers]);
 
   /* =========================
      FILTER + DISTANCE
@@ -178,10 +173,16 @@ export default function CustomerDashboard() {
   }, [nearbyOffers, customerLoc]);
 
   /* =========================
-     ICON HELPER (SAFE)
+     ICON HELPER
   ========================= */
-  const getCategoryIcon = (name) =>
-    categories.find((c) => c.name === name)?.icon || "🏷️";
+  const getCategoryIcon = (cat) => {
+    if (/food/i.test(cat)) return "🍔";
+    if (/fashion/i.test(cat)) return "👗";
+    if (/beauty/i.test(cat)) return "💅";
+    if (/medical/i.test(cat)) return "💊";
+    if (/hospital/i.test(cat)) return "🏥";
+    return "🏷️";
+  };
 
   return (
     <Box sx={{ p: 2 }}>
@@ -203,9 +204,9 @@ export default function CustomerDashboard() {
           sx={{ width: 220 }}
         >
           <MenuItem value="All">All</MenuItem>
-          {categories.map((c) => (
-            <MenuItem key={c.name} value={c.name}>
-              {c.icon || "🏷️"} {c.name}
+          {derivedCategories.map((cat) => (
+            <MenuItem key={cat} value={cat}>
+              {getCategoryIcon(cat)} {cat}
             </MenuItem>
           ))}
         </TextField>
