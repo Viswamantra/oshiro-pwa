@@ -1,4 +1,3 @@
-// src/pages/MerchantRegister.jsx
 import React, { useState } from "react";
 import {
   Box,
@@ -85,34 +84,28 @@ export default function MerchantRegister() {
      DUPLICATE CHECK
   ========================= */
   async function checkDuplicateMerchant() {
-    // Login mobile
     const qMobile = query(
       collection(db, "merchants"),
       where("mobile", "==", form.mobile)
     );
-    if (!(await getDocs(qMobile)).empty) {
+    if (!(await getDocs(qMobile)).empty)
       return "This login mobile is already registered.";
-    }
 
-    // Contact phone
     const fullContact = `+91${form.contactPhone}`;
     const qContact = query(
       collection(db, "merchants"),
       where("contactPhone", "==", fullContact)
     );
-    if (!(await getDocs(qContact)).empty) {
+    if (!(await getDocs(qContact)).empty)
       return "This contact number is already registered.";
-    }
 
-    // GPS proximity (50 meters)
     if (form.lat && form.lng) {
       const snap = await getDocs(collection(db, "merchants"));
       for (const d of snap.docs) {
         const m = d.data();
         if (!m.lat || !m.lng) continue;
-        if (distanceKm(form.lat, form.lng, m.lat, m.lng) < 0.05) {
+        if (distanceKm(form.lat, form.lng, m.lat, m.lng) < 0.05)
           return "A merchant already exists at this location.";
-        }
       }
     }
 
@@ -120,7 +113,7 @@ export default function MerchantRegister() {
   }
 
   /* =========================
-     GEOCODE
+     GEO FUNCTIONS
   ========================= */
   async function geocodeAddress() {
     const address = buildCombinedAddress(form);
@@ -136,8 +129,7 @@ export default function MerchantRegister() {
       const res = await fetch(
         `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
           address
-        )}&limit=1`,
-        { headers: { "Accept-Language": "en" } }
+        )}&limit=1`
       );
       const data = await res.json();
 
@@ -150,7 +142,7 @@ export default function MerchantRegister() {
         }));
         setMsg("Geocoding successful.");
       } else {
-        setMsg("Address not found — try more details.");
+        setMsg("Address not found.");
       }
     } catch {
       setMsg("Geocoding failed.");
@@ -159,26 +151,15 @@ export default function MerchantRegister() {
     }
   }
 
-  /* =========================
-     USE GPS
-  ========================= */
   function useMyLocation() {
-    if (!navigator.geolocation) {
-      setMsg("Geolocation not supported.");
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setForm((s) => ({
-          ...s,
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-        }));
-        setMsg("Location captured.");
-      },
-      (err) => setMsg("Unable to get location: " + err.message)
-    );
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition((pos) => {
+      setForm((s) => ({
+        ...s,
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+      }));
+    });
   }
 
   /* =========================
@@ -188,15 +169,13 @@ export default function MerchantRegister() {
     e.preventDefault();
 
     if (!/^\d{10}$/.test(form.mobile)) {
-      setMsg("Login mobile must be exactly 10 digits.");
+      setMsg("Login mobile must be 10 digits.");
       return;
     }
-
     if (!/^\d{10}$/.test(form.contactPhone)) {
-      setMsg("Contact number must be exactly 10 digits.");
+      setMsg("Contact number must be 10 digits.");
       return;
     }
-
     if (!form.category) {
       setMsg("Please select a category.");
       return;
@@ -205,9 +184,9 @@ export default function MerchantRegister() {
     setLoading(true);
     setMsg("");
 
-    const duplicateMsg = await checkDuplicateMerchant();
-    if (duplicateMsg) {
-      setMsg(duplicateMsg);
+    const dup = await checkDuplicateMerchant();
+    if (dup) {
+      setMsg(dup);
       setLoading(false);
       return;
     }
@@ -220,7 +199,6 @@ export default function MerchantRegister() {
         status: "pending",
         createdAt: Date.now(),
       });
-
       setMsg("Registration requested — admin will review.");
       setForm({
         mobile: "",
@@ -238,7 +216,7 @@ export default function MerchantRegister() {
         category: "",
       });
     } catch {
-      setMsg("Failed to submit registration.");
+      setMsg("Submission failed.");
     } finally {
       setLoading(false);
     }
@@ -252,6 +230,7 @@ export default function MerchantRegister() {
 
       <form onSubmit={handleSubmit}>
         <Grid container spacing={2}>
+          {/* LOGIN MOBILE */}
           <Grid item xs={12} sm={6}>
             <TextField
               label="Login Mobile *"
@@ -259,12 +238,12 @@ export default function MerchantRegister() {
               onChange={(e) =>
                 setForm({ ...form, mobile: e.target.value.replace(/\D/g, "").slice(0, 10) })
               }
-              inputProps={{ maxLength: 10 }}
               fullWidth
               required
             />
           </Grid>
 
+          {/* CONTACT PHONE */}
           <Grid item xs={12} sm={6}>
             <TextField
               label="Contact Number (for customers) *"
@@ -275,12 +254,12 @@ export default function MerchantRegister() {
               InputProps={{
                 startAdornment: <InputAdornment position="start">+91</InputAdornment>,
               }}
-              inputProps={{ maxLength: 10 }}
               fullWidth
               required
             />
           </Grid>
 
+          {/* SHOP NAME */}
           <Grid item xs={12}>
             <TextField
               label="Shop Name"
@@ -290,8 +269,77 @@ export default function MerchantRegister() {
             />
           </Grid>
 
-          {/* Address + category (unchanged UI) */}
-          {/* ... kept same as your version ... */}
+          {/* ADDRESS */}
+          <Grid item xs={12} sm={4}>
+            <TextField label="Door No" value={form.doorNo}
+              onChange={(e) => setForm({ ...form, doorNo: e.target.value })}
+              fullWidth />
+          </Grid>
+          <Grid item xs={12} sm={8}>
+            <TextField label="Street" value={form.street}
+              onChange={(e) => setForm({ ...form, street: e.target.value })}
+              fullWidth />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField label="Area" value={form.area}
+              onChange={(e) => setForm({ ...form, area: e.target.value })}
+              fullWidth />
+          </Grid>
+          <Grid item xs={12} sm={4}>
+            <TextField label="City" value={form.city}
+              onChange={(e) => setForm({ ...form, city: e.target.value })}
+              fullWidth />
+          </Grid>
+          <Grid item xs={12} sm={2}>
+            <TextField label="Pincode" value={form.pincode}
+              onChange={(e) =>
+                setForm({ ...form, pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })}
+              fullWidth />
+          </Grid>
+
+          <Grid item xs={12} sm={6}>
+            <TextField label="State" value={form.state}
+              onChange={(e) => setForm({ ...form, state: e.target.value })}
+              fullWidth />
+          </Grid>
+
+          {/* CATEGORY */}
+          <Grid item xs={12} sm={6}>
+            <TextField
+              select
+              label="Category *"
+              value={form.category}
+              onChange={(e) => setForm({ ...form, category: e.target.value })}
+              fullWidth
+              required
+            >
+              {CATEGORY_LIST.map((c) => (
+                <MenuItem key={c} value={c}>{c}</MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+
+          {/* ADDRESS PREVIEW */}
+          <Grid item xs={12}>
+            <TextField
+              label="Combined Address (preview)"
+              value={buildCombinedAddress(form)}
+              fullWidth
+              disabled
+            />
+          </Grid>
+
+          {/* GEO BUTTONS */}
+          <Grid item xs={12} sm={6}>
+            <Button variant="outlined" fullWidth onClick={geocodeAddress}>
+              Geocode Address
+            </Button>
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <Button variant="outlined" fullWidth onClick={useMyLocation}>
+              Use My GPS Location
+            </Button>
+          </Grid>
 
           <Grid item xs={12}>
             <Button variant="contained" type="submit" disabled={loading}>
