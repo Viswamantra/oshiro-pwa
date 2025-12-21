@@ -2,12 +2,22 @@
 import React, { useEffect, useState } from "react";
 import { Box, Typography, TextField, Button, Grid } from "@mui/material";
 import { db } from "../firebase";
-import { collection, query, where, onSnapshot, doc, updateDoc } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  doc,
+  updateDoc,
+} from "firebase/firestore";
 import { useAuth } from "../auth/AuthContext";
 
 export default function MerchantDashboard() {
   const { user } = useAuth();
+
   const [merchant, setMerchant] = useState(null);
+  const [msg, setMsg] = useState("");
+
   const [form, setForm] = useState({
     shopName: "",
     doorNo: "",
@@ -21,37 +31,49 @@ export default function MerchantDashboard() {
     lng: null,
     category: "",
   });
-  const [msg, setMsg] = useState("");
 
-  // load merchant record by mobile
+  /* =========================
+     LOAD MERCHANT BY MOBILE
+  ========================= */
   useEffect(() => {
     if (!user?.mobile) return;
-    const q = query(collection(db, "merchants"), where("mobile", "==", user.mobile));
+
+    const q = query(
+      collection(db, "merchants"),
+      where("mobile", "==", user.mobile)
+    );
+
     const unsub = onSnapshot(q, (snap) => {
-      const docData = snap.docs[0];
-      if (docData) {
-        setMerchant({ id: docData.id, ...docData.data() });
+      if (!snap.empty) {
+        const d = snap.docs[0];
+        const data = d.data();
+
+        setMerchant({ id: d.id, ...data });
+
         setForm({
-          shopName: docData.data().shopName || "",
-          doorNo: docData.data().doorNo || "",
-          street: docData.data().street || "",
-          area: docData.data().area || "",
-          city: docData.data().city || "",
-          state: docData.data().state || "",
-          pincode: docData.data().pincode || "",
-          addressCombined: docData.data().addressCombined || "",
-          lat: docData.data().lat ?? null,
-          lng: docData.data().lng ?? null,
-          category: docData.data().category || "",
+          shopName: data.shopName || "",
+          doorNo: data.doorNo || "",
+          street: data.street || "",
+          area: data.area || "",
+          city: data.city || "",
+          state: data.state || "",
+          pincode: data.pincode || "",
+          addressCombined: data.addressCombined || "",
+          lat: data.lat ?? null,
+          lng: data.lng ?? null,
+          category: data.category || "",
         });
       } else {
         setMerchant(null);
       }
     });
+
     return () => unsub();
   }, [user?.mobile]);
 
-  // combine address helper (format A)
+  /* =========================
+     ADDRESS COMBINER
+  ========================= */
   function buildCombinedAddress(f) {
     const parts = [];
     if (f.doorNo) parts.push(f.doorNo);
@@ -59,112 +81,231 @@ export default function MerchantDashboard() {
     if (f.area) parts.push(f.area);
     if (f.city) parts.push(f.city);
     if (f.state) parts.push(f.state);
-    const p = f.pincode ? `- ${f.pincode}` : "";
-    return parts.join(", ") + (parts.length ? ` ${p}` : p);
+    if (f.pincode) parts.push(f.pincode);
+    return parts.join(", ");
   }
 
-  // Nominatim geocode
+  /* =========================
+     GEOCODE (OSM)
+  ========================= */
   async function geocodeAddress() {
     const address = buildCombinedAddress(form);
-    if (!address.trim()) { setMsg("Please fill address to geocode"); return; }
-    setMsg("Geocoding...");
+    if (!address) {
+      setMsg("Please fill address first");
+      return;
+    }
+
+    setMsg("Geocoding address...");
     try {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
-      const res = await fetch(url, { headers: { "Accept-Language": "en" }});
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+        address
+      )}&limit=1`;
+
+      const res = await fetch(url, {
+        headers: { "Accept-Language": "en" },
+      });
+
       const data = await res.json();
-      if (data && data.length) {
-        setForm((s) => ({ ...s, lat: Number(data[0].lat), lng: Number(data[0].lon), addressCombined: address }));
-        setMsg("Geocode success");
+
+      if (data?.length) {
+        setForm((s) => ({
+          ...s,
+          lat: Number(data[0].lat),
+          lng: Number(data[0].lon),
+          addressCombined: address,
+        }));
+        setMsg("Address located successfully");
       } else {
         setMsg("Address not found");
       }
     } catch (e) {
       console.error(e);
-      setMsg("Geocode error");
+      setMsg("Geocoding failed");
     }
   }
 
+  /* =========================
+     GPS LOCATION (FIXED)
+  ========================= */
   function useMyLocation() {
-    if (!navigator.geolocation) { setMsg("No geolocation"); return; }
-    setMsg("Getting location...");
+    if (!navigator.geolocation) {
+      setMsg("Geolocation not supported");
+      return;
+    }
+
+    setMsg("Fetching GPS location...");
+
     navigator.geolocation.getCurrentPosition(
-      (p) => {
-        setForm((s) => ({ ...s, lat: p.coords.latitude, lng: p.coords.longitude }));
-        setMsg("Location set");
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+
+        setForm((prev) => ({
+          ...prev,
+          lat,
+          lng,
+        }));
+
+        setMsg("GPS location captured");
       },
-      (err) => setMsg("Unable to get location: " + err.message)
+      (err) => {
+        console.error(err);
+        setMsg("Location error: " + err.message);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      }
     );
   }
 
+  /* =========================
+     SAVE PROFILE
+  ========================= */
   async function saveProfile() {
-    if (!merchant) { setMsg("No merchant record to update"); return; }
+    if (!merchant) {
+      setMsg("Merchant record not found");
+      return;
+    }
+
     try {
-      setMsg("Saving...");
+      setMsg("Saving profile...");
+
       const payload = {
-        shopName: form.shopName || "",
-        doorNo: form.doorNo || "",
-        street: form.street || "",
-        area: form.area || "",
-        city: form.city || "",
-        state: form.state || "",
-        pincode: form.pincode || "",
+        shopName: form.shopName,
+        doorNo: form.doorNo,
+        street: form.street,
+        area: form.area,
+        city: form.city,
+        state: form.state,
+        pincode: form.pincode,
         addressCombined: form.addressCombined || buildCombinedAddress(form),
         lat: form.lat ?? null,
         lng: form.lng ?? null,
-        category: form.category || "",
+        category: form.category,
       };
+
       await updateDoc(doc(db, "merchants", merchant.id), payload);
-      setMsg("Profile updated.");
+      setMsg("Profile updated successfully");
     } catch (e) {
       console.error(e);
-      setMsg("Update failed.");
+      setMsg("Save failed");
     }
   }
 
+  /* =========================
+     UI
+  ========================= */
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h5">Merchant Dashboard</Typography>
-      <Typography sx={{ mb: 2 }}>{user?.mobile}</Typography>
+      <Typography sx={{ mb: 2 }}>Mobile: {user?.mobile}</Typography>
 
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6}>
-          <TextField label="Shop Name" value={form.shopName} onChange={(e) => setForm({ ...form, shopName: e.target.value })} fullWidth />
+          <TextField
+            label="Shop Name"
+            value={form.shopName}
+            onChange={(e) =>
+              setForm({ ...form, shopName: e.target.value })
+            }
+            fullWidth
+          />
         </Grid>
 
         <Grid item xs={12} sm={6}>
-          <TextField label="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} fullWidth />
+          <TextField
+            label="Category"
+            value={form.category}
+            onChange={(e) =>
+              setForm({ ...form, category: e.target.value })
+            }
+            fullWidth
+          />
         </Grid>
 
         <Grid item xs={12} sm={4}>
-          <TextField label="Door No" value={form.doorNo} onChange={(e) => setForm({ ...form, doorNo: e.target.value })} fullWidth />
+          <TextField
+            label="Door No"
+            value={form.doorNo}
+            onChange={(e) =>
+              setForm({ ...form, doorNo: e.target.value })
+            }
+            fullWidth
+          />
         </Grid>
+
         <Grid item xs={12} sm={8}>
-          <TextField label="Street" value={form.street} onChange={(e) => setForm({ ...form, street: e.target.value })} fullWidth />
+          <TextField
+            label="Street"
+            value={form.street}
+            onChange={(e) =>
+              setForm({ ...form, street: e.target.value })
+            }
+            fullWidth
+          />
         </Grid>
 
         <Grid item xs={12} sm={6}>
-          <TextField label="Area" value={form.area} onChange={(e) => setForm({ ...form, area: e.target.value })} fullWidth />
+          <TextField
+            label="Area"
+            value={form.area}
+            onChange={(e) =>
+              setForm({ ...form, area: e.target.value })
+            }
+            fullWidth
+          />
         </Grid>
+
         <Grid item xs={12} sm={4}>
-          <TextField label="City" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} fullWidth />
+          <TextField
+            label="City"
+            value={form.city}
+            onChange={(e) =>
+              setForm({ ...form, city: e.target.value })
+            }
+            fullWidth
+          />
         </Grid>
+
         <Grid item xs={12} sm={2}>
-          <TextField label="Pincode" value={form.pincode} onChange={(e) => setForm({ ...form, pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })} fullWidth />
+          <TextField
+            label="Pincode"
+            value={form.pincode}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                pincode: e.target.value.replace(/\D/g, "").slice(0, 6),
+              })
+            }
+            fullWidth
+          />
         </Grid>
 
         <Grid item xs={12} sm={6}>
-          <Button variant="outlined" onClick={geocodeAddress}>Geocode Address</Button>
+          <Button fullWidth variant="outlined" onClick={geocodeAddress}>
+            Geocode Address
+          </Button>
         </Grid>
+
         <Grid item xs={12} sm={6}>
-          <Button variant="outlined" onClick={useMyLocation}>Use My GPS Location</Button>
+          <Button fullWidth variant="outlined" onClick={useMyLocation}>
+            Use My GPS Location
+          </Button>
         </Grid>
 
         <Grid item xs={12}>
-          <Typography>Lat: {form.lat ?? "-"} • Lng: {form.lng ?? "-"}</Typography>
+          <Typography>
+            Latitude: <b>{form.lat ?? "-"}</b> &nbsp; | &nbsp;
+            Longitude: <b>{form.lng ?? "-"}</b>
+          </Typography>
         </Grid>
 
         <Grid item xs={12}>
-          <Button variant="contained" onClick={saveProfile}>Save Profile</Button>
+          <Button fullWidth variant="contained" onClick={saveProfile}>
+            Save Profile
+          </Button>
         </Grid>
 
         {msg && (
