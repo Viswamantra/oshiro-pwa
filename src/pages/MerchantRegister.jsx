@@ -1,3 +1,4 @@
+// src/pages/MerchantRegister.jsx
 import React, { useState } from "react";
 import {
   Box,
@@ -76,8 +77,8 @@ export default function MerchantRegister() {
     if (f.area) parts.push(f.area);
     if (f.city) parts.push(f.city);
     if (f.state) parts.push(f.state);
-    const p = f.pincode ? `- ${f.pincode}` : "";
-    return parts.join(", ") + (parts.length ? ` ${p}` : p);
+    if (f.pincode) parts.push(f.pincode);
+    return parts.join(", ");
   }
 
   /* =========================
@@ -108,23 +109,21 @@ export default function MerchantRegister() {
           return "A merchant already exists at this location.";
       }
     }
-
     return null;
   }
 
   /* =========================
-     GEO FUNCTIONS
+     GEOCODE
   ========================= */
   async function geocodeAddress() {
     const address = buildCombinedAddress(form);
-    if (!address.trim()) {
-      setMsg("Please enter address fields to geocode.");
+    if (!address) {
+      setMsg("Please fill address fields first");
       return;
     }
 
     setLoading(true);
-    setMsg("");
-
+    setMsg("Geocoding address...");
     try {
       const res = await fetch(
         `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
@@ -140,26 +139,50 @@ export default function MerchantRegister() {
           lng: Number(data[0].lon),
           addressCombined: address,
         }));
-        setMsg("Geocoding successful.");
+        setMsg("Address geocoded successfully");
       } else {
-        setMsg("Address not found.");
+        setMsg("Address not found");
       }
     } catch {
-      setMsg("Geocoding failed.");
+      setMsg("Geocoding failed");
     } finally {
       setLoading(false);
     }
   }
 
+  /* =========================
+     GPS LOCATION (FIXED)
+  ========================= */
   function useMyLocation() {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition((pos) => {
-      setForm((s) => ({
-        ...s,
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude,
-      }));
-    });
+    console.log("📍 GPS button clicked");
+
+    if (!navigator.geolocation) {
+      setMsg("Geolocation not supported");
+      return;
+    }
+
+    setMsg("Fetching GPS location...");
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        console.log("📍 GPS success", pos.coords);
+        setForm((s) => ({
+          ...s,
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        }));
+        setMsg("GPS location set");
+      },
+      (err) => {
+        console.error("GPS error", err);
+        setMsg("GPS error: " + err.message);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      }
+    );
   }
 
   /* =========================
@@ -195,11 +218,13 @@ export default function MerchantRegister() {
       await addDoc(collection(db, "merchants"), {
         ...form,
         contactPhone: `+91${form.contactPhone}`,
-        addressCombined: form.addressCombined || buildCombinedAddress(form),
+        addressCombined:
+          form.addressCombined || buildCombinedAddress(form),
         status: "pending",
         createdAt: Date.now(),
       });
-      setMsg("Registration requested — admin will review.");
+
+      setMsg("Registration requested. Admin will review.");
       setForm({
         mobile: "",
         contactPhone: "",
@@ -236,7 +261,10 @@ export default function MerchantRegister() {
               label="Login Mobile *"
               value={form.mobile}
               onChange={(e) =>
-                setForm({ ...form, mobile: e.target.value.replace(/\D/g, "").slice(0, 10) })
+                setForm({
+                  ...form,
+                  mobile: e.target.value.replace(/\D/g, "").slice(0, 10),
+                })
               }
               fullWidth
               required
@@ -249,10 +277,15 @@ export default function MerchantRegister() {
               label="Contact Number (for customers) *"
               value={form.contactPhone}
               onChange={(e) =>
-                setForm({ ...form, contactPhone: e.target.value.replace(/\D/g, "").slice(0, 10) })
+                setForm({
+                  ...form,
+                  contactPhone: e.target.value.replace(/\D/g, "").slice(0, 10),
+                })
               }
               InputProps={{
-                startAdornment: <InputAdornment position="start">+91</InputAdornment>,
+                startAdornment: (
+                  <InputAdornment position="start">+91</InputAdornment>
+                ),
               }}
               fullWidth
               required
@@ -264,57 +297,29 @@ export default function MerchantRegister() {
             <TextField
               label="Shop Name"
               value={form.shopName}
-              onChange={(e) => setForm({ ...form, shopName: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, shopName: e.target.value })
+              }
               fullWidth
             />
           </Grid>
 
-          {/* ADDRESS */}
-          <Grid item xs={12} sm={4}>
-            <TextField label="Door No" value={form.doorNo}
-              onChange={(e) => setForm({ ...form, doorNo: e.target.value })}
-              fullWidth />
-          </Grid>
-          <Grid item xs={12} sm={8}>
-            <TextField label="Street" value={form.street}
-              onChange={(e) => setForm({ ...form, street: e.target.value })}
-              fullWidth />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField label="Area" value={form.area}
-              onChange={(e) => setForm({ ...form, area: e.target.value })}
-              fullWidth />
-          </Grid>
-          <Grid item xs={12} sm={4}>
-            <TextField label="City" value={form.city}
-              onChange={(e) => setForm({ ...form, city: e.target.value })}
-              fullWidth />
-          </Grid>
-          <Grid item xs={12} sm={2}>
-            <TextField label="Pincode" value={form.pincode}
-              onChange={(e) =>
-                setForm({ ...form, pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })}
-              fullWidth />
-          </Grid>
-
-          <Grid item xs={12} sm={6}>
-            <TextField label="State" value={form.state}
-              onChange={(e) => setForm({ ...form, state: e.target.value })}
-              fullWidth />
-          </Grid>
-
           {/* CATEGORY */}
-          <Grid item xs={12} sm={6}>
+          <Grid item xs={12}>
             <TextField
               select
               label="Category *"
               value={form.category}
-              onChange={(e) => setForm({ ...form, category: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, category: e.target.value })
+              }
               fullWidth
               required
             >
               {CATEGORY_LIST.map((c) => (
-                <MenuItem key={c} value={c}>{c}</MenuItem>
+                <MenuItem key={c} value={c}>
+                  {c}
+                </MenuItem>
               ))}
             </TextField>
           </Grid>
@@ -331,18 +336,39 @@ export default function MerchantRegister() {
 
           {/* GEO BUTTONS */}
           <Grid item xs={12} sm={6}>
-            <Button variant="outlined" fullWidth onClick={geocodeAddress}>
+            <Button
+              type="button"
+              variant="outlined"
+              fullWidth
+              onClick={geocodeAddress}
+            >
               Geocode Address
             </Button>
           </Grid>
+
           <Grid item xs={12} sm={6}>
-            <Button variant="outlined" fullWidth onClick={useMyLocation}>
+            <Button
+              type="button"      // 🔥 CRITICAL FIX
+              variant="outlined"
+              fullWidth
+              onClick={useMyLocation}
+            >
               Use My GPS Location
             </Button>
           </Grid>
 
           <Grid item xs={12}>
-            <Button variant="contained" type="submit" disabled={loading}>
+            <Typography>
+              Lat: {form.lat ?? "—"} | Lng: {form.lng ?? "—"}
+            </Typography>
+          </Grid>
+
+          <Grid item xs={12}>
+            <Button
+              variant="contained"
+              type="submit"
+              disabled={loading}
+            >
               Request Registration
             </Button>
           </Grid>
