@@ -127,39 +127,40 @@ export default function MerchantDashboard() {
   /* =========================
      GPS LOCATION (FIXED)
   ========================= */
-  function useMyLocation() {
-    if (!navigator.geolocation) {
-      setMsg("Geolocation not supported");
-      return;
-    }
+ function useMyLocation() {
+  alert("GPS button clicked"); // 🔥 HARD CHECK
 
-    setMsg("Fetching GPS location...");
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-
-        setForm((prev) => ({
-          ...prev,
-          lat,
-          lng,
-        }));
-
-        setMsg("GPS location captured");
-      },
-      (err) => {
-        console.error(err);
-        setMsg("Location error: " + err.message);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
-      }
-    );
+  if (!navigator.geolocation) {
+    alert("Geolocation NOT supported");
+    return;
   }
 
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      alert("GPS SUCCESS");
+
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+
+      alert(`Lat: ${lat}, Lng: ${lng}`);
+
+      setForm((prev) => ({
+        ...prev,
+        lat,
+        lng,
+      }));
+    },
+    (err) => {
+      alert("GPS ERROR: " + err.message);
+      console.error(err);
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 20000,
+      maximumAge: 0,
+    }
+  );
+}
   /* =========================
      SAVE PROFILE
   ========================= */
