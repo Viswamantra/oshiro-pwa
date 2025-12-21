@@ -9,6 +9,7 @@ import {
   onSnapshot,
   doc,
   updateDoc,
+  addDoc,          // ✅ IMPORTANT
 } from "firebase/firestore";
 import { useAuth } from "../auth/AuthContext";
 
@@ -63,6 +64,9 @@ export default function MerchantDashboard() {
           lng: data.lng ?? null,
           category: data.category || "",
         });
+      } else {
+        // ✅ VERY IMPORTANT FOR NEW MERCHANTS
+        setMerchant(null);
       }
     });
 
@@ -84,7 +88,7 @@ export default function MerchantDashboard() {
   }
 
   /* =========================
-     GEOCODE
+     GEOCODE (OPTIONAL)
   ========================= */
   async function geocodeAddress() {
     const address = buildCombinedAddress(form);
@@ -94,7 +98,7 @@ export default function MerchantDashboard() {
     }
 
     try {
-      setMsg("Geocoding...");
+      setMsg("Geocoding address...");
       const res = await fetch(
         `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
           address
@@ -119,46 +123,68 @@ export default function MerchantDashboard() {
   }
 
   /* =========================
-     GPS LOCATION (FORCED)
+     GPS LOCATION (CLEAN & SAFE)
   ========================= */
   function useMyLocation() {
-    alert("BUTTON CLICK CONFIRMED");
-
     if (!navigator.geolocation) {
-      alert("Geolocation not supported");
+      setMsg("Geolocation not supported");
       return;
     }
 
+    setMsg("Fetching GPS location...");
+
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        alert("GPS SUCCESS");
         setForm((p) => ({
           ...p,
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
         }));
+        setMsg("GPS location set");
       },
-      (err) => alert("GPS ERROR: " + err.message),
+      (err) => {
+        console.error(err);
+        setMsg("GPS error: " + err.message);
+      },
       {
         enableHighAccuracy: true,
-        timeout: 20000,
+        timeout: 15000,
         maximumAge: 0,
       }
     );
   }
 
   /* =========================
-     SAVE PROFILE
+     SAVE PROFILE (FIXED)
   ========================= */
   async function saveProfile() {
-    if (!merchant) return;
+    try {
+      setMsg("Saving profile...");
 
-    setMsg("Saving...");
-    await updateDoc(doc(db, "merchants", merchant.id), {
-      ...form,
-      addressCombined: form.addressCombined || buildCombinedAddress(form),
-    });
-    setMsg("Profile saved");
+      const payload = {
+        ...form,
+        mobile: user.mobile, // 🔥 REQUIRED
+        addressCombined:
+          form.addressCombined || buildCombinedAddress(form),
+        updatedAt: new Date(),
+      };
+
+      if (merchant?.id) {
+        // ✅ UPDATE EXISTING MERCHANT
+        await updateDoc(doc(db, "merchants", merchant.id), payload);
+        setMsg("Profile updated successfully");
+      } else {
+        // ✅ CREATE NEW MERCHANT (THIS WAS MISSING EARLIER)
+        await addDoc(collection(db, "merchants"), {
+          ...payload,
+          createdAt: new Date(),
+        });
+        setMsg("Merchant created successfully");
+      }
+    } catch (e) {
+      console.error(e);
+      setMsg("Save failed");
+    }
   }
 
   /* =========================
@@ -198,21 +224,10 @@ export default function MerchantDashboard() {
           </Button>
         </Grid>
 
-        {/* 🔥 CLICK-PROOF GPS BUTTON */}
         <Grid item xs={12} sm={6}>
-          <Box sx={{ position: "relative", zIndex: 99999 }}>
-            <Button
-              fullWidth
-              variant="contained"
-              color="error"
-              onClick={() => {
-                alert("VISIBLE CLICK");
-                useMyLocation();
-              }}
-            >
-              Use My GPS Location (TEST)
-            </Button>
-          </Box>
+          <Button fullWidth variant="contained" onClick={useMyLocation}>
+            Use My GPS Location
+          </Button>
         </Grid>
 
         <Grid item xs={12}>
