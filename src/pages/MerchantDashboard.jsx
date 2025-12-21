@@ -297,10 +297,11 @@ export default function MerchantDashboard() {
         </Grid>
 
         <Grid item xs={12}>
-          <Typography>
-            Latitude: <b>{form.lat ?? "-"}</b> &nbsp; | &nbsp;
-            Longitude: <b>{form.lng ?? "-"}</b>
-          </Typography>
+       <Typography>
+  Lat: {form.lat !== null ? form.lat.toFixed(6) : "NOT SET"} <br />
+  Lng: {form.lng !== null ? form.lng.toFixed(6) : "NOT SET"}
+</Typography>
+
         </Grid>
 
         <Grid item xs={12}>
