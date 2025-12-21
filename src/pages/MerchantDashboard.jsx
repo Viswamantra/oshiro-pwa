@@ -63,8 +63,6 @@ export default function MerchantDashboard() {
           lng: data.lng ?? null,
           category: data.category || "",
         });
-      } else {
-        setMerchant(null);
       }
     });
 
@@ -86,7 +84,7 @@ export default function MerchantDashboard() {
   }
 
   /* =========================
-     GEOCODE (OSM)
+     GEOCODE
   ========================= */
   async function geocodeAddress() {
     const address = buildCombinedAddress(form);
@@ -95,16 +93,13 @@ export default function MerchantDashboard() {
       return;
     }
 
-    setMsg("Geocoding address...");
     try {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-        address
-      )}&limit=1`;
-
-      const res = await fetch(url, {
-        headers: { "Accept-Language": "en" },
-      });
-
+      setMsg("Geocoding...");
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+          address
+        )}&limit=1`
+      );
       const data = await res.json();
 
       if (data?.length) {
@@ -114,85 +109,56 @@ export default function MerchantDashboard() {
           lng: Number(data[0].lon),
           addressCombined: address,
         }));
-        setMsg("Address located successfully");
+        setMsg("Address located");
       } else {
         setMsg("Address not found");
       }
-    } catch (e) {
-      console.error(e);
-      setMsg("Geocoding failed");
+    } catch {
+      setMsg("Geocode failed");
     }
   }
 
   /* =========================
-     GPS LOCATION (FIXED)
+     GPS LOCATION (FORCED)
   ========================= */
- function useMyLocation() {
-  alert("GPS button clicked"); // 🔥 HARD CHECK
+  function useMyLocation() {
+    alert("BUTTON CLICK CONFIRMED");
 
-  if (!navigator.geolocation) {
-    alert("Geolocation NOT supported");
-    return;
+    if (!navigator.geolocation) {
+      alert("Geolocation not supported");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        alert("GPS SUCCESS");
+        setForm((p) => ({
+          ...p,
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        }));
+      },
+      (err) => alert("GPS ERROR: " + err.message),
+      {
+        enableHighAccuracy: true,
+        timeout: 20000,
+        maximumAge: 0,
+      }
+    );
   }
 
-  navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      alert("GPS SUCCESS");
-
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
-
-      alert(`Lat: ${lat}, Lng: ${lng}`);
-
-      setForm((prev) => ({
-        ...prev,
-        lat,
-        lng,
-      }));
-    },
-    (err) => {
-      alert("GPS ERROR: " + err.message);
-      console.error(err);
-    },
-    {
-      enableHighAccuracy: true,
-      timeout: 20000,
-      maximumAge: 0,
-    }
-  );
-}
   /* =========================
      SAVE PROFILE
   ========================= */
   async function saveProfile() {
-    if (!merchant) {
-      setMsg("Merchant record not found");
-      return;
-    }
+    if (!merchant) return;
 
-    try {
-      setMsg("Saving profile...");
-
-      const payload = {
-        shopName: form.shopName,
-        doorNo: form.doorNo,
-        street: form.street,
-        area: form.area,
-        city: form.city,
-        state: form.state,
-        pincode: form.pincode,
-        addressCombined: form.addressCombined || buildCombinedAddress(form),
-        lat: form.lat ?? null,
-        lng: form.lng ?? null,
-        category: form.category,
-      };
-
-      await updateDoc(doc(db, "merchants", merchant.id), payload);
-      setMsg("Profile updated successfully");
-    } catch (e) {
-      console.error(e);
-      setMsg("Save failed");
-    }
+    setMsg("Saving...");
+    await updateDoc(doc(db, "merchants", merchant.id), {
+      ...form,
+      addressCombined: form.addressCombined || buildCombinedAddress(form),
+    });
+    setMsg("Profile saved");
   }
 
   /* =========================
@@ -226,82 +192,34 @@ export default function MerchantDashboard() {
           />
         </Grid>
 
-        <Grid item xs={12} sm={4}>
-          <TextField
-            label="Door No"
-            value={form.doorNo}
-            onChange={(e) =>
-              setForm({ ...form, doorNo: e.target.value })
-            }
-            fullWidth
-          />
-        </Grid>
-
-        <Grid item xs={12} sm={8}>
-          <TextField
-            label="Street"
-            value={form.street}
-            onChange={(e) =>
-              setForm({ ...form, street: e.target.value })
-            }
-            fullWidth
-          />
-        </Grid>
-
-        <Grid item xs={12} sm={6}>
-          <TextField
-            label="Area"
-            value={form.area}
-            onChange={(e) =>
-              setForm({ ...form, area: e.target.value })
-            }
-            fullWidth
-          />
-        </Grid>
-
-        <Grid item xs={12} sm={4}>
-          <TextField
-            label="City"
-            value={form.city}
-            onChange={(e) =>
-              setForm({ ...form, city: e.target.value })
-            }
-            fullWidth
-          />
-        </Grid>
-
-        <Grid item xs={12} sm={2}>
-          <TextField
-            label="Pincode"
-            value={form.pincode}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                pincode: e.target.value.replace(/\D/g, "").slice(0, 6),
-              })
-            }
-            fullWidth
-          />
-        </Grid>
-
         <Grid item xs={12} sm={6}>
           <Button fullWidth variant="outlined" onClick={geocodeAddress}>
             Geocode Address
           </Button>
         </Grid>
 
+        {/* 🔥 CLICK-PROOF GPS BUTTON */}
         <Grid item xs={12} sm={6}>
-          <Button fullWidth variant="outlined" onClick={useMyLocation}>
-            Use My GPS Location
-          </Button>
+          <Box sx={{ position: "relative", zIndex: 99999 }}>
+            <Button
+              fullWidth
+              variant="contained"
+              color="error"
+              onClick={() => {
+                alert("VISIBLE CLICK");
+                useMyLocation();
+              }}
+            >
+              Use My GPS Location (TEST)
+            </Button>
+          </Box>
         </Grid>
 
         <Grid item xs={12}>
-       <Typography>
-  Lat: {form.lat !== null ? form.lat.toFixed(6) : "NOT SET"} <br />
-  Lng: {form.lng !== null ? form.lng.toFixed(6) : "NOT SET"}
-</Typography>
-
+          <Typography>
+            Lat: {form.lat !== null ? form.lat.toFixed(6) : "NOT SET"} <br />
+            Lng: {form.lng !== null ? form.lng.toFixed(6) : "NOT SET"}
+          </Typography>
         </Grid>
 
         <Grid item xs={12}>
