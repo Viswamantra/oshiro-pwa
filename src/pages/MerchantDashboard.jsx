@@ -1,7 +1,14 @@
-// src/pages/MerchantDashboard.jsx
 import React, { useEffect, useState } from "react";
-import { Box, Typography, TextField, Button, Grid } from "@mui/material";
-import { db } from "../firebase";
+import {
+  Box,
+  Typography,
+  TextField,
+  MenuItem,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+} from "@mui/material";
 import {
   collection,
   query,
@@ -9,9 +16,18 @@ import {
   onSnapshot,
   doc,
   updateDoc,
-  addDoc,
 } from "firebase/firestore";
+import { db } from "../firebase";
 import { useAuth } from "../auth/AuthContext";
+
+const CATEGORIES = [
+  "Food",
+  "Home Kitchen",
+  "Fashion & Clothing",
+  "Beauty & Spa",
+  "Hospitals",
+  "Medicals",
+];
 
 export default function MerchantDashboard() {
   const { user } = useAuth();
@@ -19,210 +35,151 @@ export default function MerchantDashboard() {
   const [merchant, setMerchant] = useState(null);
   const [msg, setMsg] = useState("");
 
-  const [form, setForm] = useState({
-    shopName: "",
-    doorNo: "",
-    street: "",
-    area: "",
-    city: "",
-    state: "",
-    pincode: "",
-    addressCombined: "",
-    lat: null,
-    lng: null,
-    category: "",
-  });
-
   /* =========================
      LOAD MERCHANT BY MOBILE
   ========================= */
   useEffect(() => {
-    if (!user) {
-      console.warn("Auth user not ready");
-      return;
-    }
-
-    const mobile =
-      user.mobile || user.phoneNumber || user?.providerData?.[0]?.phoneNumber;
-
-    if (!mobile) {
-      console.error("❌ Mobile number not found in auth user");
-      return;
-    }
+    if (!user?.mobile) return;
 
     const q = query(
       collection(db, "merchants"),
-      where("mobile", "==", mobile)
+      where("mobile", "==", user.mobile)
     );
 
-    const unsub = onSnapshot(q, (snap) => {
+    return onSnapshot(q, (snap) => {
       if (!snap.empty) {
-        const d = snap.docs[0];
-        const data = d.data();
-        setMerchant({ id: d.id, ...data });
-        setForm({
-          shopName: data.shopName || "",
-          doorNo: data.doorNo || "",
-          street: data.street || "",
-          area: data.area || "",
-          city: data.city || "",
-          state: data.state || "",
-          pincode: data.pincode || "",
-          addressCombined: data.addressCombined || "",
-          lat: data.lat ?? null,
-          lng: data.lng ?? null,
-          category: data.category || "",
-        });
-      } else {
-        setMerchant(null);
+        setMerchant({ id: snap.docs[0].id, ...snap.docs[0].data() });
       }
     });
-
-    return () => unsub();
   }, [user]);
 
   /* =========================
-     GPS LOCATION (BULLETPROOF)
+     UPDATE HANDLER
   ========================= */
-  function useMyLocation() {
-    console.log("✅ GPS button clicked");
+  const updateField = async (field, value) => {
+    if (!merchant) return;
+    await updateDoc(doc(db, "merchants", merchant.id), {
+      [field]: value,
+    });
+    setMsg("Saved successfully");
+    setTimeout(() => setMsg(""), 2000);
+  };
 
-    if (!navigator.geolocation) {
-      setMsg("Geolocation not supported");
-      return;
-    }
+  if (!merchant) return null;
 
-    setMsg("Fetching GPS location...");
+  const isHomeKitchen = merchant.category === "Home Kitchen";
 
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        console.log("📍 GPS success", pos.coords);
-        setForm((p) => ({
-          ...p,
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-        }));
-        setMsg("GPS location set");
-      },
-      (err) => {
-        console.error("❌ GPS error", err);
-        setMsg("GPS error: " + err.message);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
-      }
-    );
-  }
-
-  /* =========================
-     SAVE PROFILE (ALWAYS WORKS)
-  ========================= */
-  async function saveProfile() {
-    try {
-      const mobile =
-        user.mobile ||
-        user.phoneNumber ||
-        user?.providerData?.[0]?.phoneNumber;
-
-      if (!mobile) {
-        setMsg("Mobile number missing in auth");
-        return;
-      }
-
-      setMsg("Saving profile...");
-
-      const payload = {
-        ...form,
-        mobile,
-        updatedAt: new Date(),
-      };
-
-      if (merchant?.id) {
-        await updateDoc(doc(db, "merchants", merchant.id), payload);
-        setMsg("Profile updated");
-      } else {
-        await addDoc(collection(db, "merchants"), {
-          ...payload,
-          createdAt: new Date(),
-        });
-        setMsg("Merchant created");
-      }
-    } catch (e) {
-      console.error(e);
-      setMsg("Save failed");
-    }
-  }
-
-  /* =========================
-     UI
-  ========================= */
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h5">Merchant Dashboard</Typography>
-      <Typography sx={{ mb: 2 }}>
-        Mobile: {user?.mobile || user?.phoneNumber || "N/A"}
-      </Typography>
+    <Box sx={{ p: 2 }}>
+      <Typography variant="h6">Merchant Dashboard</Typography>
 
-      <Grid container spacing={2}>
-        <Grid item xs={12} sm={6}>
+      {msg && (
+        <Typography sx={{ color: "green", my: 1 }}>{msg}</Typography>
+      )}
+
+      {/* CATEGORY */}
+      <Card sx={{ my: 2 }}>
+        <CardContent>
+          <Typography variant="subtitle1">Business Category</Typography>
+
           <TextField
-            label="Shop Name"
-            value={form.shopName}
-            onChange={(e) =>
-              setForm({ ...form, shopName: e.target.value })
-            }
+            select
             fullWidth
-          />
-        </Grid>
-
-        <Grid item xs={12} sm={6}>
-          <TextField
-            label="Category"
-            value={form.category}
-            onChange={(e) =>
-              setForm({ ...form, category: e.target.value })
-            }
-            fullWidth
-          />
-        </Grid>
-
-        <Grid item xs={12} sm={6}>
-          <Button
-            type="button"
-            fullWidth
-            variant="contained"
-            onClick={useMyLocation}
+            value={merchant.category || ""}
+            onChange={(e) => updateField("category", e.target.value)}
           >
-            Use My GPS Location
-          </Button>
-        </Grid>
+            {CATEGORIES.map((c) => (
+              <MenuItem key={c} value={c}>
+                {c === "Home Kitchen"
+                  ? "Home Kitchen – Ghar ka khana • Limited orders"
+                  : c}
+              </MenuItem>
+            ))}
+          </TextField>
 
-        <Grid item xs={12}>
-          <Typography>
-            Lat: {form.lat !== null ? form.lat.toFixed(6) : "NOT SET"} <br />
-            Lng: {form.lng !== null ? form.lng.toFixed(6) : "NOT SET"}
-          </Typography>
-        </Grid>
+          {isHomeKitchen && (
+            <Chip
+              label="🍱 Limited Orders"
+              color="warning"
+              sx={{ mt: 1 }}
+            />
+          )}
+        </CardContent>
+      </Card>
 
-        <Grid item xs={12}>
-          <Button
-            type="button"
-            fullWidth
-            variant="contained"
-            onClick={saveProfile}
-          >
-            Save Profile
-          </Button>
-        </Grid>
+      {/* HOME KITCHEN RULES */}
+      {isHomeKitchen && (
+        <Card sx={{ my: 2 }}>
+          <CardContent>
+            <Typography variant="subtitle1">
+              Home Kitchen Settings
+            </Typography>
 
-        {msg && (
-          <Grid item xs={12}>
-            <Typography color="primary">{msg}</Typography>
-          </Grid>
-        )}
-      </Grid>
+            {/* ORDER CUT-OFF */}
+            <TextField
+              label="Order cut-off time"
+              type="time"
+              fullWidth
+              sx={{ mt: 2 }}
+              value={merchant.orderCutoff || "11:00"}
+              onChange={(e) =>
+                updateField("orderCutoff", e.target.value)
+              }
+              InputLabelProps={{ shrink: true }}
+            />
+
+            {/* MAX ORDERS */}
+            <TextField
+              label="Max orders per day"
+              type="number"
+              fullWidth
+              sx={{ mt: 2 }}
+              value={merchant.maxOrdersPerDay || 20}
+              onChange={(e) =>
+                updateField(
+                  "maxOrdersPerDay",
+                  Number(e.target.value)
+                )
+              }
+            />
+
+            {/* AVAILABLE DAYS */}
+            <TextField
+              label="Available days"
+              fullWidth
+              sx={{ mt: 2 }}
+              helperText="Example: Mon–Sat or Mon,Wed,Fri"
+              value={merchant.availableDays || "Mon–Sun"}
+              onChange={(e) =>
+                updateField("availableDays", e.target.value)
+              }
+            />
+
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ mt: 1, display: "block" }}
+            >
+              Customers can only pre-order before the cut-off time.
+            </Typography>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* INFO */}
+      {isHomeKitchen && (
+        <Typography variant="body2" color="text.secondary">
+          ✔ Pre-order only  
+          <br />
+          ✔ Limited daily quantity  
+          <br />
+          ✔ Cook when convenient  
+        </Typography>
+      )}
+
+      <Button sx={{ mt: 3 }} variant="contained">
+        Dashboard Ready
+      </Button>
     </Box>
   );
 }
