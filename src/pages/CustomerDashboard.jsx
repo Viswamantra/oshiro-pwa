@@ -52,6 +52,26 @@ function openWhatsApp(merchant, offer) {
   window.open(`https://wa.me/${phone}?text=${message}`, "_blank");
 }
 
+/* =========================
+   CATEGORY HELPERS
+========================= */
+const getCategoryIcon = (cat) => {
+  if (/home kitchen/i.test(cat)) return "🍱";
+  if (/food/i.test(cat)) return "🍔";
+  if (/fashion/i.test(cat)) return "👗";
+  if (/beauty/i.test(cat)) return "💅";
+  if (/medical/i.test(cat)) return "💊";
+  if (/hospital/i.test(cat)) return "🏥";
+  return "🏷️";
+};
+
+const getCategoryLabel = (cat) => {
+  if (cat === "Home Kitchen") {
+    return "Home Kitchen – Ghar ka khana • Limited orders";
+  }
+  return cat;
+};
+
 export default function CustomerDashboard() {
   const { user } = useAuth();
 
@@ -182,18 +202,6 @@ export default function CustomerDashboard() {
     if (RADIUS_STEPS[idx + 1]) setRadiusKm(RADIUS_STEPS[idx + 1]);
   }, [nearbyOffers, customerLoc]);
 
-  /* =========================
-     ICON HELPER
-  ========================= */
-  const getCategoryIcon = (cat) => {
-    if (/food/i.test(cat)) return "🍔";
-    if (/fashion/i.test(cat)) return "👗";
-    if (/beauty/i.test(cat)) return "💅";
-    if (/medical/i.test(cat)) return "💊";
-    if (/hospital/i.test(cat)) return "🏥";
-    return "🏷️";
-  };
-
   return (
     <Box sx={{ p: 2 }}>
       <Typography variant="h6">Nearby Offers</Typography>
@@ -206,18 +214,28 @@ export default function CustomerDashboard() {
 
       {/* FILTERS */}
       <Box sx={{ display: "flex", gap: 2, my: 2, flexWrap: "wrap" }}>
-        <TextField select label="Category" value={category}
-          onChange={(e) => setCategory(e.target.value)} sx={{ width: 220 }}>
+        <TextField
+          select
+          label="Category"
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          sx={{ width: 260 }}
+        >
           <MenuItem value="All">All</MenuItem>
           {derivedCategories.map((cat) => (
             <MenuItem key={cat} value={cat}>
-              {getCategoryIcon(cat)} {cat}
+              {getCategoryIcon(cat)} {getCategoryLabel(cat)}
             </MenuItem>
           ))}
         </TextField>
 
-        <TextField select label="Show offers within" value={radiusKm}
-          onChange={(e) => setRadiusKm(Number(e.target.value))} sx={{ width: 220 }}>
+        <TextField
+          select
+          label="Show offers within"
+          value={radiusKm}
+          onChange={(e) => setRadiusKm(Number(e.target.value))}
+          sx={{ width: 220 }}
+        >
           <MenuItem value={1}>1 km</MenuItem>
           <MenuItem value={2}>2 km</MenuItem>
           <MenuItem value={3}>3 km</MenuItem>
@@ -227,57 +245,94 @@ export default function CustomerDashboard() {
 
       {/* OFFER LIST */}
       {nearbyOffers.map((o) => (
-        <Card key={o.id} sx={{ mb: 1, cursor: "pointer" }}
-          onClick={() => setSelectedOffer(o)}>
+        <Card
+          key={o.id}
+          sx={{ mb: 1, cursor: "pointer" }}
+          onClick={() => setSelectedOffer(o)}
+        >
           <CardContent>
             <Typography variant="subtitle1">
               <strong>{o.merchant.shopName}</strong> — {o.title}
             </Typography>
             <Typography variant="body2">
-              {getCategoryIcon(o.category)} {o.category} • {o.discount}% • {o.distanceLabel}
+              {getCategoryIcon(o.category)} {getCategoryLabel(o.category)} •{" "}
+              {o.discount}% • {o.distanceLabel}
             </Typography>
           </CardContent>
         </Card>
       ))}
 
       {/* OFFER DETAILS */}
-      <Dialog open={Boolean(selectedOffer)}
-        onClose={() => setSelectedOffer(null)} fullWidth>
+      <Dialog
+        open={Boolean(selectedOffer)}
+        onClose={() => setSelectedOffer(null)}
+        fullWidth
+      >
         {selectedOffer && (
           <>
             <DialogTitle>{selectedOffer.title}</DialogTitle>
             <DialogContent dividers>
-              <Typography><strong>Merchant:</strong> {selectedOffer.merchant.shopName}</Typography>
-              <Typography sx={{ mt: 1 }}><strong>Category:</strong> {selectedOffer.category}</Typography>
-              <Typography sx={{ mt: 1 }}><strong>Discount:</strong> {selectedOffer.discount}%</Typography>
-              <Typography sx={{ mt: 1 }}><strong>Distance:</strong> {selectedOffer.distanceLabel}</Typography>
-              <Typography sx={{ mt: 1 }}><strong>Address:</strong> {selectedOffer.merchant.addressCombined || "N/A"}</Typography>
+              <Typography>
+                <strong>Merchant:</strong>{" "}
+                {selectedOffer.merchant.shopName}
+              </Typography>
+              <Typography sx={{ mt: 1 }}>
+                <strong>Category:</strong>{" "}
+                {getCategoryLabel(selectedOffer.category)}
+              </Typography>
+              <Typography sx={{ mt: 1 }}>
+                <strong>Discount:</strong> {selectedOffer.discount}%
+              </Typography>
+              <Typography sx={{ mt: 1 }}>
+                <strong>Distance:</strong> {selectedOffer.distanceLabel}
+              </Typography>
+              <Typography sx={{ mt: 1 }}>
+                <strong>Address:</strong>{" "}
+                {selectedOffer.merchant.addressCombined || "N/A"}
+              </Typography>
               {selectedOffer.merchant.contactPhone && (
                 <Typography sx={{ mt: 1 }}>
-                  <strong>Contact:</strong> {selectedOffer.merchant.contactPhone}
+                  <strong>Contact:</strong>{" "}
+                  {selectedOffer.merchant.contactPhone}
                 </Typography>
               )}
             </DialogContent>
 
             <DialogActions>
               {selectedOffer.merchant.contactPhone && (
-                <Button color="success"
-                  onClick={() => window.open(`tel:${selectedOffer.merchant.contactPhone}`)}>
+                <Button
+                  color="success"
+                  onClick={() =>
+                    window.open(
+                      `tel:${selectedOffer.merchant.contactPhone}`
+                    )
+                  }
+                >
                   📞 Call
                 </Button>
               )}
 
               {selectedOffer.merchant.contactPhone && (
-                <Button color="success" variant="outlined"
-                  onClick={() => openWhatsApp(selectedOffer.merchant, selectedOffer)}>
+                <Button
+                  color="success"
+                  variant="outlined"
+                  onClick={() =>
+                    openWhatsApp(selectedOffer.merchant, selectedOffer)
+                  }
+                >
                   💬 WhatsApp
                 </Button>
               )}
 
-              <Button onClick={() => {
-                const { lat, lng } = selectedOffer.merchant;
-                window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, "_blank");
-              }}>
+              <Button
+                onClick={() => {
+                  const { lat, lng } = selectedOffer.merchant;
+                  window.open(
+                    `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
+                    "_blank"
+                  );
+                }}
+              >
                 Navigate
               </Button>
 
