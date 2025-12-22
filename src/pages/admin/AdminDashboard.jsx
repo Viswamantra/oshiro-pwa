@@ -5,6 +5,7 @@ import MerchantManager from "./MerchantManager";
 import OfferManager from "./OfferManager";
 import PendingApprovals from "./PendingApprovals";
 import AdminReports from "./AdminReports";
+import CategoryManager from "./admin/CategoryManager"; // ✅ NEW IMPORT
 
 export default function AdminDashboard() {
   const [tab, setTab] = useState(0);
@@ -32,6 +33,7 @@ export default function AdminDashboard() {
           <Tab label="Offers" />
           <Tab label="Pending" />
           <Tab label="Reports" />
+          <Tab label="Categories" /> {/* ✅ NEW TAB */}
         </Tabs>
       </Box>
 
@@ -41,6 +43,7 @@ export default function AdminDashboard() {
         {tab === 1 && <OfferManager />}
         {tab === 2 && <PendingApprovals />}
         {tab === 3 && <AdminReports />}
+        {tab === 4 && <CategoryManager />} {/* ✅ NEW CONTENT */}
       </Box>
     </Box>
   );
