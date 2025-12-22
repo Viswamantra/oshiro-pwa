@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Box,
   TextField,
@@ -15,22 +15,9 @@ import {
   where,
   getDocs,
   serverTimestamp,
+  onSnapshot,
 } from "firebase/firestore";
 import { db } from "../firebase";
-
-/* =========================
-   CATEGORY LIST
-========================= */
-const CATEGORY_LIST = [
-  "Food",
-  "Fashion & Clothing",
-  "Beauty & Spa",
-  "Hospitals",
-  "Medicals",
-  "Electronics",
-  "Education",
-  "Services",
-];
 
 export default function MerchantRegister() {
   const [form, setForm] = useState({
@@ -48,8 +35,30 @@ export default function MerchantRegister() {
     category: "",
   });
 
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
+
+  /* =========================
+     LOAD ACTIVE CATEGORIES
+  ========================= */
+  useEffect(() => {
+    const q = query(
+      collection(db, "categories"),
+      where("status", "==", "active")
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      setCategories(
+        snap.docs.map((d) => ({
+          id: d.id,
+          name: d.data().name,
+        }))
+      );
+    });
+
+    return () => unsub();
+  }, []);
 
   /* =========================
      ADDRESS BUILDER
@@ -229,6 +238,7 @@ export default function MerchantRegister() {
             />
           </Grid>
 
+          {/* 🔥 DYNAMIC CATEGORY DROPDOWN */}
           <Grid item xs={12}>
             <TextField
               select
@@ -240,9 +250,9 @@ export default function MerchantRegister() {
               required
               fullWidth
             >
-              {CATEGORY_LIST.map((c) => (
-                <MenuItem key={c} value={c}>
-                  {c}
+              {categories.map((c) => (
+                <MenuItem key={c.id} value={c.name}>
+                  {c.name}
                 </MenuItem>
               ))}
             </TextField>
