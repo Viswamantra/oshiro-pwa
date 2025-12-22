@@ -48,7 +48,7 @@ export default function MerchantManager() {
     addressCombined: "",
     lat: null,
     lng: null,
-    category: "",
+    category: "", 
     status: "",
   });
 
