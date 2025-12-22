@@ -5,7 +5,8 @@ import MerchantManager from "./MerchantManager";
 import OfferManager from "./OfferManager";
 import PendingApprovals from "./PendingApprovals";
 import AdminReports from "./AdminReports";
-import CategoryManager from "./admin/CategoryManager"; // ✅ NEW IMPORT
+import CategoryManager from "./CategoryManager";
+
 
 export default function AdminDashboard() {
   const [tab, setTab] = useState(0);
