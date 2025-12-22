@@ -1,4 +1,3 @@
-// src/pages/MerchantRegister.jsx
 import React, { useState } from "react";
 import {
   Box,
@@ -15,11 +14,12 @@ import {
   query,
   where,
   getDocs,
+  serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
 
 /* =========================
-   CATEGORY MASTER LIST
+   CATEGORY LIST
 ========================= */
 const CATEGORY_LIST = [
   "Food",
@@ -32,21 +32,6 @@ const CATEGORY_LIST = [
   "Services",
 ];
 
-/* =========================
-   DISTANCE (HAVERSINE)
-========================= */
-function distanceKm(lat1, lon1, lat2, lon2) {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1 * Math.PI / 180) *
-      Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLon / 2) ** 2;
-  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
-}
-
 export default function MerchantRegister() {
   const [form, setForm] = useState({
     mobile: "",
@@ -58,7 +43,6 @@ export default function MerchantRegister() {
     city: "",
     state: "",
     pincode: "",
-    addressCombined: "",
     lat: null,
     lng: null,
     category: "",
@@ -68,120 +52,59 @@ export default function MerchantRegister() {
   const [msg, setMsg] = useState("");
 
   /* =========================
-     BUILD ADDRESS
+     ADDRESS BUILDER
   ========================= */
-  function buildCombinedAddress(f) {
-    const parts = [];
-    if (f.doorNo) parts.push(f.doorNo);
-    if (f.street) parts.push(f.street);
-    if (f.area) parts.push(f.area);
-    if (f.city) parts.push(f.city);
-    if (f.state) parts.push(f.state);
-    if (f.pincode) parts.push(f.pincode);
-    return parts.join(", ");
-  }
+  const buildCombinedAddress = () =>
+    [
+      form.doorNo,
+      form.street,
+      form.area,
+      form.city,
+      form.state,
+      form.pincode,
+    ]
+      .filter(Boolean)
+      .join(", ");
 
   /* =========================
      DUPLICATE CHECK
   ========================= */
   async function checkDuplicateMerchant() {
-    const qMobile = query(
+    const q = query(
       collection(db, "merchants"),
       where("mobile", "==", form.mobile)
     );
-    if (!(await getDocs(qMobile)).empty)
-      return "This login mobile is already registered.";
 
-    const fullContact = `+91${form.contactPhone}`;
-    const qContact = query(
-      collection(db, "merchants"),
-      where("contactPhone", "==", fullContact)
-    );
-    if (!(await getDocs(qContact)).empty)
-      return "This contact number is already registered.";
-
-    if (form.lat && form.lng) {
-      const snap = await getDocs(collection(db, "merchants"));
-      for (const d of snap.docs) {
-        const m = d.data();
-        if (!m.lat || !m.lng) continue;
-        if (distanceKm(form.lat, form.lng, m.lat, m.lng) < 0.05)
-          return "A merchant already exists at this location.";
-      }
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      return "This mobile number is already registered";
     }
     return null;
   }
 
   /* =========================
-     GEOCODE
-  ========================= */
-  async function geocodeAddress() {
-    const address = buildCombinedAddress(form);
-    if (!address) {
-      setMsg("Please fill address fields first");
-      return;
-    }
-
-    setLoading(true);
-    setMsg("Geocoding address...");
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-          address
-        )}&limit=1`
-      );
-      const data = await res.json();
-
-      if (data?.length) {
-        setForm((s) => ({
-          ...s,
-          lat: Number(data[0].lat),
-          lng: Number(data[0].lon),
-          addressCombined: address,
-        }));
-        setMsg("Address geocoded successfully");
-      } else {
-        setMsg("Address not found");
-      }
-    } catch {
-      setMsg("Geocoding failed");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  /* =========================
-     GPS LOCATION (FIXED)
+     GPS LOCATION
   ========================= */
   function useMyLocation() {
-    console.log("📍 GPS button clicked");
-
     if (!navigator.geolocation) {
       setMsg("Geolocation not supported");
       return;
     }
 
-    setMsg("Fetching GPS location...");
-
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        console.log("📍 GPS success", pos.coords);
         setForm((s) => ({
           ...s,
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
         }));
-        setMsg("GPS location set");
+        setMsg("GPS location captured");
       },
       (err) => {
-        console.error("GPS error", err);
-        setMsg("GPS error: " + err.message);
+        console.error(err);
+        setMsg("GPS permission denied");
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
-      }
+      { enableHighAccuracy: true }
     );
   }
 
@@ -192,39 +115,43 @@ export default function MerchantRegister() {
     e.preventDefault();
 
     if (!/^\d{10}$/.test(form.mobile)) {
-      setMsg("Login mobile must be 10 digits.");
+      setMsg("Login mobile must be 10 digits");
       return;
     }
-    if (!/^\d{10}$/.test(form.contactPhone)) {
-      setMsg("Contact number must be 10 digits.");
-      return;
-    }
+
     if (!form.category) {
-      setMsg("Please select a category.");
+      setMsg("Please select a category");
+      return;
+    }
+
+    if (!form.lat || !form.lng) {
+      setMsg("Please use GPS or geocode address");
       return;
     }
 
     setLoading(true);
     setMsg("");
 
-    const dup = await checkDuplicateMerchant();
-    if (dup) {
-      setMsg(dup);
-      setLoading(false);
-      return;
-    }
-
     try {
+      const dup = await checkDuplicateMerchant();
+      if (dup) throw new Error(dup);
+
       await addDoc(collection(db, "merchants"), {
-        ...form,
-        contactPhone: `+91${form.contactPhone}`,
-        addressCombined:
-          form.addressCombined || buildCombinedAddress(form),
+        mobile: form.mobile,
+        contactPhone: form.contactPhone
+          ? `+91${form.contactPhone}`
+          : "",
+        shopName: form.shopName,
+        category: form.category,
+        addressCombined: buildCombinedAddress(),
+        lat: form.lat,
+        lng: form.lng,
         status: "pending",
-        createdAt: Date.now(),
+        createdAt: serverTimestamp(),
       });
 
-      setMsg("Registration requested. Admin will review.");
+      setMsg("✅ Registration submitted for approval");
+
       setForm({
         mobile: "",
         contactPhone: "",
@@ -235,13 +162,13 @@ export default function MerchantRegister() {
         city: "",
         state: "",
         pincode: "",
-        addressCombined: "",
         lat: null,
         lng: null,
         category: "",
       });
-    } catch {
-      setMsg("Submission failed.");
+    } catch (err) {
+      console.error("🔥 Firestore error:", err);
+      setMsg(err.message);
     } finally {
       setLoading(false);
     }
@@ -255,7 +182,6 @@ export default function MerchantRegister() {
 
       <form onSubmit={handleSubmit}>
         <Grid container spacing={2}>
-          {/* LOGIN MOBILE */}
           <Grid item xs={12} sm={6}>
             <TextField
               label="Login Mobile *"
@@ -266,15 +192,14 @@ export default function MerchantRegister() {
                   mobile: e.target.value.replace(/\D/g, "").slice(0, 10),
                 })
               }
-              fullWidth
               required
+              fullWidth
             />
           </Grid>
 
-          {/* CONTACT PHONE */}
           <Grid item xs={12} sm={6}>
             <TextField
-              label="Contact Number (for customers) *"
+              label="Contact Number"
               value={form.contactPhone}
               onChange={(e) =>
                 setForm({
@@ -288,11 +213,9 @@ export default function MerchantRegister() {
                 ),
               }}
               fullWidth
-              required
             />
           </Grid>
 
-          {/* SHOP NAME */}
           <Grid item xs={12}>
             <TextField
               label="Shop Name"
@@ -304,7 +227,6 @@ export default function MerchantRegister() {
             />
           </Grid>
 
-          {/* CATEGORY */}
           <Grid item xs={12}>
             <TextField
               select
@@ -313,8 +235,8 @@ export default function MerchantRegister() {
               onChange={(e) =>
                 setForm({ ...form, category: e.target.value })
               }
-              fullWidth
               required
+              fullWidth
             >
               {CATEGORY_LIST.map((c) => (
                 <MenuItem key={c} value={c}>
@@ -324,35 +246,8 @@ export default function MerchantRegister() {
             </TextField>
           </Grid>
 
-          {/* ADDRESS PREVIEW */}
           <Grid item xs={12}>
-            <TextField
-              label="Combined Address (preview)"
-              value={buildCombinedAddress(form)}
-              fullWidth
-              disabled
-            />
-          </Grid>
-
-          {/* GEO BUTTONS */}
-          <Grid item xs={12} sm={6}>
-            <Button
-              type="button"
-              variant="outlined"
-              fullWidth
-              onClick={geocodeAddress}
-            >
-              Geocode Address
-            </Button>
-          </Grid>
-
-          <Grid item xs={12} sm={6}>
-            <Button
-              type="button"      // 🔥 CRITICAL FIX
-              variant="outlined"
-              fullWidth
-              onClick={useMyLocation}
-            >
+            <Button variant="outlined" fullWidth onClick={useMyLocation}>
               Use My GPS Location
             </Button>
           </Grid>
@@ -364,11 +259,7 @@ export default function MerchantRegister() {
           </Grid>
 
           <Grid item xs={12}>
-            <Button
-              variant="contained"
-              type="submit"
-              disabled={loading}
-            >
+            <Button type="submit" variant="contained" disabled={loading}>
               Request Registration
             </Button>
           </Grid>
