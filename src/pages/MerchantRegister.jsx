@@ -67,7 +67,7 @@ export default function MerchantRegister() {
       .join(", ");
 
   /* =========================
-     DUPLICATE CHECK
+     DUPLICATE CHECK (MOBILE ONLY)
   ========================= */
   async function checkDuplicateMerchant() {
     const q = query(
@@ -91,6 +91,8 @@ export default function MerchantRegister() {
       return;
     }
 
+    setMsg("Fetching GPS location...");
+
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setForm((s) => ({
@@ -101,7 +103,7 @@ export default function MerchantRegister() {
         setMsg("GPS location captured");
       },
       (err) => {
-        console.error(err);
+        console.error("GPS error:", err);
         setMsg("GPS permission denied");
       },
       { enableHighAccuracy: true }
@@ -125,7 +127,7 @@ export default function MerchantRegister() {
     }
 
     if (!form.lat || !form.lng) {
-      setMsg("Please use GPS or geocode address");
+      setMsg("Please use GPS location");
       return;
     }
 
@@ -168,7 +170,7 @@ export default function MerchantRegister() {
       });
     } catch (err) {
       console.error("🔥 Firestore error:", err);
-      setMsg(err.message);
+      setMsg(err.message || "Submission failed");
     } finally {
       setLoading(false);
     }
@@ -247,7 +249,12 @@ export default function MerchantRegister() {
           </Grid>
 
           <Grid item xs={12}>
-            <Button variant="outlined" fullWidth onClick={useMyLocation}>
+            <Button
+              type="button"
+              variant="outlined"
+              fullWidth
+              onClick={useMyLocation}
+            >
               Use My GPS Location
             </Button>
           </Grid>
