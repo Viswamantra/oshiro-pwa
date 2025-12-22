@@ -12,7 +12,14 @@ import {
   DialogActions,
   Button,
 } from "@mui/material";
-import { collection, onSnapshot, doc, setDoc } from "firebase/firestore";
+import {
+  collection,
+  onSnapshot,
+  doc,
+  setDoc,
+  query,
+  where,
+} from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../auth/AuthContext";
 
@@ -77,6 +84,8 @@ export default function CustomerDashboard() {
 
   const [offers, setOffers] = useState([]);
   const [merchantsMap, setMerchantsMap] = useState({});
+  const [categories, setCategories] = useState([]);
+
   const [customerLoc, setCustomerLoc] = useState(null);
   const [gpsAccuracy, setGpsAccuracy] = useState(null);
 
@@ -128,6 +137,25 @@ export default function CustomerDashboard() {
   }, [user]);
 
   /* =========================
+     LOAD ACTIVE CATEGORIES
+  ========================= */
+  useEffect(() => {
+    const q = query(
+      collection(db, "categories"),
+      where("status", "==", "active")
+    );
+
+    return onSnapshot(q, (snap) => {
+      setCategories(
+        snap.docs.map((d) => ({
+          id: d.id,
+          name: d.data().name,
+        }))
+      );
+    });
+  }, []);
+
+  /* =========================
      FETCH OFFERS
   ========================= */
   useEffect(() => {
@@ -150,15 +178,6 @@ export default function CustomerDashboard() {
       setMerchantsMap(map);
     });
   }, []);
-
-  /* =========================
-     DERIVED CATEGORIES
-  ========================= */
-  const derivedCategories = useMemo(() => {
-    const set = new Set();
-    offers.forEach((o) => o.category && set.add(o.category));
-    return Array.from(set);
-  }, [offers]);
 
   /* =========================
      FILTER + DISTANCE
@@ -222,9 +241,9 @@ export default function CustomerDashboard() {
           sx={{ width: 260 }}
         >
           <MenuItem value="All">All</MenuItem>
-          {derivedCategories.map((cat) => (
-            <MenuItem key={cat} value={cat}>
-              {getCategoryIcon(cat)} {getCategoryLabel(cat)}
+          {categories.map((cat) => (
+            <MenuItem key={cat.id} value={cat.name}>
+              {getCategoryIcon(cat.name)} {getCategoryLabel(cat.name)}
             </MenuItem>
           ))}
         </TextField>
@@ -284,7 +303,8 @@ export default function CustomerDashboard() {
                 <strong>Discount:</strong> {selectedOffer.discount}%
               </Typography>
               <Typography sx={{ mt: 1 }}>
-                <strong>Distance:</strong> {selectedOffer.distanceLabel}
+                <strong>Distance:</strong>{" "}
+                {selectedOffer.distanceLabel}
               </Typography>
               <Typography sx={{ mt: 1 }}>
                 <strong>Address:</strong>{" "}
@@ -303,9 +323,7 @@ export default function CustomerDashboard() {
                 <Button
                   color="success"
                   onClick={() =>
-                    window.open(
-                      `tel:${selectedOffer.merchant.contactPhone}`
-                    )
+                    window.open(`tel:${selectedOffer.merchant.contactPhone}`)
                   }
                 >
                   📞 Call
