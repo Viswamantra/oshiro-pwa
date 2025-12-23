@@ -23,37 +23,28 @@ function distanceKm(lat1, lon1, lat2, lon2) {
 /* =========================================================
    CONFIG
 ========================================================= */
-const GEOFENCE_KM = 1;          // 1 km radius
-const COOLDOWN_MINUTES = 30;   // anti-spam
+const GEOFENCE_KM = 1;
+const COOLDOWN_MINUTES = 30;
 const MAX_PIN_ATTEMPTS = 5;
 
 /* =========================================================
    🔍 CHECK USER EXISTS
-   Used by LoginPage (new vs existing user)
 ========================================================= */
-exports.checkUserExists = functions.https.onCall(async (data) => {
-  try {
-    const { mobile } = data;
-
-    if (!/^\d{10}$/.test(mobile)) {
-      return { exists: false };
-    }
-
-    const snap = await db.collection("users").doc(mobile).get();
-    return { exists: snap.exists };
-  } catch (err) {
-    console.error("checkUserExists error:", err);
+exports.checkUserExists = functions.https.onCall(async ({ mobile }) => {
+  if (!/^\d{10}$/.test(mobile)) {
     return { exists: false };
   }
+
+  const snap = await db.collection("users").doc(mobile).get();
+  return { exists: snap.exists };
 });
 
 /* =========================================================
-   🔐 SET 4-DIGIT PIN (CUSTOMER / MERCHANT)
+   🔐 SET / RESET 4-DIGIT PIN
+   (Customer OR Merchant)
 ========================================================= */
-exports.setUserPin = functions.https.onCall(async (data) => {
+exports.setUserPin = functions.https.onCall(async ({ mobile, pin, role }) => {
   try {
-    const { mobile, pin, role } = data;
-
     if (!/^\d{10}$/.test(mobile)) {
       return { success: false, message: "Invalid mobile number" };
     }
@@ -62,21 +53,32 @@ exports.setUserPin = functions.https.onCall(async (data) => {
       return { success: false, message: "PIN must be 4 digits" };
     }
 
+    const ref = db.collection("users").doc(mobile);
+    const snap = await ref.get();
+
     const pinHash = await bcrypt.hash(pin, 10);
 
-    await db.collection("users").doc(mobile).set(
+    // Preserve existing role (merchant stays merchant)
+    const finalRole = snap.exists
+      ? snap.data().role || "customer"
+      : role || "customer";
+
+    await ref.set(
       {
         mobile,
-        role: role || "customer", // customer | merchant
+        role: finalRole,
         pinHash,
         pinAttempts: 0,
         status: "active",
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: snap.exists
+          ? snap.data().createdAt
+          : admin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
 
-    return { success: true };
+    return { success: true, role: finalRole };
   } catch (err) {
     console.error("setUserPin error:", err);
     return { success: false, message: "Failed to set PIN" };
@@ -84,18 +86,16 @@ exports.setUserPin = functions.https.onCall(async (data) => {
 });
 
 /* =========================================================
-   🔐 PIN LOGIN VERIFICATION
+   🔐 PIN LOGIN (CUSTOMER + MERCHANT)
 ========================================================= */
-exports.verifyPinLogin = functions.https.onCall(async (data) => {
+exports.verifyPinLogin = functions.https.onCall(async ({ mobile, pin }) => {
   try {
-    const { mobile, pin } = data;
-
     if (!/^\d{10}$/.test(mobile) || !/^\d{4}$/.test(pin)) {
       return { success: false, message: "Invalid input" };
     }
 
-    const userRef = db.collection("users").doc(mobile);
-    const snap = await userRef.get();
+    const ref = db.collection("users").doc(mobile);
+    const snap = await ref.get();
 
     if (!snap.exists) {
       return { success: false, message: "User not registered" };
@@ -106,21 +106,21 @@ exports.verifyPinLogin = functions.https.onCall(async (data) => {
     if (user.pinAttempts >= MAX_PIN_ATTEMPTS) {
       return {
         success: false,
-        message: "Account locked. Try again later.",
+        message: "Account locked. Try again later",
       };
     }
 
     const isValid = await bcrypt.compare(pin, user.pinHash);
 
     if (!isValid) {
-      await userRef.update({
+      await ref.update({
         pinAttempts: admin.firestore.FieldValue.increment(1),
       });
       return { success: false, message: "Wrong PIN" };
     }
 
-    // Reset attempts on success
-    await userRef.update({ pinAttempts: 0 });
+    // Reset attempts
+    await ref.update({ pinAttempts: 0 });
 
     return {
       success: true,
@@ -142,9 +142,6 @@ exports.notifyOnGeofenceEnter = functions.firestore
     const after = change.after.data();
     const userId = context.params.userId;
 
-    /* =========================
-       BASIC VALIDATION
-    ========================= */
     if (!after?.lat || !after?.lng) return null;
     if (!after?.fcmToken) return null;
     if (after.pushEnabled === false) return null;
@@ -166,9 +163,6 @@ exports.notifyOnGeofenceEnter = functions.firestore
       ? after.categories
       : [];
 
-    /* =========================
-       LOAD MERCHANTS & OFFERS
-    ========================= */
     const merchantsSnap = await db
       .collection("merchants")
       .where("status", "==", "approved")
@@ -187,13 +181,11 @@ exports.notifyOnGeofenceEnter = functions.firestore
 
     offersSnap.forEach((doc) => {
       const o = doc.data();
-
       if (
         userCategories.length > 0 &&
         !userCategories.includes(o.category)
-      ) {
+      )
         return;
-      }
 
       if (!offersByMerchant[o.merchantId]) {
         offersByMerchant[o.merchantId] = [];
@@ -202,51 +194,39 @@ exports.notifyOnGeofenceEnter = functions.firestore
     });
 
     let notifiedMerchantId = null;
-    let notificationPayload = null;
+    let payload = null;
 
-    /* =========================
-       GEOFENCE CHECK
-    ========================= */
     for (const mDoc of merchantsSnap.docs) {
-      const merchant = mDoc.data();
+      const m = mDoc.data();
       const merchantId = mDoc.id;
 
-      if (!merchant.lat || !merchant.lng) continue;
+      if (!m.lat || !m.lng) continue;
       if (!offersByMerchant[merchantId]) continue;
       if (after.lastNotifiedMerchantId === merchantId) continue;
 
-      const dist = distanceKm(
-        after.lat,
-        after.lng,
-        merchant.lat,
-        merchant.lng
-      );
+      const dist = distanceKm(after.lat, after.lng, m.lat, m.lng);
 
       if (dist <= GEOFENCE_KM) {
-        const offerTitles = offersByMerchant[merchantId]
-          .map((o) => o.title)
-          .slice(0, 2)
-          .join(", ");
-
-        notificationPayload = {
-          title: `Offers near ${merchant.shopName}`,
-          body: offerTitles || "New offer available",
+        payload = {
+          title: `Offers near ${m.shopName}`,
+          body:
+            offersByMerchant[merchantId]
+              .map((o) => o.title)
+              .slice(0, 2)
+              .join(", ") || "New offer available",
         };
-
         notifiedMerchantId = merchantId;
         break;
       }
     }
 
-    if (!notificationPayload) return null;
+    if (!payload) return null;
 
     await admin.messaging().send({
       token: after.fcmToken,
-      notification: notificationPayload,
+      notification: payload,
       android: { priority: "high" },
-      data: {
-        merchantId: notifiedMerchantId,
-      },
+      data: { merchantId: notifiedMerchantId },
     });
 
     await db.doc(`users/${userId}`).update({
