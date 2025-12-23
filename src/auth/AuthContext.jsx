@@ -5,7 +5,6 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase";
 
 const AuthContext = createContext(null);
-
 const STORAGE_KEY = "oshiro_user";
 
 export function AuthProvider({ children }) {
@@ -23,8 +22,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   /* =========================
-     LOGIN WITH PIN (SECURE)
-     → BACKEND VERIFICATION
+     LOGIN WITH PIN (BACKEND)
   ========================= */
   const loginWithPin = async (mobile, pin) => {
     if (!/^\d{10}$/.test(mobile)) {
@@ -36,7 +34,6 @@ export function AuthProvider({ children }) {
     }
 
     try {
-      // 🔐 Call Firebase Cloud Function
       const verifyPin = httpsCallable(functions, "verifyPinLogin");
       const res = await verifyPin({ mobile, pin });
 
@@ -46,22 +43,20 @@ export function AuthProvider({ children }) {
 
       const loggedUser = {
         mobile,
-        role: res.data.role, // admin | merchant | customer
+        role: res.data.role,
       };
 
-      // ✅ Persist session
       setUser(loggedUser);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(loggedUser));
 
-      // 🔀 Role routing
       if (loggedUser.role === "admin") navigate("/admin");
       else if (loggedUser.role === "merchant") navigate("/merchant");
       else navigate("/customer");
 
       return { success: true };
-    } catch (error) {
-      console.error("PIN login error:", error);
-      return { success: false, message: "Login failed. Try again." };
+    } catch (err) {
+      console.error("loginWithPin error:", err);
+      return { success: false, message: "Login failed" };
     }
   };
 
