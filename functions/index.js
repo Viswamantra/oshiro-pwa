@@ -23,12 +23,49 @@ function distanceKm(lat1, lon1, lat2, lon2) {
 /* =========================================================
    CONFIG
 ========================================================= */
-const GEOFENCE_KM = 1;        // 1 km radius
-const COOLDOWN_MINUTES = 30; // anti-spam
+const GEOFENCE_KM = 1;          // 1 km radius
+const COOLDOWN_MINUTES = 30;   // anti-spam
 const MAX_PIN_ATTEMPTS = 5;
 
 /* =========================================================
-   🔐 PIN LOGIN (SECURE BACKEND AUTH)
+   🔐 SET 4-DIGIT PIN (CUSTOMER / MERCHANT)
+   Called during signup or first-time setup
+========================================================= */
+exports.setUserPin = functions.https.onCall(async (data) => {
+  try {
+    const { mobile, pin, role } = data;
+
+    if (!/^\d{10}$/.test(mobile)) {
+      return { success: false, message: "Invalid mobile number" };
+    }
+
+    if (!/^\d{4}$/.test(pin)) {
+      return { success: false, message: "PIN must be 4 digits" };
+    }
+
+    const pinHash = await bcrypt.hash(pin, 10);
+
+    await db.collection("users").doc(mobile).set(
+      {
+        mobile,
+        role: role || "customer", // customer | merchant
+        pinHash,
+        pinAttempts: 0,
+        status: "active",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    return { success: true };
+  } catch (err) {
+    console.error("setUserPin error:", err);
+    return { success: false, message: "Failed to set PIN" };
+  }
+});
+
+/* =========================================================
+   🔐 PIN LOGIN VERIFICATION
    Used by AuthContext → loginWithPin()
 ========================================================= */
 exports.verifyPinLogin = functions.https.onCall(async (data) => {
