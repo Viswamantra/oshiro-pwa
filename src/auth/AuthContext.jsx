@@ -1,4 +1,3 @@
-// src/auth/AuthContext.jsx
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { httpsCallable } from "firebase/functions";
@@ -12,18 +11,12 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  /* =========================
-     RESTORE SESSION
-  ========================= */
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) setUser(JSON.parse(saved));
     setLoading(false);
   }, []);
 
-  /* =========================
-     LOGIN WITH PIN (BACKEND)
-  ========================= */
   const loginWithPin = async (mobile, pin) => {
     if (!/^\d{10}$/.test(mobile)) {
       return { success: false, message: "Mobile must be 10 digits" };
@@ -60,9 +53,6 @@ export function AuthProvider({ children }) {
     }
   };
 
-  /* =========================
-     LOGOUT
-  ========================= */
   const logout = () => {
     setUser(null);
     localStorage.removeItem(STORAGE_KEY);
