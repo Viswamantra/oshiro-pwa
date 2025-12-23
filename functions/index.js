@@ -28,8 +28,27 @@ const COOLDOWN_MINUTES = 30;   // anti-spam
 const MAX_PIN_ATTEMPTS = 5;
 
 /* =========================================================
+   🔍 CHECK USER EXISTS
+   Used by LoginPage (new vs existing user)
+========================================================= */
+exports.checkUserExists = functions.https.onCall(async (data) => {
+  try {
+    const { mobile } = data;
+
+    if (!/^\d{10}$/.test(mobile)) {
+      return { exists: false };
+    }
+
+    const snap = await db.collection("users").doc(mobile).get();
+    return { exists: snap.exists };
+  } catch (err) {
+    console.error("checkUserExists error:", err);
+    return { exists: false };
+  }
+});
+
+/* =========================================================
    🔐 SET 4-DIGIT PIN (CUSTOMER / MERCHANT)
-   Called during signup or first-time setup
 ========================================================= */
 exports.setUserPin = functions.https.onCall(async (data) => {
   try {
@@ -66,7 +85,6 @@ exports.setUserPin = functions.https.onCall(async (data) => {
 
 /* =========================================================
    🔐 PIN LOGIN VERIFICATION
-   Used by AuthContext → loginWithPin()
 ========================================================= */
 exports.verifyPinLogin = functions.https.onCall(async (data) => {
   try {
@@ -101,7 +119,7 @@ exports.verifyPinLogin = functions.https.onCall(async (data) => {
       return { success: false, message: "Wrong PIN" };
     }
 
-    // ✅ Reset attempts after success
+    // Reset attempts on success
     await userRef.update({ pinAttempts: 0 });
 
     return {
@@ -131,14 +149,12 @@ exports.notifyOnGeofenceEnter = functions.firestore
     if (!after?.fcmToken) return null;
     if (after.pushEnabled === false) return null;
 
-    // Ignore insignificant movement
     if (before?.lat === after.lat && before?.lng === after.lng) {
       return null;
     }
 
     const now = Date.now();
 
-    // Cooldown check
     if (
       after.lastPushAt &&
       now - after.lastPushAt < COOLDOWN_MINUTES * 60 * 1000
@@ -167,15 +183,11 @@ exports.notifyOnGeofenceEnter = functions.firestore
 
     if (offersSnap.empty) return null;
 
-    /* =========================
-       GROUP OFFERS BY MERCHANT
-    ========================= */
     const offersByMerchant = {};
 
     offersSnap.forEach((doc) => {
       const o = doc.data();
 
-      // Category preference filter
       if (
         userCategories.length > 0 &&
         !userCategories.includes(o.category)
@@ -201,8 +213,6 @@ exports.notifyOnGeofenceEnter = functions.firestore
 
       if (!merchant.lat || !merchant.lng) continue;
       if (!offersByMerchant[merchantId]) continue;
-
-      // Avoid repeat notification
       if (after.lastNotifiedMerchantId === merchantId) continue;
 
       const dist = distanceKm(
@@ -224,15 +234,12 @@ exports.notifyOnGeofenceEnter = functions.firestore
         };
 
         notifiedMerchantId = merchantId;
-        break; // 🔒 only ONE push
+        break;
       }
     }
 
     if (!notificationPayload) return null;
 
-    /* =========================
-       SEND PUSH
-    ========================= */
     await admin.messaging().send({
       token: after.fcmToken,
       notification: notificationPayload,
@@ -242,9 +249,6 @@ exports.notifyOnGeofenceEnter = functions.firestore
       },
     });
 
-    /* =========================
-       UPDATE COOLDOWN STATE
-    ========================= */
     await db.doc(`users/${userId}`).update({
       lastPushAt: now,
       lastNotifiedMerchantId: notifiedMerchantId,
