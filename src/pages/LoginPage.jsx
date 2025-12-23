@@ -16,11 +16,12 @@ export default function LoginPage() {
 
   const [mobile, setMobile] = useState("");
   const [pin, setPin] = useState("");
-  const [step, setStep] = useState("CHECK"); 
-  // CHECK | SET_PIN | LOGIN
+  const [step, setStep] = useState("MOBILE"); 
+  // MOBILE | LOGIN | SET_PIN
+  const [loading, setLoading] = useState(false);
 
   /* =========================
-     VALIDATIONS
+     VALIDATION
   ========================= */
   const isValidMobile = /^\d{10}$/.test(mobile);
   const isValidPin = /^\d{4}$/.test(pin);
@@ -28,12 +29,13 @@ export default function LoginPage() {
   /* =========================
      CHECK USER EXISTS
   ========================= */
-  const handleCheckMobile = async () => {
+  const handleMobileSubmit = async () => {
     if (!isValidMobile) {
       alert("Enter valid 10-digit mobile number");
       return;
     }
 
+    setLoading(true);
     try {
       const checkUser = httpsCallable(functions, "checkUserExists");
       const res = await checkUser({ mobile });
@@ -47,6 +49,7 @@ export default function LoginPage() {
       console.error(err);
       alert("Unable to check user");
     }
+    setLoading(false);
   };
 
   /* =========================
@@ -58,25 +61,27 @@ export default function LoginPage() {
       return;
     }
 
+    setLoading(true);
     try {
       const setPin = httpsCallable(functions, "setUserPin");
       const res = await setPin({
         mobile,
         pin,
-        role: "customer", // merchant can be upgraded later
+        role: "customer", // merchant can be upgraded later by admin
       });
 
       if (res.data.success) {
         alert("PIN set successfully. Please login.");
-        setStep("LOGIN");
         setPin("");
+        setStep("LOGIN");
       } else {
         alert(res.data.message || "Failed to set PIN");
       }
     } catch (err) {
       console.error(err);
-      alert("Error setting PIN");
+      alert("Unable to set PIN");
     }
+    setLoading(false);
   };
 
   /* =========================
@@ -84,12 +89,14 @@ export default function LoginPage() {
   ========================= */
   const handleLogin = async () => {
     if (!isValidPin) {
-      alert("Enter 4-digit PIN");
+      alert("Enter valid 4-digit PIN");
       return;
     }
 
+    setLoading(true);
     const res = await loginWithPin(mobile, pin);
     if (!res.success) alert(res.message);
+    setLoading(false);
   };
 
   return (
@@ -103,7 +110,7 @@ export default function LoginPage() {
     >
       <Paper sx={{ p: 4, width: 380 }}>
         <Typography variant="h6" mb={2}>
-          User Login
+          Customer / Merchant Login
         </Typography>
 
         {/* MOBILE NUMBER */}
@@ -112,18 +119,23 @@ export default function LoginPage() {
           fullWidth
           margin="normal"
           value={mobile}
-          onChange={(e) => setMobile(e.target.value.replace(/\D/g, ""))}
           inputProps={{ maxLength: 10 }}
-          disabled={step !== "CHECK"}
+          onChange={(e) => setMobile(e.target.value.replace(/\D/g, ""))}
+          disabled={step !== "MOBILE"}
         />
 
-        {step === "CHECK" && (
-          <Button fullWidth variant="contained" onClick={handleCheckMobile}>
+        {step === "MOBILE" && (
+          <Button
+            fullWidth
+            variant="contained"
+            onClick={handleMobileSubmit}
+            disabled={loading}
+          >
             Continue
           </Button>
         )}
 
-        {step !== "CHECK" && (
+        {step !== "MOBILE" && (
           <>
             <Divider sx={{ my: 2 }} />
 
@@ -133,18 +145,28 @@ export default function LoginPage() {
               fullWidth
               margin="normal"
               value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
               inputProps={{ maxLength: 4 }}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
             />
 
             {step === "SET_PIN" && (
-              <Button fullWidth variant="contained" onClick={handleSetPin}>
+              <Button
+                fullWidth
+                variant="contained"
+                onClick={handleSetPin}
+                disabled={loading}
+              >
                 Set PIN
               </Button>
             )}
 
             {step === "LOGIN" && (
-              <Button fullWidth variant="contained" onClick={handleLogin}>
+              <Button
+                fullWidth
+                variant="contained"
+                onClick={handleLogin}
+                disabled={loading}
+              >
                 Login
               </Button>
             )}
