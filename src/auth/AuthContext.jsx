@@ -2,13 +2,18 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { db } from "../firebase";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  updateDoc,
+  increment,
+} from "firebase/firestore";
+import bcrypt from "bcryptjs";
 
 const AuthContext = createContext(null);
 
-const DEFAULT_OTP = "2345";
 const ADMIN_MOBILE = "7386361725";
-const STORAGE_KEY = "oshiro_user"; // 🔒 localStorage key
+const STORAGE_KEY = "oshiro_user";
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -16,61 +21,80 @@ export function AuthProvider({ children }) {
   const navigate = useNavigate();
 
   /* =========================
-     RESTORE SESSION ON REFRESH
+     RESTORE SESSION
   ========================= */
   useEffect(() => {
-    const savedUser = localStorage.getItem(STORAGE_KEY);
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    }
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) setUser(JSON.parse(saved));
     setLoading(false);
   }, []);
 
   /* =========================
-     LOGIN WITH OTP
+     LOGIN WITH PIN
   ========================= */
-  const loginWithOtp = async (mobile, otp) => {
+  const loginWithPin = async (mobile, pin) => {
     if (!/^\d{10}$/.test(mobile)) {
       return { success: false, message: "Mobile must be 10 digits" };
     }
-    if (otp !== DEFAULT_OTP) {
-      return { success: false, message: "Invalid OTP" };
+
+    if (!/^\d{4}$/.test(pin)) {
+      return { success: false, message: "PIN must be 4 digits" };
     }
 
-    let role = "customer";
-
-    if (mobile === ADMIN_MOBILE) {
-      role = "admin";
-    } else {
-      try {
-        const q = query(
-          collection(db, "merchants"),
-          where("mobile", "==", mobile),
-          where("status", "==", "approved")
-        );
-        const snap = await getDocs(q);
-        if (!snap.empty) role = "merchant";
-      } catch (e) {
-        console.error("Auth merchant check error", e);
-      }
+    // 🔐 Admin shortcut
+    if (mobile === ADMIN_MOBILE && pin === "0000") {
+      const adminUser = { mobile, role: "admin" };
+      setUser(adminUser);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(adminUser));
+      navigate("/admin");
+      return { success: true };
     }
 
-    const loggedInUser = { mobile, role };
+    const userRef = doc(db, "users", mobile);
+    const snap = await getDoc(userRef);
 
-    // ✅ Persist session
-    setUser(loggedInUser);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(loggedInUser));
+    if (!snap.exists()) {
+      return { success: false, message: "User not registered" };
+    }
 
-    // ✅ Role-based navigation
-    if (role === "admin") navigate("/admin");
-    else if (role === "merchant") navigate("/merchant");
+    const data = snap.data();
+
+    if (data.pinAttempts >= 5) {
+      return {
+        success: false,
+        message: "Account locked. Try later.",
+      };
+    }
+
+    const valid = await bcrypt.compare(pin, data.pinHash);
+
+    if (!valid) {
+      await updateDoc(userRef, {
+        pinAttempts: increment(1),
+      });
+      return { success: false, message: "Wrong PIN" };
+    }
+
+    // ✅ Reset attempts
+    await updateDoc(userRef, { pinAttempts: 0 });
+
+    const loggedUser = {
+      mobile,
+      role: data.role || "customer",
+    };
+
+    setUser(loggedUser);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(loggedUser));
+
+    // 🔀 Role routing
+    if (loggedUser.role === "merchant") navigate("/merchant");
     else navigate("/customer");
 
     return { success: true };
   };
 
   /* =========================
-     LOGOUT (ONLY HERE)
+     LOGOUT
   ========================= */
   const logout = () => {
     setUser(null);
@@ -78,11 +102,10 @@ export function AuthProvider({ children }) {
     navigate("/login");
   };
 
-  // ⛔ Prevent rendering until session restored
   if (loading) return null;
 
   return (
-    <AuthContext.Provider value={{ user, loginWithOtp, logout }}>
+    <AuthContext.Provider value={{ user, loginWithPin, logout }}>
       {children}
     </AuthContext.Provider>
   );
