@@ -1,18 +1,11 @@
 // src/auth/AuthContext.jsx
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { db } from "../firebase";
-import {
-  doc,
-  getDoc,
-  updateDoc,
-  increment,
-} from "firebase/firestore";
-import bcrypt from "bcryptjs";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "../firebase";
 
 const AuthContext = createContext(null);
 
-const ADMIN_MOBILE = "7386361725";
 const STORAGE_KEY = "oshiro_user";
 
 export function AuthProvider({ children }) {
@@ -30,7 +23,8 @@ export function AuthProvider({ children }) {
   }, []);
 
   /* =========================
-     LOGIN WITH PIN
+     LOGIN WITH PIN (SECURE)
+     → BACKEND VERIFICATION
   ========================= */
   const loginWithPin = async (mobile, pin) => {
     if (!/^\d{10}$/.test(mobile)) {
@@ -41,56 +35,34 @@ export function AuthProvider({ children }) {
       return { success: false, message: "PIN must be 4 digits" };
     }
 
-    // 🔐 Admin shortcut
-    if (mobile === ADMIN_MOBILE && pin === "0000") {
-      const adminUser = { mobile, role: "admin" };
-      setUser(adminUser);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(adminUser));
-      navigate("/admin");
-      return { success: true };
-    }
+    try {
+      // 🔐 Call Firebase Cloud Function
+      const verifyPin = httpsCallable(functions, "verifyPinLogin");
+      const res = await verifyPin({ mobile, pin });
 
-    const userRef = doc(db, "users", mobile);
-    const snap = await getDoc(userRef);
+      if (!res.data.success) {
+        return { success: false, message: res.data.message };
+      }
 
-    if (!snap.exists()) {
-      return { success: false, message: "User not registered" };
-    }
-
-    const data = snap.data();
-
-    if (data.pinAttempts >= 5) {
-      return {
-        success: false,
-        message: "Account locked. Try later.",
+      const loggedUser = {
+        mobile,
+        role: res.data.role, // admin | merchant | customer
       };
+
+      // ✅ Persist session
+      setUser(loggedUser);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(loggedUser));
+
+      // 🔀 Role routing
+      if (loggedUser.role === "admin") navigate("/admin");
+      else if (loggedUser.role === "merchant") navigate("/merchant");
+      else navigate("/customer");
+
+      return { success: true };
+    } catch (error) {
+      console.error("PIN login error:", error);
+      return { success: false, message: "Login failed. Try again." };
     }
-
-    const valid = await bcrypt.compare(pin, data.pinHash);
-
-    if (!valid) {
-      await updateDoc(userRef, {
-        pinAttempts: increment(1),
-      });
-      return { success: false, message: "Wrong PIN" };
-    }
-
-    // ✅ Reset attempts
-    await updateDoc(userRef, { pinAttempts: 0 });
-
-    const loggedUser = {
-      mobile,
-      role: data.role || "customer",
-    };
-
-    setUser(loggedUser);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(loggedUser));
-
-    // 🔀 Role routing
-    if (loggedUser.role === "merchant") navigate("/merchant");
-    else navigate("/customer");
-
-    return { success: true };
   };
 
   /* =========================
