@@ -4,64 +4,19 @@ import {
   TextField,
   Button,
   Typography,
-  Paper
+  Paper,
 } from "@mui/material";
-import { db } from "../firebase";
-import { doc, getDoc, updateDoc, increment } from "firebase/firestore";
-import bcrypt from "bcryptjs";
-import { useNavigate } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
 
 export default function LoginPage() {
+  const { loginWithPin } = useAuth();
   const [mobile, setMobile] = useState("");
   const [pin, setPin] = useState("");
-  const navigate = useNavigate();
 
   const handleLogin = async () => {
-    if (!/^\d{10}$/.test(mobile)) {
-      alert("Enter valid 10-digit mobile number");
-      return;
-    }
-
-    if (!/^\d{4}$/.test(pin)) {
-      alert("Enter 4-digit PIN");
-      return;
-    }
-
-    const userRef = doc(db, "users", mobile);
-    const snap = await getDoc(userRef);
-
-    if (!snap.exists()) {
-      alert("User not registered");
-      return;
-    }
-
-    const user = snap.data();
-
-    if (user.pinAttempts >= 5) {
-      alert("Account locked. Try later.");
-      return;
-    }
-
-    const ok = await bcrypt.compare(pin, user.pinHash);
-
-    if (!ok) {
-      await updateDoc(userRef, {
-        pinAttempts: increment(1),
-      });
-      alert("Wrong PIN");
-      return;
-    }
-
-    // Reset attempts
-    await updateDoc(userRef, { pinAttempts: 0 });
-
-    // 🔀 ROLE ROUTING
-    if (user.role === "admin") {
-      navigate("/admin");
-    } else if (user.role === "merchant") {
-      navigate("/merchant");
-    } else {
-      navigate("/customer");
+    const res = await loginWithPin(mobile, pin);
+    if (!res.success) {
+      alert(res.message);
     }
   };
 
@@ -109,7 +64,7 @@ export default function LoginPage() {
           variant="text"
           fullWidth
           sx={{ mt: 1 }}
-          onClick={() => navigate("/merchant-register")}
+          onClick={() => window.location.href = "/merchant-register"}
         >
           New merchant? Request registration here
         </Button>
