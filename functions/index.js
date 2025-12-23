@@ -1,12 +1,13 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
+const bcrypt = require("bcryptjs");
 
 admin.initializeApp();
 const db = admin.firestore();
 
-/* =========================
+/* =========================================================
    DISTANCE (HAVERSINE)
-========================= */
+========================================================= */
 function distanceKm(lat1, lon1, lat2, lon2) {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -19,12 +20,66 @@ function distanceKm(lat1, lon1, lat2, lon2) {
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-/* =========================
+/* =========================================================
    CONFIG
-========================= */
-const GEOFENCE_KM = 1;           // 1 km radius
-const COOLDOWN_MINUTES = 30;     // anti-spam
+========================================================= */
+const GEOFENCE_KM = 1;        // 1 km radius
+const COOLDOWN_MINUTES = 30; // anti-spam
+const MAX_PIN_ATTEMPTS = 5;
 
+/* =========================================================
+   🔐 PIN LOGIN (SECURE BACKEND AUTH)
+   Used by AuthContext → loginWithPin()
+========================================================= */
+exports.verifyPinLogin = functions.https.onCall(async (data) => {
+  try {
+    const { mobile, pin } = data;
+
+    if (!/^\d{10}$/.test(mobile) || !/^\d{4}$/.test(pin)) {
+      return { success: false, message: "Invalid input" };
+    }
+
+    const userRef = db.collection("users").doc(mobile);
+    const snap = await userRef.get();
+
+    if (!snap.exists) {
+      return { success: false, message: "User not registered" };
+    }
+
+    const user = snap.data();
+
+    if (user.pinAttempts >= MAX_PIN_ATTEMPTS) {
+      return {
+        success: false,
+        message: "Account locked. Try again later.",
+      };
+    }
+
+    const isValid = await bcrypt.compare(pin, user.pinHash);
+
+    if (!isValid) {
+      await userRef.update({
+        pinAttempts: admin.firestore.FieldValue.increment(1),
+      });
+      return { success: false, message: "Wrong PIN" };
+    }
+
+    // ✅ Reset attempts after success
+    await userRef.update({ pinAttempts: 0 });
+
+    return {
+      success: true,
+      role: user.role || "customer",
+    };
+  } catch (err) {
+    console.error("verifyPinLogin error:", err);
+    return { success: false, message: "Server error" };
+  }
+});
+
+/* =========================================================
+   📍 GEOFENCE + PUSH NOTIFICATIONS
+========================================================= */
 exports.notifyOnGeofenceEnter = functions.firestore
   .document("users/{userId}")
   .onUpdate(async (change, context) => {
@@ -40,10 +95,7 @@ exports.notifyOnGeofenceEnter = functions.firestore
     if (after.pushEnabled === false) return null;
 
     // Ignore insignificant movement
-    if (
-      before?.lat === after.lat &&
-      before?.lng === after.lng
-    ) {
+    if (before?.lat === after.lat && before?.lng === after.lng) {
       return null;
     }
 
@@ -80,7 +132,6 @@ exports.notifyOnGeofenceEnter = functions.firestore
 
     /* =========================
        GROUP OFFERS BY MERCHANT
-       + CATEGORY FILTER
     ========================= */
     const offersByMerchant = {};
 
@@ -114,7 +165,7 @@ exports.notifyOnGeofenceEnter = functions.firestore
       if (!merchant.lat || !merchant.lng) continue;
       if (!offersByMerchant[merchantId]) continue;
 
-      // Avoid repeat notification for same merchant
+      // Avoid repeat notification
       if (after.lastNotifiedMerchantId === merchantId) continue;
 
       const dist = distanceKm(
@@ -136,7 +187,7 @@ exports.notifyOnGeofenceEnter = functions.firestore
         };
 
         notifiedMerchantId = merchantId;
-        break; // 🔒 send only ONE notification
+        break; // 🔒 only ONE push
       }
     }
 
