@@ -1,32 +1,128 @@
-import React, { useState } from 'react';
-import { Box, TextField, Button, Typography } from '@mui/material';
-import { useAuth } from '../auth/AuthContext';
-import { Link } from 'react-router-dom';
+import React, { useState } from "react";
+import {
+  Box,
+  TextField,
+  Button,
+  Typography,
+  Paper
+} from "@mui/material";
+import { db } from "../firebase";
+import { doc, getDoc, updateDoc, increment } from "firebase/firestore";
+import bcrypt from "bcryptjs";
+import { useNavigate } from "react-router-dom";
 
 export default function LoginPage() {
-  const { loginWithOtp } = useAuth();
-  const [mobile, setMobile] = useState('');
-  const [otp, setOtp] = useState('');
-  const [err, setErr] = useState('');
+  const [mobile, setMobile] = useState("");
+  const [pin, setPin] = useState("");
+  const navigate = useNavigate();
 
-  const submit = async (e) => {
-    e.preventDefault();
-    setErr('');
-    const res = await loginWithOtp(mobile, otp);
-    if (!res.success) setErr(res.message);
+  const handleLogin = async () => {
+    if (!/^\d{10}$/.test(mobile)) {
+      alert("Enter valid 10-digit mobile number");
+      return;
+    }
+
+    if (!/^\d{4}$/.test(pin)) {
+      alert("Enter 4-digit PIN");
+      return;
+    }
+
+    const userRef = doc(db, "users", mobile);
+    const snap = await getDoc(userRef);
+
+    if (!snap.exists()) {
+      alert("User not registered");
+      return;
+    }
+
+    const user = snap.data();
+
+    if (user.pinAttempts >= 5) {
+      alert("Account locked. Try later.");
+      return;
+    }
+
+    const ok = await bcrypt.compare(pin, user.pinHash);
+
+    if (!ok) {
+      await updateDoc(userRef, {
+        pinAttempts: increment(1),
+      });
+      alert("Wrong PIN");
+      return;
+    }
+
+    // Reset attempts
+    await updateDoc(userRef, { pinAttempts: 0 });
+
+    // 🔀 ROLE ROUTING
+    if (user.role === "admin") {
+      navigate("/admin");
+    } else if (user.role === "merchant") {
+      navigate("/merchant");
+    } else {
+      navigate("/customer");
+    }
   };
 
   return (
-    <Box sx={{ maxWidth: 380, mx: 'auto', mt: 8, p:3, bgcolor:'#fff', borderRadius:2 }}>
-      <Typography variant="h6" sx={{ mb:2 }}>Login with OTP</Typography>
-      <form onSubmit={submit}>
-        <TextField label="Mobile" value={mobile} onChange={e => setMobile(e.target.value.replace(/\D/g,'' ).slice(0,10))} fullWidth sx={{ mb:2 }} />
-        <TextField label="OTP" value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g,'').slice(0,4))} fullWidth sx={{ mb:2 }} />
-        {err && <Typography color="error" sx={{ mb:2 }}>{err}</Typography>}
-        <Button type="submit" variant="contained" color="primary" fullWidth>Login</Button>
-      </form>
-      <Typography sx={{ mt:2, fontSize: 13 }}>New merchant? <Link to="/merchant-register">Request registration here</Link></Typography>
-      <Typography sx={{ mt:1, fontSize: 12, color:"#666" }}>Test OTP: 2345</Typography>
+    <Box
+      sx={{
+        minHeight: "80vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+      }}
+    >
+      <Paper sx={{ p: 4, width: 350 }}>
+        <Typography variant="h6" mb={2}>
+          User Login
+        </Typography>
+
+        <TextField
+          label="Mobile No"
+          fullWidth
+          margin="normal"
+          value={mobile}
+          onChange={(e) => setMobile(e.target.value)}
+        />
+
+        <TextField
+          label="4-digit PIN"
+          type="password"
+          fullWidth
+          margin="normal"
+          value={pin}
+          onChange={(e) => setPin(e.target.value)}
+        />
+
+        <Button
+          variant="contained"
+          fullWidth
+          sx={{ mt: 2 }}
+          onClick={handleLogin}
+        >
+          Log In
+        </Button>
+
+        <Button
+          variant="text"
+          fullWidth
+          sx={{ mt: 1 }}
+          onClick={() => navigate("/merchant-register")}
+        >
+          New merchant? Request registration here
+        </Button>
+
+        <Typography
+          variant="caption"
+          display="block"
+          mt={1}
+          color="text.secondary"
+        >
+          For security, OTP may be required on new devices.
+        </Typography>
+      </Paper>
     </Box>
-);
+  );
 }
