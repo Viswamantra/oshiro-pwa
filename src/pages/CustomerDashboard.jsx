@@ -15,13 +15,10 @@ import {
 import {
   collection,
   onSnapshot,
-  doc,
-  setDoc,
   query,
   where,
 } from "firebase/firestore";
 import { db } from "../firebase";
-import { useAuth } from "../auth/AuthContext";
 
 /* =========================
    DISTANCE (HAVERSINE)
@@ -39,48 +36,10 @@ function distanceKm(lat1, lon1, lat2, lon2) {
 }
 
 const GPS_BUFFER_KM = 0.5;
-const LOCATION_WRITE_KM = 0.05;
 const RADIUS_STEPS = [1, 2, 3, 5];
 
-/* =========================
-   WHATSAPP HELPER
-========================= */
-function openWhatsApp(merchant, offer) {
-  if (!merchant?.contactPhone) {
-    alert("WhatsApp number not available");
-    return;
-  }
-
-  const phone = merchant.contactPhone.replace(/\D/g, "");
-  const message = encodeURIComponent(
-    `Hi, I saw your offer "${offer.title}" on OshirO. Please share more details.`
-  );
-
-  window.open(`https://wa.me/${phone}?text=${message}`, "_blank");
-}
-
-/* =========================
-   CATEGORY HELPERS
-========================= */
-const getCategoryIcon = (cat) => {
-  if (/home kitchen/i.test(cat)) return "🍱";
-  if (/food/i.test(cat)) return "🍔";
-  if (/fashion/i.test(cat)) return "👗";
-  if (/beauty/i.test(cat)) return "💅";
-  if (/medical/i.test(cat)) return "💊";
-  if (/hospital/i.test(cat)) return "🏥";
-  return "🏷️";
-};
-
-const getCategoryLabel = (cat) => {
-  if (cat === "Home Kitchen") {
-    return "Home Kitchen – Ghar ka khana • Limited orders";
-  }
-  return cat;
-};
-
 export default function CustomerDashboard() {
-  const { user } = useAuth();
+  const stored = JSON.parse(localStorage.getItem("oshiro_user") || "{}");
 
   const [offers, setOffers] = useState([]);
   const [merchantsMap, setMerchantsMap] = useState({});
@@ -96,48 +55,28 @@ export default function CustomerDashboard() {
   const lastWrittenLoc = useRef(null);
 
   /* =========================
-     LIVE GPS + FIRESTORE WRITE
+     LIVE GPS
   ========================= */
   useEffect(() => {
     if (!navigator.geolocation) return;
 
     const watchId = navigator.geolocation.watchPosition(
-      async (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-
-        setCustomerLoc({ lat, lng });
+      (pos) => {
+        setCustomerLoc({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        });
         setGpsAccuracy(pos.coords.accuracy);
-
-        if (user?.uid) {
-          if (lastWrittenLoc.current) {
-            const moved = distanceKm(
-              lastWrittenLoc.current.lat,
-              lastWrittenLoc.current.lng,
-              lat,
-              lng
-            );
-            if (moved < LOCATION_WRITE_KM) return;
-          }
-
-          lastWrittenLoc.current = { lat, lng };
-
-          await setDoc(
-            doc(db, "users", user.uid),
-            { lat, lng, updatedAt: Date.now() },
-            { merge: true }
-          );
-        }
       },
       () => {},
       { enableHighAccuracy: true }
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [user]);
+  }, []);
 
   /* =========================
-     LOAD ACTIVE CATEGORIES
+     LOAD CATEGORIES
   ========================= */
   useEffect(() => {
     const q = query(
@@ -156,20 +95,20 @@ export default function CustomerDashboard() {
   }, []);
 
   /* =========================
-     FETCH OFFERS
+     LOAD OFFERS
   ========================= */
   useEffect(() => {
     return onSnapshot(collection(db, "offers"), (snap) => {
       setOffers(
         snap.docs
           .map((d) => ({ id: d.id, ...d.data() }))
-          .filter((o) => o.active !== false && o.category)
+          .filter((o) => o.active !== false)
       );
     });
   }, []);
 
   /* =========================
-     FETCH MERCHANTS
+     LOAD MERCHANTS
   ========================= */
   useEffect(() => {
     return onSnapshot(collection(db, "merchants"), (snap) => {
@@ -180,7 +119,7 @@ export default function CustomerDashboard() {
   }, []);
 
   /* =========================
-     FILTER + DISTANCE
+     FILTER OFFERS
   ========================= */
   const nearbyOffers = useMemo(() => {
     if (!customerLoc) return [];
@@ -203,158 +142,56 @@ export default function CustomerDashboard() {
         return {
           ...offer,
           merchant,
-          distanceValue: d,
           distanceLabel:
             d < 1 ? `${Math.round(d * 1000)} m` : `${d.toFixed(2)} km`,
         };
       })
-      .filter(Boolean)
-      .sort((a, b) => a.distanceValue - b.distanceValue);
+      .filter(Boolean);
   }, [offers, merchantsMap, customerLoc, radiusKm, category]);
-
-  /* =========================
-     AUTO-EXPAND RADIUS
-  ========================= */
-  useEffect(() => {
-    if (!customerLoc || nearbyOffers.length) return;
-    const idx = RADIUS_STEPS.indexOf(radiusKm);
-    if (RADIUS_STEPS[idx + 1]) setRadiusKm(RADIUS_STEPS[idx + 1]);
-  }, [nearbyOffers, customerLoc]);
 
   return (
     <Box sx={{ p: 2 }}>
       <Typography variant="h6">Nearby Offers</Typography>
 
       {gpsAccuracy && (
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption">
           GPS accuracy ~{Math.round(gpsAccuracy)} m
         </Typography>
       )}
 
-      {/* FILTERS */}
-      <Box sx={{ display: "flex", gap: 2, my: 2, flexWrap: "wrap" }}>
-        <TextField
-          select
-          label="Category"
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          sx={{ width: 260 }}
-        >
-          <MenuItem value="All">All</MenuItem>
-          {categories.map((cat) => (
-            <MenuItem key={cat.id} value={cat.name}>
-              {getCategoryIcon(cat.name)} {getCategoryLabel(cat.name)}
-            </MenuItem>
-          ))}
-        </TextField>
-
-        <TextField
-          select
-          label="Show offers within"
-          value={radiusKm}
-          onChange={(e) => setRadiusKm(Number(e.target.value))}
-          sx={{ width: 220 }}
-        >
-          <MenuItem value={1}>1 km</MenuItem>
-          <MenuItem value={2}>2 km</MenuItem>
-          <MenuItem value={3}>3 km</MenuItem>
-          <MenuItem value={5}>5 km</MenuItem>
-        </TextField>
-      </Box>
-
-      {/* OFFER LIST */}
       {nearbyOffers.map((o) => (
         <Card
           key={o.id}
-          sx={{ mb: 1, cursor: "pointer" }}
+          sx={{ mb: 1 }}
           onClick={() => setSelectedOffer(o)}
         >
           <CardContent>
-            <Typography variant="subtitle1">
+            <Typography>
               <strong>{o.merchant.shopName}</strong> — {o.title}
             </Typography>
             <Typography variant="body2">
-              {getCategoryIcon(o.category)} {getCategoryLabel(o.category)} •{" "}
-              {o.discount}% • {o.distanceLabel}
+              {o.category} • {o.distanceLabel}
             </Typography>
           </CardContent>
         </Card>
       ))}
 
-      {/* OFFER DETAILS */}
       <Dialog
         open={Boolean(selectedOffer)}
         onClose={() => setSelectedOffer(null)}
-        fullWidth
       >
         {selectedOffer && (
           <>
             <DialogTitle>{selectedOffer.title}</DialogTitle>
-            <DialogContent dividers>
+            <DialogContent>
               <Typography>
-                <strong>Merchant:</strong>{" "}
                 {selectedOffer.merchant.shopName}
               </Typography>
-              <Typography sx={{ mt: 1 }}>
-                <strong>Category:</strong>{" "}
-                {getCategoryLabel(selectedOffer.category)}
-              </Typography>
-              <Typography sx={{ mt: 1 }}>
-                <strong>Discount:</strong> {selectedOffer.discount}%
-              </Typography>
-              <Typography sx={{ mt: 1 }}>
-                <strong>Distance:</strong>{" "}
-                {selectedOffer.distanceLabel}
-              </Typography>
-              <Typography sx={{ mt: 1 }}>
-                <strong>Address:</strong>{" "}
-                {selectedOffer.merchant.addressCombined || "N/A"}
-              </Typography>
-              {selectedOffer.merchant.contactPhone && (
-                <Typography sx={{ mt: 1 }}>
-                  <strong>Contact:</strong>{" "}
-                  {selectedOffer.merchant.contactPhone}
-                </Typography>
-              )}
             </DialogContent>
-
             <DialogActions>
-              {selectedOffer.merchant.contactPhone && (
-                <Button
-                  color="success"
-                  onClick={() =>
-                    window.open(`tel:${selectedOffer.merchant.contactPhone}`)
-                  }
-                >
-                  📞 Call
-                </Button>
-              )}
-
-              {selectedOffer.merchant.contactPhone && (
-                <Button
-                  color="success"
-                  variant="outlined"
-                  onClick={() =>
-                    openWhatsApp(selectedOffer.merchant, selectedOffer)
-                  }
-                >
-                  💬 WhatsApp
-                </Button>
-              )}
-
-              <Button
-                onClick={() => {
-                  const { lat, lng } = selectedOffer.merchant;
-                  window.open(
-                    `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
-                    "_blank"
-                  );
-                }}
-              >
-                Navigate
+              <Button onClick={() => setSelectedOffer(null)}>
+                Close
               </Button>
-
-              <Button onClick={() => setSelectedOffer(null)}>Close</Button>
             </DialogActions>
           </>
         )}
