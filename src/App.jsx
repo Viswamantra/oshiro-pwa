@@ -1,10 +1,14 @@
 import React from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
+
+import LoginPage from "./pages/LoginPage";
 
 export default function App() {
   return (
-    <div style={{ padding: 40 }}>
-      <h1>OshirO App is LIVE</h1>
-      <p>If you see this, the app is fixed.</p>
-    </div>
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="*" element={<Navigate to="/login" replace />} />
+    </Routes>
   );
 }
