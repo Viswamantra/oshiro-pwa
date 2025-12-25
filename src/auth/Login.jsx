@@ -10,6 +10,7 @@ import { db } from "../firebase";
 const TEST_CUSTOMER_OTP = "2345";
 const ADMIN_MOBILE = "7386361725";
 const ADMIN_PASSWORD = "2#345";
+const STORAGE_KEY = "oshiro_user";
 
 export default function Login() {
   const [phone, setPhone] = useState("");
@@ -32,6 +33,12 @@ export default function Login() {
           alert("Invalid admin password");
           return;
         }
+
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({ mobile: phone, role: "admin" })
+        );
+
         navigate("/admin-dashboard");
         return;
       }
@@ -60,6 +67,11 @@ export default function Login() {
           return;
         }
 
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({ mobile: phone, role: "merchant" })
+        );
+
         navigate("/merchant-dashboard");
         return;
       }
@@ -82,6 +94,11 @@ export default function Login() {
           createdAt: Date.now(),
         });
       }
+
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ mobile: phone, role: "customer" })
+      );
 
       navigate("/customer-dashboard");
     } catch (err) {
