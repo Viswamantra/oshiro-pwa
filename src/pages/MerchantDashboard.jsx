@@ -18,7 +18,6 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
-import { useAuth } from "../auth/AuthContext";
 
 const CATEGORIES = [
   "Food",
@@ -30,7 +29,8 @@ const CATEGORIES = [
 ];
 
 export default function MerchantDashboard() {
-  const { user } = useAuth();
+  const stored = JSON.parse(localStorage.getItem("oshiro_user") || "{}");
+  const mobile = stored.mobile;
 
   const [merchant, setMerchant] = useState(null);
   const [msg, setMsg] = useState("");
@@ -39,11 +39,11 @@ export default function MerchantDashboard() {
      LOAD MERCHANT BY MOBILE
   ========================= */
   useEffect(() => {
-    if (!user?.mobile) return;
+    if (!mobile) return;
 
     const q = query(
       collection(db, "merchants"),
-      where("mobile", "==", user.mobile)
+      where("mobile", "==", mobile)
     );
 
     return onSnapshot(q, (snap) => {
@@ -51,7 +51,7 @@ export default function MerchantDashboard() {
         setMerchant({ id: snap.docs[0].id, ...snap.docs[0].data() });
       }
     });
-  }, [user]);
+  }, [mobile]);
 
   /* =========================
      UPDATE HANDLER
@@ -65,7 +65,9 @@ export default function MerchantDashboard() {
     setTimeout(() => setMsg(""), 2000);
   };
 
-  if (!merchant) return null;
+  if (!merchant) {
+    return <Typography sx={{ p: 2 }}>Loading merchant...</Typography>;
+  }
 
   const isHomeKitchen = merchant.category === "Home Kitchen";
 
@@ -98,11 +100,7 @@ export default function MerchantDashboard() {
           </TextField>
 
           {isHomeKitchen && (
-            <Chip
-              label="🍱 Limited Orders"
-              color="warning"
-              sx={{ mt: 1 }}
-            />
+            <Chip label="🍱 Limited Orders" color="warning" sx={{ mt: 1 }} />
           )}
         </CardContent>
       </Card>
@@ -115,7 +113,6 @@ export default function MerchantDashboard() {
               Home Kitchen Settings
             </Typography>
 
-            {/* ORDER CUT-OFF */}
             <TextField
               label="Order cut-off time"
               type="time"
@@ -128,7 +125,6 @@ export default function MerchantDashboard() {
               InputLabelProps={{ shrink: true }}
             />
 
-            {/* MAX ORDERS */}
             <TextField
               label="Max orders per day"
               type="number"
@@ -136,14 +132,10 @@ export default function MerchantDashboard() {
               sx={{ mt: 2 }}
               value={merchant.maxOrdersPerDay || 20}
               onChange={(e) =>
-                updateField(
-                  "maxOrdersPerDay",
-                  Number(e.target.value)
-                )
+                updateField("maxOrdersPerDay", Number(e.target.value))
               }
             />
 
-            {/* AVAILABLE DAYS */}
             <TextField
               label="Available days"
               fullWidth
@@ -154,27 +146,8 @@ export default function MerchantDashboard() {
                 updateField("availableDays", e.target.value)
               }
             />
-
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{ mt: 1, display: "block" }}
-            >
-              Customers can only pre-order before the cut-off time.
-            </Typography>
           </CardContent>
         </Card>
-      )}
-
-      {/* INFO */}
-      {isHomeKitchen && (
-        <Typography variant="body2" color="text.secondary">
-          ✔ Pre-order only  
-          <br />
-          ✔ Limited daily quantity  
-          <br />
-          ✔ Cook when convenient  
-        </Typography>
       )}
 
       <Button sx={{ mt: 3 }} variant="contained">
