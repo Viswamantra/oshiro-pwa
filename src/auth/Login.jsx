@@ -64,15 +64,27 @@ export default function Login() {
         }}
       />
 
-      <Button
-        type="button"
-        fullWidth
-        variant="contained"
-        sx={{ mt: 2 }}
-        onClick={handleContinue}
-      >
-        CONTINUE
-      </Button>
+     <Box
+  role="button"
+  tabIndex={0}
+  onClick={(e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    handleContinue(e);
+  }}
+  sx={{
+    mt: 2,
+    width: "100%",
+    bgcolor: "primary.main",
+    color: "#fff",
+    textAlign: "center",
+    py: 1.5,
+    borderRadius: 1,
+    cursor: "pointer",
+    userSelect: "none",
+  }}
+>
+  CONTINUE
     </Box>
   );
 }
