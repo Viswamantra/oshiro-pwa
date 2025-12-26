@@ -16,6 +16,7 @@ import {
   onSnapshot,
   doc,
   updateDoc,
+  addDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
@@ -32,14 +33,18 @@ const CATEGORIES = [
 export default function MerchantDashboard() {
   const navigate = useNavigate();
 
-  /* =========================
-     ROLE GUARD
-  ========================= */
+  /* ===== ROLE GUARD ===== */
   const role = localStorage.getItem("oshiro_role");
   if (role !== "merchant") {
     navigate("/login", { replace: true });
     return null;
   }
+
+  /* ===== LOGOUT ===== */
+  const logout = () => {
+    localStorage.clear();
+    window.location.href = "/login";
+  };
 
   const stored = JSON.parse(localStorage.getItem("oshiro_user") || "{}");
   const mobile = stored.mobile;
@@ -47,9 +52,6 @@ export default function MerchantDashboard() {
   const [merchant, setMerchant] = useState(null);
   const [msg, setMsg] = useState("");
 
-  /* =========================
-     LOAD MERCHANT BY MOBILE
-  ========================= */
   useEffect(() => {
     if (!mobile) return;
 
@@ -58,18 +60,23 @@ export default function MerchantDashboard() {
       where("mobile", "==", mobile)
     );
 
-    return onSnapshot(q, (snap) => {
+    return onSnapshot(q, async (snap) => {
       if (!snap.empty) {
         setMerchant({ id: snap.docs[0].id, ...snap.docs[0].data() });
+      } else {
+        const ref = await addDoc(collection(db, "merchants"), {
+          mobile,
+          category: "",
+          createdAt: new Date(),
+        });
+        setMerchant({ id: ref.id, mobile, category: "" });
       }
     });
   }, [mobile]);
 
-  /* =========================
-     UPDATE HANDLER
-  ========================= */
   const updateField = async (field, value) => {
-    if (!merchant) return;
+    if (!merchant?.id) return;
+
     await updateDoc(doc(db, "merchants", merchant.id), {
       [field]: value,
     });
@@ -85,27 +92,28 @@ export default function MerchantDashboard() {
 
   return (
     <Box sx={{ p: 2 }}>
-      <Typography variant="h6">Merchant Dashboard</Typography>
+      <Button variant="outlined" color="error" onClick={logout}>
+        Logout
+      </Button>
 
-      {msg && (
-        <Typography sx={{ color: "green", my: 1 }}>{msg}</Typography>
-      )}
+      <Typography variant="h6" sx={{ mt: 2 }}>
+        Merchant Dashboard
+      </Typography>
+
+      {msg && <Typography sx={{ color: "green" }}>{msg}</Typography>}
 
       <Card sx={{ my: 2 }}>
         <CardContent>
-          <Typography variant="subtitle1">Business Category</Typography>
-
+          <Typography>Business Category</Typography>
           <TextField
             select
             fullWidth
-            value={merchant.category || ""}
+            value={merchant.category}
             onChange={(e) => updateField("category", e.target.value)}
           >
             {CATEGORIES.map((c) => (
               <MenuItem key={c} value={c}>
-                {c === "Home Kitchen"
-                  ? "Home Kitchen – Ghar ka khana • Limited orders"
-                  : c}
+                {c}
               </MenuItem>
             ))}
           </TextField>
@@ -115,54 +123,6 @@ export default function MerchantDashboard() {
           )}
         </CardContent>
       </Card>
-
-      {isHomeKitchen && (
-        <Card sx={{ my: 2 }}>
-          <CardContent>
-            <Typography variant="subtitle1">
-              Home Kitchen Settings
-            </Typography>
-
-            <TextField
-              label="Order cut-off time"
-              type="time"
-              fullWidth
-              sx={{ mt: 2 }}
-              value={merchant.orderCutoff || "11:00"}
-              onChange={(e) =>
-                updateField("orderCutoff", e.target.value)
-              }
-              InputLabelProps={{ shrink: true }}
-            />
-
-            <TextField
-              label="Max orders per day"
-              type="number"
-              fullWidth
-              sx={{ mt: 2 }}
-              value={merchant.maxOrdersPerDay || 20}
-              onChange={(e) =>
-                updateField("maxOrdersPerDay", Number(e.target.value))
-              }
-            />
-
-            <TextField
-              label="Available days"
-              fullWidth
-              sx={{ mt: 2 }}
-              helperText="Example: Mon–Sat or Mon,Wed,Fri"
-              value={merchant.availableDays || "Mon–Sun"}
-              onChange={(e) =>
-                updateField("availableDays", e.target.value)
-              }
-            />
-          </CardContent>
-        </Card>
-      )}
-
-      <Button sx={{ mt: 3 }} variant="contained">
-        Dashboard Ready
-      </Button>
     </Box>
   );
 }
