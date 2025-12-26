@@ -4,7 +4,7 @@ import {
   Typography,
   TextField,
   Button,
-  InputAdornment
+  InputAdornment,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 
@@ -26,6 +26,17 @@ export default function Login() {
       setError("Enter exactly 10 digits");
       return;
     }
+
+    // ✅ SAVE USER INFO (THIS WAS MISSING)
+    localStorage.setItem(
+      "oshiro_user",
+      JSON.stringify({ mobile: "+91" + mobile })
+    );
+
+    // optional: clear old role on fresh login
+    localStorage.removeItem("oshiro_role");
+
+    // ✅ NAVIGATE TO ROLE SELECTION
     navigate("/select-role");
   };
 
