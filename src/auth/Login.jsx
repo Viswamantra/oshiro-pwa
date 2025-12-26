@@ -26,7 +26,7 @@ export default function Login() {
       setError("Enter exactly 10 digits");
       return;
     }
-    navigate("/dashboard");
+    navigate("/select-role");
   };
 
   return (
