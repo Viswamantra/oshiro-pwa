@@ -52,6 +52,7 @@ export default function MerchantDashboard() {
   const [merchant, setMerchant] = useState(null);
   const [msg, setMsg] = useState("");
 
+  /* ===== LOAD / AUTO-CREATE MERCHANT ===== */
   useEffect(() => {
     if (!mobile) return;
 
@@ -67,13 +68,28 @@ export default function MerchantDashboard() {
         const ref = await addDoc(collection(db, "merchants"), {
           mobile,
           category: "",
+          shopName: "",
+          address: "",
+          lat: null,
+          lng: null,
+          geofenceRadius: 300,
           createdAt: new Date(),
         });
-        setMerchant({ id: ref.id, mobile, category: "" });
+        setMerchant({
+          id: ref.id,
+          mobile,
+          category: "",
+          shopName: "",
+          address: "",
+          lat: null,
+          lng: null,
+          geofenceRadius: 300,
+        });
       }
     });
   }, [mobile]);
 
+  /* ===== UPDATE FIELD ===== */
   const updateField = async (field, value) => {
     if (!merchant?.id) return;
 
@@ -102,9 +118,34 @@ export default function MerchantDashboard() {
 
       {msg && <Typography sx={{ color: "green" }}>{msg}</Typography>}
 
+      {/* ===== BUSINESS DETAILS ===== */}
       <Card sx={{ my: 2 }}>
         <CardContent>
-          <Typography>Business Category</Typography>
+          <Typography variant="subtitle1">Business Details</Typography>
+
+          <TextField
+            label="Shop Name"
+            fullWidth
+            sx={{ mt: 2 }}
+            value={merchant.shopName || ""}
+            onChange={(e) => updateField("shopName", e.target.value)}
+          />
+
+          <TextField
+            label="Business Address"
+            fullWidth
+            sx={{ mt: 2 }}
+            value={merchant.address || ""}
+            onChange={(e) => updateField("address", e.target.value)}
+          />
+        </CardContent>
+      </Card>
+
+      {/* ===== CATEGORY ===== */}
+      <Card sx={{ my: 2 }}>
+        <CardContent>
+          <Typography variant="subtitle1">Business Category</Typography>
+
           <TextField
             select
             fullWidth
@@ -113,7 +154,9 @@ export default function MerchantDashboard() {
           >
             {CATEGORIES.map((c) => (
               <MenuItem key={c} value={c}>
-                {c}
+                {c === "Home Kitchen"
+                  ? "Home Kitchen – Ghar ka khana • Limited orders"
+                  : c}
               </MenuItem>
             ))}
           </TextField>
@@ -121,6 +164,60 @@ export default function MerchantDashboard() {
           {isHomeKitchen && (
             <Chip label="🍱 Limited Orders" color="warning" sx={{ mt: 1 }} />
           )}
+        </CardContent>
+      </Card>
+
+      {/* ===== GEOFENCE ===== */}
+      <Card sx={{ my: 2 }}>
+        <CardContent>
+          <Typography variant="subtitle1">Geofence Settings</Typography>
+
+          <TextField
+            label="Latitude"
+            fullWidth
+            sx={{ mt: 2 }}
+            value={merchant.lat ?? ""}
+            onChange={(e) =>
+              updateField("lat", Number(e.target.value))
+            }
+          />
+
+          <TextField
+            label="Longitude"
+            fullWidth
+            sx={{ mt: 2 }}
+            value={merchant.lng ?? ""}
+            onChange={(e) =>
+              updateField("lng", Number(e.target.value))
+            }
+          />
+
+          <TextField
+            label="Geofence Radius (meters)"
+            type="number"
+            fullWidth
+            sx={{ mt: 2 }}
+            value={merchant.geofenceRadius || 300}
+            onChange={(e) =>
+              updateField(
+                "geofenceRadius",
+                Number(e.target.value)
+              )
+            }
+          />
+
+          <Button
+            sx={{ mt: 2 }}
+            variant="outlined"
+            onClick={() => {
+              navigator.geolocation.getCurrentPosition((pos) => {
+                updateField("lat", pos.coords.latitude);
+                updateField("lng", pos.coords.longitude);
+              });
+            }}
+          >
+            📍 Use Current Location
+          </Button>
         </CardContent>
       </Card>
     </Box>
