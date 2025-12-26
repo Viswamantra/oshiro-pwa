@@ -62,11 +62,12 @@ export default function Login() {
       />
 
       <Button
-        fullWidth
-        variant="contained"
-        sx={{ mt: 2 }}
-        onClick={handleContinue}
-      >
+  type="button"
+  fullWidth
+  variant="contained"
+  sx={{ mt: 2 }}
+  onClick={handleContinue}
+>
         CONTINUE
       </Button>
     </Box>
