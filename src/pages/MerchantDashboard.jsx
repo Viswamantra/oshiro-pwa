@@ -18,6 +18,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
+import { useNavigate } from "react-router-dom";
 
 const CATEGORIES = [
   "Food",
@@ -29,6 +30,17 @@ const CATEGORIES = [
 ];
 
 export default function MerchantDashboard() {
+  const navigate = useNavigate();
+
+  /* =========================
+     ROLE GUARD
+  ========================= */
+  const role = localStorage.getItem("oshiro_role");
+  if (role !== "merchant") {
+    navigate("/login", { replace: true });
+    return null;
+  }
+
   const stored = JSON.parse(localStorage.getItem("oshiro_user") || "{}");
   const mobile = stored.mobile;
 
@@ -79,7 +91,6 @@ export default function MerchantDashboard() {
         <Typography sx={{ color: "green", my: 1 }}>{msg}</Typography>
       )}
 
-      {/* CATEGORY */}
       <Card sx={{ my: 2 }}>
         <CardContent>
           <Typography variant="subtitle1">Business Category</Typography>
@@ -105,7 +116,6 @@ export default function MerchantDashboard() {
         </CardContent>
       </Card>
 
-      {/* HOME KITCHEN RULES */}
       {isHomeKitchen && (
         <Card sx={{ my: 2 }}>
           <CardContent>
