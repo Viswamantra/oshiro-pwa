@@ -3,7 +3,6 @@ import {
   Box,
   Typography,
   TextField,
-  Button,
   InputAdornment,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
@@ -22,24 +21,24 @@ export default function Login() {
   };
 
   const handleContinue = (e) => {
-    // 🔒 ABSOLUTE SAFETY (prevents any form-submit behaviour)
     e.preventDefault();
+    e.stopPropagation();
 
     if (mobile.length !== 10) {
       setError("Enter exactly 10 digits");
       return;
     }
 
-    // ✅ SAVE USER INFO
+    // save user
     localStorage.setItem(
       "oshiro_user",
       JSON.stringify({ mobile: "+91" + mobile })
     );
 
-    // reset role on fresh login
+    // reset role
     localStorage.removeItem("oshiro_role");
 
-    // ✅ NAVIGATE
+    // go to role page
     navigate("/select-role", { replace: true });
   };
 
@@ -64,27 +63,25 @@ export default function Login() {
         }}
       />
 
-     <Box
-  role="button"
-  tabIndex={0}
-  onClick={(e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    handleContinue(e);
-  }}
-  sx={{
-    mt: 2,
-    width: "100%",
-    bgcolor: "primary.main",
-    color: "#fff",
-    textAlign: "center",
-    py: 1.5,
-    borderRadius: 1,
-    cursor: "pointer",
-    userSelect: "none",
-  }}
->
-  CONTINUE
+      {/* NOT a Button, so it can never submit a form */}
+      <Box
+        role="button"
+        tabIndex={0}
+        onClick={handleContinue}
+        sx={{
+          mt: 2,
+          width: "100%",
+          bgcolor: "primary.main",
+          color: "#fff",
+          textAlign: "center",
+          py: 1.5,
+          borderRadius: 1,
+          cursor: "pointer",
+          userSelect: "none",
+        }}
+      >
+        CONTINUE
+      </Box>
     </Box>
   );
 }
