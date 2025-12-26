@@ -1,5 +1,11 @@
 import React, { useState } from "react";
-import { Box, Typography, TextField, Button, InputAdornment } from "@mui/material";
+import {
+  Box,
+  Typography,
+  TextField,
+  Button,
+  InputAdornment
+} from "@mui/material";
 import { useNavigate } from "react-router-dom";
 
 export default function Login() {
@@ -8,10 +14,9 @@ export default function Login() {
   const [error, setError] = useState("");
 
   const handleChange = (e) => {
-    const value = e.target.value.replace(/\D/g, ""); // only numbers
-
-    if (value.length <= 10) {
-      setMobile(value);
+    const digits = e.target.value.replace(/\D/g, "");
+    if (digits.length <= 10) {
+      setMobile(digits);
       setError("");
     }
   };
@@ -21,8 +26,6 @@ export default function Login() {
       setError("Enter exactly 10 digits");
       return;
     }
-
-    // TEMP success navigation
     navigate("/dashboard");
   };
 
