@@ -9,12 +9,16 @@ import {
   DialogContent,
   DialogActions,
   Button,
+  TextField,
+  MenuItem,
+  IconButton,
 } from "@mui/material";
+import WhatsAppIcon from "@mui/icons-material/WhatsApp";
+import CallIcon from "@mui/icons-material/Call";
+import DirectionsIcon from "@mui/icons-material/Directions";
 import {
   collection,
   onSnapshot,
-  query,
-  where,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
@@ -35,35 +39,40 @@ function distanceKm(lat1, lon1, lat2, lon2) {
 }
 
 const GPS_BUFFER_KM = 0.5;
+const RADIUS_OPTIONS = [1, 2, 3, 5];
 
 export default function CustomerDashboard() {
   const navigate = useNavigate();
 
-  /* =========================
-     ROLE GUARD
-  ========================= */
+  /* ===== ROLE GUARD ===== */
   const role = localStorage.getItem("oshiro_role");
   if (role !== "customer") {
     navigate("/login", { replace: true });
     return null;
   }
 
+  /* ===== LOGOUT ===== */
+  const logout = () => {
+    localStorage.clear();
+    window.location.href = "/login";
+  };
+
   const [offers, setOffers] = useState([]);
   const [merchantsMap, setMerchantsMap] = useState({});
+  const [categories, setCategories] = useState([]);
+
   const [customerLoc, setCustomerLoc] = useState(null);
   const [gpsAccuracy, setGpsAccuracy] = useState(null);
-  const [radiusKm] = useState(1);
-  const [category] = useState("All");
-  const [selectedOffer, setSelectedOffer] = useState(null);
-  const lastWrittenLoc = useRef(null);
 
-  /* =========================
-     LIVE GPS
-  ========================= */
+  const [radiusKm, setRadiusKm] = useState(1);
+  const [category, setCategory] = useState("All");
+  const [selectedOffer, setSelectedOffer] = useState(null);
+
+  /* ===== LIVE GPS ===== */
   useEffect(() => {
     if (!navigator.geolocation) return;
 
-    const watchId = navigator.geolocation.watchPosition(
+    const id = navigator.geolocation.watchPosition(
       (pos) => {
         setCustomerLoc({
           lat: pos.coords.latitude,
@@ -75,12 +84,19 @@ export default function CustomerDashboard() {
       { enableHighAccuracy: true }
     );
 
-    return () => navigator.geolocation.clearWatch(watchId);
+    return () => navigator.geolocation.clearWatch(id);
   }, []);
 
-  /* =========================
-     LOAD OFFERS
-  ========================= */
+  /* ===== LOAD CATEGORIES ===== */
+  useEffect(() => {
+    return onSnapshot(collection(db, "categories"), (snap) => {
+      setCategories(
+        snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      );
+    });
+  }, []);
+
+  /* ===== LOAD OFFERS ===== */
   useEffect(() => {
     return onSnapshot(collection(db, "offers"), (snap) => {
       setOffers(
@@ -91,9 +107,7 @@ export default function CustomerDashboard() {
     });
   }, []);
 
-  /* =========================
-     LOAD MERCHANTS
-  ========================= */
+  /* ===== LOAD MERCHANTS ===== */
   useEffect(() => {
     return onSnapshot(collection(db, "merchants"), (snap) => {
       const map = {};
@@ -102,30 +116,27 @@ export default function CustomerDashboard() {
     });
   }, []);
 
-  /* =========================
-     FILTER OFFERS
-  ========================= */
+  /* ===== FILTER ===== */
   const nearbyOffers = useMemo(() => {
     if (!customerLoc) return [];
 
     return offers
-      .map((offer) => {
-        const merchant = merchantsMap[offer.merchantId];
-        if (!merchant?.lat || !merchant?.lng) return null;
-        if (category !== "All" && offer.category !== category) return null;
+      .map((o) => {
+        const m = merchantsMap[o.merchantId];
+        if (!m?.lat || !m?.lng) return null;
+        if (category !== "All" && o.category !== category) return null;
 
         const d = distanceKm(
           customerLoc.lat,
           customerLoc.lng,
-          merchant.lat,
-          merchant.lng
+          m.lat,
+          m.lng
         );
-
         if (d > radiusKm + GPS_BUFFER_KM) return null;
 
         return {
-          ...offer,
-          merchant,
+          ...o,
+          merchant: m,
           distanceLabel:
             d < 1 ? `${Math.round(d * 1000)} m` : `${d.toFixed(2)} km`,
         };
@@ -135,7 +146,13 @@ export default function CustomerDashboard() {
 
   return (
     <Box sx={{ p: 2 }}>
-      <Typography variant="h6">Nearby Offers</Typography>
+      <Button variant="outlined" color="error" onClick={logout}>
+        Logout
+      </Button>
+
+      <Typography variant="h6" sx={{ mt: 2 }}>
+        Nearby Offers
+      </Typography>
 
       {gpsAccuracy && (
         <Typography variant="caption">
@@ -143,12 +160,38 @@ export default function CustomerDashboard() {
         </Typography>
       )}
 
-      {nearbyOffers.map((o) => (
-        <Card
-          key={o.id}
-          sx={{ mb: 1 }}
-          onClick={() => setSelectedOffer(o)}
+      {/* FILTERS */}
+      <Box sx={{ display: "flex", gap: 2, my: 2 }}>
+        <TextField
+          select
+          label="Category"
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
         >
+          <MenuItem value="All">All</MenuItem>
+          {categories.map((c) => (
+            <MenuItem key={c.id} value={c.name}>
+              {c.name}
+            </MenuItem>
+          ))}
+        </TextField>
+
+        <TextField
+          select
+          label="Distance (km)"
+          value={radiusKm}
+          onChange={(e) => setRadiusKm(Number(e.target.value))}
+        >
+          {RADIUS_OPTIONS.map((r) => (
+            <MenuItem key={r} value={r}>
+              {r} km
+            </MenuItem>
+          ))}
+        </TextField>
+      </Box>
+
+      {nearbyOffers.map((o) => (
+        <Card key={o.id} sx={{ mb: 1 }} onClick={() => setSelectedOffer(o)}>
           <CardContent>
             <Typography>
               <strong>{o.merchant.shopName}</strong> — {o.title}
@@ -160,22 +203,39 @@ export default function CustomerDashboard() {
         </Card>
       ))}
 
-      <Dialog
-        open={Boolean(selectedOffer)}
-        onClose={() => setSelectedOffer(null)}
-      >
+      {/* OFFER DIALOG */}
+      <Dialog open={Boolean(selectedOffer)} onClose={() => setSelectedOffer(null)}>
         {selectedOffer && (
           <>
             <DialogTitle>{selectedOffer.title}</DialogTitle>
             <DialogContent>
-              <Typography>
-                {selectedOffer.merchant.shopName}
-              </Typography>
+              <Typography>{selectedOffer.merchant.shopName}</Typography>
             </DialogContent>
             <DialogActions>
-              <Button onClick={() => setSelectedOffer(null)}>
-                Close
-              </Button>
+              <IconButton
+                color="success"
+                href={`https://wa.me/${selectedOffer.merchant.mobile}`}
+                target="_blank"
+              >
+                <WhatsAppIcon />
+              </IconButton>
+
+              <IconButton
+                color="primary"
+                href={`tel:${selectedOffer.merchant.mobile}`}
+              >
+                <CallIcon />
+              </IconButton>
+
+              <IconButton
+                color="secondary"
+                href={`https://www.google.com/maps?q=${selectedOffer.merchant.lat},${selectedOffer.merchant.lng}`}
+                target="_blank"
+              >
+                <DirectionsIcon />
+              </IconButton>
+
+              <Button onClick={() => setSelectedOffer(null)}>Close</Button>
             </DialogActions>
           </>
         )}
