@@ -67,6 +67,7 @@ export default function MerchantDashboard() {
       } else {
         const ref = await addDoc(collection(db, "merchants"), {
           mobile,
+          status: "draft",              // 👈 important
           category: "",
           shopName: "",
           address: "",
@@ -78,6 +79,7 @@ export default function MerchantDashboard() {
         setMerchant({
           id: ref.id,
           mobile,
+          status: "draft",
           category: "",
           shopName: "",
           address: "",
@@ -105,6 +107,8 @@ export default function MerchantDashboard() {
   }
 
   const isHomeKitchen = merchant.category === "Home Kitchen";
+  const isPending = merchant.status === "pending";
+  const isApproved = merchant.status === "approved";
 
   return (
     <Box sx={{ p: 2 }}>
@@ -114,6 +118,16 @@ export default function MerchantDashboard() {
 
       <Typography variant="h6" sx={{ mt: 2 }}>
         Merchant Dashboard
+      </Typography>
+
+      {/* ===== STATUS INFO ===== */}
+      <Typography sx={{ mt: 1 }}>
+        Status:{" "}
+        <strong>
+          {merchant.status === "draft" && "Draft (Not Submitted)"}
+          {merchant.status === "pending" && "Pending Admin Approval"}
+          {merchant.status === "approved" && "Approved"}
+        </strong>
       </Typography>
 
       {msg && <Typography sx={{ color: "green" }}>{msg}</Typography>}
@@ -129,6 +143,7 @@ export default function MerchantDashboard() {
             sx={{ mt: 2 }}
             value={merchant.shopName || ""}
             onChange={(e) => updateField("shopName", e.target.value)}
+            disabled={isPending}
           />
 
           <TextField
@@ -137,6 +152,7 @@ export default function MerchantDashboard() {
             sx={{ mt: 2 }}
             value={merchant.address || ""}
             onChange={(e) => updateField("address", e.target.value)}
+            disabled={isPending}
           />
         </CardContent>
       </Card>
@@ -151,6 +167,7 @@ export default function MerchantDashboard() {
             fullWidth
             value={merchant.category}
             onChange={(e) => updateField("category", e.target.value)}
+            disabled={isPending}
           >
             {CATEGORIES.map((c) => (
               <MenuItem key={c} value={c}>
@@ -177,9 +194,8 @@ export default function MerchantDashboard() {
             fullWidth
             sx={{ mt: 2 }}
             value={merchant.lat ?? ""}
-            onChange={(e) =>
-              updateField("lat", Number(e.target.value))
-            }
+            onChange={(e) => updateField("lat", Number(e.target.value))}
+            disabled={isPending}
           />
 
           <TextField
@@ -187,9 +203,8 @@ export default function MerchantDashboard() {
             fullWidth
             sx={{ mt: 2 }}
             value={merchant.lng ?? ""}
-            onChange={(e) =>
-              updateField("lng", Number(e.target.value))
-            }
+            onChange={(e) => updateField("lng", Number(e.target.value))}
+            disabled={isPending}
           />
 
           <TextField
@@ -199,16 +214,15 @@ export default function MerchantDashboard() {
             sx={{ mt: 2 }}
             value={merchant.geofenceRadius || 300}
             onChange={(e) =>
-              updateField(
-                "geofenceRadius",
-                Number(e.target.value)
-              )
+              updateField("geofenceRadius", Number(e.target.value))
             }
+            disabled={isPending}
           />
 
           <Button
             sx={{ mt: 2 }}
             variant="outlined"
+            disabled={isPending}
             onClick={() => {
               navigator.geolocation.getCurrentPosition((pos) => {
                 updateField("lat", pos.coords.latitude);
@@ -220,6 +234,28 @@ export default function MerchantDashboard() {
           </Button>
         </CardContent>
       </Card>
+
+      {/* ===== SUBMIT FOR ADMIN APPROVAL ===== */}
+      {!isApproved && (
+        <Button
+          fullWidth
+          sx={{ mt: 3 }}
+          variant="contained"
+          color="primary"
+          disabled={isPending}
+          onClick={() => updateField("status", "pending")}
+        >
+          {isPending
+            ? "Waiting for Admin Approval"
+            : "Submit for Admin Approval"}
+        </Button>
+      )}
+
+      {isApproved && (
+        <Typography sx={{ mt: 3, color: "green" }}>
+          ✅ Approved by Admin. You can now create offers.
+        </Typography>
+      )}
     </Box>
   );
 }
