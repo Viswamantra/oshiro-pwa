@@ -2,8 +2,6 @@ import React, { useEffect, useState, useMemo, useRef } from "react";
 import {
   Box,
   Typography,
-  TextField,
-  MenuItem,
   Card,
   CardContent,
   Dialog,
@@ -19,6 +17,7 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../firebase";
+import { useNavigate } from "react-router-dom";
 
 /* =========================
    DISTANCE (HAVERSINE)
@@ -36,21 +35,25 @@ function distanceKm(lat1, lon1, lat2, lon2) {
 }
 
 const GPS_BUFFER_KM = 0.5;
-const RADIUS_STEPS = [1, 2, 3, 5];
 
 export default function CustomerDashboard() {
-  const stored = JSON.parse(localStorage.getItem("oshiro_user") || "{}");
+  const navigate = useNavigate();
+
+  /* =========================
+     ROLE GUARD
+  ========================= */
+  const role = localStorage.getItem("oshiro_role");
+  if (role !== "customer") {
+    navigate("/login", { replace: true });
+    return null;
+  }
 
   const [offers, setOffers] = useState([]);
   const [merchantsMap, setMerchantsMap] = useState({});
-  const [categories, setCategories] = useState([]);
-
   const [customerLoc, setCustomerLoc] = useState(null);
   const [gpsAccuracy, setGpsAccuracy] = useState(null);
-
-  const [radiusKm, setRadiusKm] = useState(1);
-  const [category, setCategory] = useState("All");
-
+  const [radiusKm] = useState(1);
+  const [category] = useState("All");
   const [selectedOffer, setSelectedOffer] = useState(null);
   const lastWrittenLoc = useRef(null);
 
@@ -73,25 +76,6 @@ export default function CustomerDashboard() {
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
-
-  /* =========================
-     LOAD CATEGORIES
-  ========================= */
-  useEffect(() => {
-    const q = query(
-      collection(db, "categories"),
-      where("status", "==", "active")
-    );
-
-    return onSnapshot(q, (snap) => {
-      setCategories(
-        snap.docs.map((d) => ({
-          id: d.id,
-          name: d.data().name,
-        }))
-      );
-    });
   }, []);
 
   /* =========================
