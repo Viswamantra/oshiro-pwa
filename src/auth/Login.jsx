@@ -21,23 +21,26 @@ export default function Login() {
     }
   };
 
-  const handleContinue = () => {
+  const handleContinue = (e) => {
+    // 🔒 ABSOLUTE SAFETY (prevents any form-submit behaviour)
+    e.preventDefault();
+
     if (mobile.length !== 10) {
       setError("Enter exactly 10 digits");
       return;
     }
 
-    // ✅ SAVE USER INFO (THIS WAS MISSING)
+    // ✅ SAVE USER INFO
     localStorage.setItem(
       "oshiro_user",
       JSON.stringify({ mobile: "+91" + mobile })
     );
 
-    // optional: clear old role on fresh login
+    // reset role on fresh login
     localStorage.removeItem("oshiro_role");
 
-    // ✅ NAVIGATE TO ROLE SELECTION
-    navigate("/select-role");
+    // ✅ NAVIGATE
+    navigate("/select-role", { replace: true });
   };
 
   return (
@@ -62,12 +65,12 @@ export default function Login() {
       />
 
       <Button
-  type="button"
-  fullWidth
-  variant="contained"
-  sx={{ mt: 2 }}
-  onClick={handleContinue}
->
+        type="button"
+        fullWidth
+        variant="contained"
+        sx={{ mt: 2 }}
+        onClick={handleContinue}
+      >
         CONTINUE
       </Button>
     </Box>
