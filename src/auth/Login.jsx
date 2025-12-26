@@ -10,9 +10,14 @@ export default function Login() {
 
       <TextField label="Mobile Number" fullWidth margin="normal" />
       <TextField label="OTP" fullWidth margin="normal" />
-      <TextField label="Password" type="password" fullWidth margin="normal" />
+      <TextField
+        label="Password"
+        type="password"
+        fullWidth
+        margin="normal"
+      />
 
-      <Button fullWidth variant="contained">
+      <Button fullWidth variant="contained" sx={{ mt: 2 }}>
         CONTINUE
       </Button>
     </Box>
