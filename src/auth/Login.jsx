@@ -9,10 +9,12 @@ import { useNavigate } from "react-router-dom";
 
 export default function Login() {
   const navigate = useNavigate();
+
   const [mobile, setMobile] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const handleChange = (e) => {
+  const handleMobileChange = (e) => {
     const digits = e.target.value.replace(/\D/g, "");
     if (digits.length <= 10) {
       setMobile(digits);
@@ -24,21 +26,31 @@ export default function Login() {
     e.preventDefault();
     e.stopPropagation();
 
+    /* ===== BASIC VALIDATION ===== */
     if (mobile.length !== 10) {
       setError("Enter exactly 10 digits");
       return;
     }
 
-    // save user
+    /* ===== ADMIN LOGIN ===== */
+    if (mobile === "7386361725" && password === "45#67") {
+      localStorage.setItem("oshiro_role", "admin");
+      localStorage.setItem(
+        "oshiro_user",
+        JSON.stringify({ mobile: "+91" + mobile })
+      );
+      navigate("/admin", { replace: true });
+      return;
+    }
+
+    /* ===== NORMAL USER LOGIN ===== */
     localStorage.setItem(
       "oshiro_user",
       JSON.stringify({ mobile: "+91" + mobile })
     );
 
-    // reset role
     localStorage.removeItem("oshiro_role");
 
-    // go to role page
     navigate("/select-role", { replace: true });
   };
 
@@ -48,12 +60,13 @@ export default function Login() {
         Login Screen
       </Typography>
 
+      {/* MOBILE */}
       <TextField
         label="Mobile Number"
         fullWidth
         margin="normal"
         value={mobile}
-        onChange={handleChange}
+        onChange={handleMobileChange}
         error={!!error}
         helperText={error}
         InputProps={{
@@ -63,7 +76,17 @@ export default function Login() {
         }}
       />
 
-      {/* NOT a Button, so it can never submit a form */}
+      {/* PASSWORD (ONLY FOR ADMIN) */}
+      <TextField
+        label="Password (Admin only)"
+        type="password"
+        fullWidth
+        margin="normal"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+      />
+
+      {/* CONTINUE BUTTON */}
       <Box
         role="button"
         tabIndex={0}
