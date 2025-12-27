@@ -11,6 +11,8 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  Tabs,
+  Tab,
 } from "@mui/material";
 import {
   collection,
@@ -33,23 +35,27 @@ export default function AdminDashboard() {
     return null;
   }
 
-  const [pendingMerchants, setPendingMerchants] = useState([]);
+  const [tab, setTab] = useState(0);
+  const [merchants, setMerchants] = useState([]);
   const [rejectingMerchant, setRejectingMerchant] = useState(null);
   const [reason, setReason] = useState("");
 
-  /* ===== LOAD PENDING MERCHANTS ===== */
+  const statusMap = ["pending", "approved", "rejected"];
+  const currentStatus = statusMap[tab];
+
+  /* ===== LOAD MERCHANTS BY STATUS ===== */
   useEffect(() => {
     const q = query(
       collection(db, "merchants"),
-      where("status", "==", "pending")
+      where("status", "==", currentStatus)
     );
 
     return onSnapshot(q, (snap) => {
-      setPendingMerchants(
+      setMerchants(
         snap.docs.map((d) => ({ id: d.id, ...d.data() }))
       );
     });
-  }, []);
+  }, [currentStatus]);
 
   /* ===== ACTIONS ===== */
   const approve = async (id) => {
@@ -90,42 +96,63 @@ export default function AdminDashboard() {
         Admin Dashboard
       </Typography>
 
+      {/* ===== TABS ===== */}
+      <Tabs
+        value={tab}
+        onChange={(_, v) => setTab(v)}
+        sx={{ mt: 2 }}
+      >
+        <Tab label="Pending" />
+        <Tab label="Approved" />
+        <Tab label="Rejected" />
+      </Tabs>
+
       <Divider sx={{ my: 2 }} />
 
-      {pendingMerchants.length === 0 && (
-        <Typography>No pending merchants 🎉</Typography>
+      {merchants.length === 0 && (
+        <Typography>No merchants in this section</Typography>
       )}
 
-      {pendingMerchants.map((m) => (
+      {merchants.map((m) => (
         <Card key={m.id} sx={{ my: 1 }}>
           <CardContent>
             <Typography fontWeight="bold">
               {m.shopName || "Unnamed Shop"}
             </Typography>
-
             <Typography variant="body2">{m.mobile}</Typography>
             <Typography variant="body2">{m.category}</Typography>
 
-            <Box sx={{ mt: 1, display: "flex", gap: 1 }}>
-              <Button
-                variant="contained"
-                color="success"
-                onClick={() => approve(m.id)}
+            {m.status === "rejected" && (
+              <Typography
+                variant="body2"
+                sx={{ color: "error.main", mt: 1 }}
               >
-                Approve
-              </Button>
+                ❌ {m.rejectionReason}
+              </Typography>
+            )}
 
-              <Button
-                variant="outlined"
-                color="error"
-                onClick={() => {
-                  setRejectingMerchant(m);
-                  setReason("");
-                }}
-              >
-                Reject
-              </Button>
-            </Box>
+            {m.status === "pending" && (
+              <Box sx={{ mt: 1, display: "flex", gap: 1 }}>
+                <Button
+                  variant="contained"
+                  color="success"
+                  onClick={() => approve(m.id)}
+                >
+                  Approve
+                </Button>
+
+                <Button
+                  variant="outlined"
+                  color="error"
+                  onClick={() => {
+                    setRejectingMerchant(m);
+                    setReason("");
+                  }}
+                >
+                  Reject
+                </Button>
+              </Box>
+            )}
           </CardContent>
         </Card>
       ))}
