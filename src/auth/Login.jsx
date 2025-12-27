@@ -19,6 +19,7 @@ export default function Login() {
     if (digits.length <= 10) {
       setMobile(digits);
       setError("");
+      setPassword(""); // reset password if mobile changes
     }
   };
 
@@ -26,14 +27,18 @@ export default function Login() {
     e.preventDefault();
     e.stopPropagation();
 
-    /* ===== BASIC VALIDATION ===== */
     if (mobile.length !== 10) {
       setError("Enter exactly 10 digits");
       return;
     }
 
     /* ===== ADMIN LOGIN ===== */
-    if (mobile === "7386361725" && password === "45#67") {
+    if (mobile === "7386361725") {
+      if (password !== "45#67") {
+        setError("Invalid admin password");
+        return;
+      }
+
       localStorage.setItem("oshiro_role", "admin");
       localStorage.setItem(
         "oshiro_user",
@@ -43,14 +48,12 @@ export default function Login() {
       return;
     }
 
-    /* ===== NORMAL USER LOGIN ===== */
+    /* ===== NORMAL USER ===== */
     localStorage.setItem(
       "oshiro_user",
       JSON.stringify({ mobile: "+91" + mobile })
     );
-
     localStorage.removeItem("oshiro_role");
-
     navigate("/select-role", { replace: true });
   };
 
@@ -60,7 +63,6 @@ export default function Login() {
         Login Screen
       </Typography>
 
-      {/* MOBILE */}
       <TextField
         label="Mobile Number"
         fullWidth
@@ -76,17 +78,18 @@ export default function Login() {
         }}
       />
 
-      {/* PASSWORD (ONLY FOR ADMIN) */}
-      <TextField
-        label="Password (Admin only)"
-        type="password"
-        fullWidth
-        margin="normal"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-      />
+      {/* ADMIN PASSWORD ONLY IF ADMIN MOBILE */}
+      {mobile === "7386361725" && (
+        <TextField
+          label="Admin Password"
+          type="password"
+          fullWidth
+          margin="normal"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+      )}
 
-      {/* CONTINUE BUTTON */}
       <Box
         role="button"
         tabIndex={0}
