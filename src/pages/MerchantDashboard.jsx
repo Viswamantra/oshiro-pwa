@@ -22,6 +22,11 @@ import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
 import MerchantOffers from "./MerchantOffers";
 
+/* 🔔 FCM */
+import { getMessaging, getToken } from "firebase/messaging";
+
+const VAPID_KEY = "PASTE_YOUR_VAPID_PUBLIC_KEY_HERE";
+
 const CATEGORIES = [
   "Food",
   "Home Kitchen",
@@ -93,6 +98,35 @@ export default function MerchantDashboard() {
     });
   }, [mobile]);
 
+  /* ===== 🔔 REGISTER FCM TOKEN (MERCHANT) ===== */
+  useEffect(() => {
+    if (!merchant?.id) return;
+
+    const registerPush = async () => {
+      try {
+        if (!("Notification" in window)) return;
+
+        const permission = await Notification.requestPermission();
+        if (permission !== "granted") return;
+
+        const messaging = getMessaging();
+        const token = await getToken(messaging, {
+          vapidKey: VAPID_KEY,
+        });
+
+        if (token) {
+          await updateDoc(doc(db, "merchants", merchant.id), {
+            fcmToken: token,
+          });
+        }
+      } catch (err) {
+        console.error("FCM error:", err);
+      }
+    };
+
+    registerPush();
+  }, [merchant?.id]);
+
   /* ===== UPDATE FIELD ===== */
   const updateField = async (field, value) => {
     if (!merchant?.id) return;
@@ -115,15 +149,12 @@ export default function MerchantDashboard() {
   const isRejected = merchant.status === "rejected";
 
   /* ===== VALIDATION ===== */
-  const isProfileComplete = () => {
-    return (
-      merchant.shopName &&
-      merchant.address &&
-      merchant.category &&
-      typeof merchant.lat === "number" &&
-      typeof merchant.lng === "number"
-    );
-  };
+  const isProfileComplete = () =>
+    merchant.shopName &&
+    merchant.address &&
+    merchant.category &&
+    typeof merchant.lat === "number" &&
+    typeof merchant.lng === "number";
 
   return (
     <Box sx={{ p: 2 }}>
@@ -146,7 +177,6 @@ export default function MerchantDashboard() {
         </strong>
       </Typography>
 
-      {/* ===== REJECTION MESSAGE ===== */}
       {isRejected && (
         <Typography sx={{ mt: 1, color: "error.main" }}>
           ❌ Rejected by Admin: {merchant.rejectionReason}
@@ -266,9 +296,7 @@ export default function MerchantDashboard() {
             sx={{ mt: 3 }}
             variant="contained"
             disabled={isPending || !isProfileComplete()}
-            onClick={() =>
-              updateField("status", "pending")
-            }
+            onClick={() => updateField("status", "pending")}
           >
             {isPending
               ? "Waiting for Admin Approval"
@@ -285,7 +313,7 @@ export default function MerchantDashboard() {
         </>
       )}
 
-      {/* ===== OFFER CREATION (ONLY AFTER APPROVAL) ===== */}
+      {/* ===== OFFER CREATION ===== */}
       {isApproved && (
         <>
           <Typography sx={{ mt: 3, color: "green" }}>
