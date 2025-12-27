@@ -19,6 +19,8 @@ import DirectionsIcon from "@mui/icons-material/Directions";
 import {
   collection,
   onSnapshot,
+  doc,
+  setDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
@@ -57,6 +59,9 @@ export default function CustomerDashboard() {
     window.location.href = "/login";
   };
 
+  const stored = JSON.parse(localStorage.getItem("oshiro_user") || "{}");
+  const customerId = stored.mobile; // use mobile as ID
+
   const [offers, setOffers] = useState([]);
   const [merchantsMap, setMerchantsMap] = useState({});
   const [categories, setCategories] = useState([]);
@@ -68,7 +73,11 @@ export default function CustomerDashboard() {
   const [category, setCategory] = useState("All");
   const [selectedOffer, setSelectedOffer] = useState(null);
 
-  /* ===== LIVE GPS ===== */
+  const lastLocationWrite = useRef(0);
+
+  /* =========================
+     LIVE GPS (CLIENT)
+  ========================= */
   useEffect(() => {
     if (!navigator.geolocation) return;
 
@@ -87,7 +96,33 @@ export default function CustomerDashboard() {
     return () => navigator.geolocation.clearWatch(id);
   }, []);
 
-  /* ===== LOAD CATEGORIES ===== */
+  /* =========================
+     🔔 SEND LOCATION TO FIRESTORE
+     (Triggers Cloud Function)
+  ========================= */
+  useEffect(() => {
+    if (!customerLoc || !customerId) return;
+
+    const now = Date.now();
+
+    // throttle: once every 60 seconds
+    if (now - lastLocationWrite.current < 60 * 1000) return;
+    lastLocationWrite.current = now;
+
+    setDoc(
+      doc(db, "customers", customerId),
+      {
+        lat: customerLoc.lat,
+        lng: customerLoc.lng,
+        updatedAt: new Date(),
+      },
+      { merge: true }
+    );
+  }, [customerLoc, customerId]);
+
+  /* =========================
+     LOAD CATEGORIES
+  ========================= */
   useEffect(() => {
     return onSnapshot(collection(db, "categories"), (snap) => {
       setCategories(
@@ -96,7 +131,9 @@ export default function CustomerDashboard() {
     });
   }, []);
 
-  /* ===== LOAD OFFERS ===== */
+  /* =========================
+     LOAD OFFERS
+  ========================= */
   useEffect(() => {
     return onSnapshot(collection(db, "offers"), (snap) => {
       setOffers(
@@ -107,7 +144,9 @@ export default function CustomerDashboard() {
     });
   }, []);
 
-  /* ===== LOAD MERCHANTS ===== */
+  /* =========================
+     LOAD MERCHANTS
+  ========================= */
   useEffect(() => {
     return onSnapshot(collection(db, "merchants"), (snap) => {
       const map = {};
@@ -116,7 +155,9 @@ export default function CustomerDashboard() {
     });
   }, []);
 
-  /* ===== FILTER ===== */
+  /* =========================
+     FILTER OFFERS
+  ========================= */
   const nearbyOffers = useMemo(() => {
     if (!customerLoc) return [];
 
@@ -160,7 +201,7 @@ export default function CustomerDashboard() {
         </Typography>
       )}
 
-      {/* FILTERS */}
+      {/* ===== FILTERS ===== */}
       <Box sx={{ display: "flex", gap: 2, my: 2 }}>
         <TextField
           select
@@ -191,7 +232,11 @@ export default function CustomerDashboard() {
       </Box>
 
       {nearbyOffers.map((o) => (
-        <Card key={o.id} sx={{ mb: 1 }} onClick={() => setSelectedOffer(o)}>
+        <Card
+          key={o.id}
+          sx={{ mb: 1 }}
+          onClick={() => setSelectedOffer(o)}
+        >
           <CardContent>
             <Typography>
               <strong>{o.merchant.shopName}</strong> — {o.title}
@@ -203,14 +248,20 @@ export default function CustomerDashboard() {
         </Card>
       ))}
 
-      {/* OFFER DIALOG */}
-      <Dialog open={Boolean(selectedOffer)} onClose={() => setSelectedOffer(null)}>
+      {/* ===== OFFER DIALOG ===== */}
+      <Dialog
+        open={Boolean(selectedOffer)}
+        onClose={() => setSelectedOffer(null)}
+      >
         {selectedOffer && (
           <>
             <DialogTitle>{selectedOffer.title}</DialogTitle>
             <DialogContent>
-              <Typography>{selectedOffer.merchant.shopName}</Typography>
+              <Typography>
+                {selectedOffer.merchant.shopName}
+              </Typography>
             </DialogContent>
+
             <DialogActions>
               <IconButton
                 color="success"
@@ -235,7 +286,9 @@ export default function CustomerDashboard() {
                 <DirectionsIcon />
               </IconButton>
 
-              <Button onClick={() => setSelectedOffer(null)}>Close</Button>
+              <Button onClick={() => setSelectedOffer(null)}>
+                Close
+              </Button>
             </DialogActions>
           </>
         )}
