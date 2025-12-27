@@ -146,7 +146,7 @@ export default function MerchantDashboard() {
         </strong>
       </Typography>
 
-      {/* ===== REJECTION REASON ===== */}
+      {/* ===== REJECTION MESSAGE ===== */}
       {isRejected && (
         <Typography sx={{ mt: 1, color: "error.main" }}>
           ❌ Rejected by Admin: {merchant.rejectionReason}
@@ -166,7 +166,7 @@ export default function MerchantDashboard() {
             sx={{ mt: 2 }}
             value={merchant.shopName}
             onChange={(e) => updateField("shopName", e.target.value)}
-            disabled={isPending}
+            disabled={isPending || isApproved}
           />
 
           <TextField
@@ -175,7 +175,7 @@ export default function MerchantDashboard() {
             sx={{ mt: 2 }}
             value={merchant.address}
             onChange={(e) => updateField("address", e.target.value)}
-            disabled={isPending}
+            disabled={isPending || isApproved}
           />
         </CardContent>
       </Card>
@@ -190,7 +190,7 @@ export default function MerchantDashboard() {
             fullWidth
             value={merchant.category}
             onChange={(e) => updateField("category", e.target.value)}
-            disabled={isPending}
+            disabled={isPending || isApproved}
           >
             {CATEGORIES.map((c) => (
               <MenuItem key={c} value={c}>
@@ -218,7 +218,7 @@ export default function MerchantDashboard() {
             sx={{ mt: 2 }}
             value={merchant.lat ?? ""}
             onChange={(e) => updateField("lat", Number(e.target.value))}
-            disabled={isPending}
+            disabled={isPending || isApproved}
           />
 
           <TextField
@@ -227,7 +227,7 @@ export default function MerchantDashboard() {
             sx={{ mt: 2 }}
             value={merchant.lng ?? ""}
             onChange={(e) => updateField("lng", Number(e.target.value))}
-            disabled={isPending}
+            disabled={isPending || isApproved}
           />
 
           <TextField
@@ -239,13 +239,13 @@ export default function MerchantDashboard() {
             onChange={(e) =>
               updateField("geofenceRadius", Number(e.target.value))
             }
-            disabled={isPending}
+            disabled={isPending || isApproved}
           />
 
           <Button
             sx={{ mt: 2 }}
             variant="outlined"
-            disabled={isPending}
+            disabled={isPending || isApproved}
             onClick={() => {
               navigator.geolocation.getCurrentPosition((pos) => {
                 updateField("lat", pos.coords.latitude);
@@ -258,7 +258,7 @@ export default function MerchantDashboard() {
         </CardContent>
       </Card>
 
-      {/* ===== SUBMIT FOR ADMIN APPROVAL ===== */}
+      {/* ===== SUBMIT / RESUBMIT ===== */}
       {!isApproved && (
         <>
           <Button
@@ -266,10 +266,14 @@ export default function MerchantDashboard() {
             sx={{ mt: 3 }}
             variant="contained"
             disabled={isPending || !isProfileComplete()}
-            onClick={() => updateField("status", "pending")}
+            onClick={() =>
+              updateField("status", "pending")
+            }
           >
             {isPending
               ? "Waiting for Admin Approval"
+              : isRejected
+              ? "Re-Submit for Approval"
               : "Submit for Admin Approval"}
           </Button>
 
