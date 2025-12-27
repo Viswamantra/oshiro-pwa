@@ -259,3 +259,6 @@ export default function MerchantDashboard() {
     </Box>
   );
 }
+{merchant.status === "approved" && (
+  <MerchantOffers merchant={merchant} />
+)}
