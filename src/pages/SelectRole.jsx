@@ -1,9 +1,17 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Box, Button, Typography } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 
 export default function SelectRole() {
   const navigate = useNavigate();
+
+  // 🔐 ADMIN MUST BYPASS ROLE SELECTION
+  useEffect(() => {
+    const role = localStorage.getItem("oshiro_role");
+    if (role === "admin") {
+      navigate("/admin", { replace: true });
+    }
+  }, [navigate]);
 
   const selectRole = (role) => {
     localStorage.setItem("oshiro_role", role);
