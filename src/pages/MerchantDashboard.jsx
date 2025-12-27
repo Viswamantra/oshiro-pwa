@@ -20,6 +20,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
+import MerchantOffers from "./MerchantOffers";
 
 const CATEGORIES = [
   "Food",
@@ -67,7 +68,7 @@ export default function MerchantDashboard() {
       } else {
         const ref = await addDoc(collection(db, "merchants"), {
           mobile,
-          status: "draft",              // 👈 important
+          status: "draft",
           category: "",
           shopName: "",
           address: "",
@@ -110,6 +111,17 @@ export default function MerchantDashboard() {
   const isPending = merchant.status === "pending";
   const isApproved = merchant.status === "approved";
 
+  /* ===== VALIDATION ===== */
+  const isProfileComplete = () => {
+    return (
+      merchant.shopName &&
+      merchant.address &&
+      merchant.category &&
+      typeof merchant.lat === "number" &&
+      typeof merchant.lng === "number"
+    );
+  };
+
   return (
     <Box sx={{ p: 2 }}>
       <Button variant="outlined" color="error" onClick={logout}>
@@ -120,7 +132,7 @@ export default function MerchantDashboard() {
         Merchant Dashboard
       </Typography>
 
-      {/* ===== STATUS INFO ===== */}
+      {/* ===== STATUS ===== */}
       <Typography sx={{ mt: 1 }}>
         Status:{" "}
         <strong>
@@ -141,7 +153,7 @@ export default function MerchantDashboard() {
             label="Shop Name"
             fullWidth
             sx={{ mt: 2 }}
-            value={merchant.shopName || ""}
+            value={merchant.shopName}
             onChange={(e) => updateField("shopName", e.target.value)}
             disabled={isPending}
           />
@@ -150,7 +162,7 @@ export default function MerchantDashboard() {
             label="Business Address"
             fullWidth
             sx={{ mt: 2 }}
-            value={merchant.address || ""}
+            value={merchant.address}
             onChange={(e) => updateField("address", e.target.value)}
             disabled={isPending}
           />
@@ -212,7 +224,7 @@ export default function MerchantDashboard() {
             type="number"
             fullWidth
             sx={{ mt: 2 }}
-            value={merchant.geofenceRadius || 300}
+            value={merchant.geofenceRadius}
             onChange={(e) =>
               updateField("geofenceRadius", Number(e.target.value))
             }
@@ -237,28 +249,39 @@ export default function MerchantDashboard() {
 
       {/* ===== SUBMIT FOR ADMIN APPROVAL ===== */}
       {!isApproved && (
-        <Button
-          fullWidth
-          sx={{ mt: 3 }}
-          variant="contained"
-          color="primary"
-          disabled={isPending}
-          onClick={() => updateField("status", "pending")}
-        >
-          {isPending
-            ? "Waiting for Admin Approval"
-            : "Submit for Admin Approval"}
-        </Button>
+        <>
+          <Button
+            fullWidth
+            sx={{ mt: 3 }}
+            variant="contained"
+            color="primary"
+            disabled={isPending || !isProfileComplete()}
+            onClick={() => updateField("status", "pending")}
+          >
+            {isPending
+              ? "Waiting for Admin Approval"
+              : "Submit for Admin Approval"}
+          </Button>
+
+          {!isProfileComplete() && !isPending && (
+            <Typography sx={{ mt: 1, color: "red" }}>
+              ⚠️ Complete shop name, address, category, and location before submitting.
+            </Typography>
+          )}
+        </>
       )}
 
+      {/* ===== OFFER CREATION (ONLY AFTER APPROVAL) ===== */}
       {isApproved && (
-        <Typography sx={{ mt: 3, color: "green" }}>
-          ✅ Approved by Admin. You can now create offers.
-        </Typography>
+        <>
+          <Typography sx={{ mt: 3, color: "green" }}>
+            ✅ Approved by Admin. You can now create offers.
+          </Typography>
+
+          <MerchantOffers merchant={merchant} />
+        </>
       )}
     </Box>
   );
 }
-{merchant.status === "approved" && (
-  <MerchantOffers merchant={merchant} />
-)}
+
