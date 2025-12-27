@@ -77,6 +77,7 @@ export default function MerchantDashboard() {
           geofenceRadius: 300,
           createdAt: new Date(),
         });
+
         setMerchant({
           id: ref.id,
           mobile,
@@ -99,6 +100,7 @@ export default function MerchantDashboard() {
     await updateDoc(doc(db, "merchants", merchant.id), {
       [field]: value,
     });
+
     setMsg("Saved successfully");
     setTimeout(() => setMsg(""), 2000);
   };
@@ -110,6 +112,7 @@ export default function MerchantDashboard() {
   const isHomeKitchen = merchant.category === "Home Kitchen";
   const isPending = merchant.status === "pending";
   const isApproved = merchant.status === "approved";
+  const isRejected = merchant.status === "rejected";
 
   /* ===== VALIDATION ===== */
   const isProfileComplete = () => {
@@ -139,8 +142,16 @@ export default function MerchantDashboard() {
           {merchant.status === "draft" && "Draft (Not Submitted)"}
           {merchant.status === "pending" && "Pending Admin Approval"}
           {merchant.status === "approved" && "Approved"}
+          {merchant.status === "rejected" && "Rejected"}
         </strong>
       </Typography>
+
+      {/* ===== REJECTION REASON ===== */}
+      {isRejected && (
+        <Typography sx={{ mt: 1, color: "error.main" }}>
+          ❌ Rejected by Admin: {merchant.rejectionReason}
+        </Typography>
+      )}
 
       {msg && <Typography sx={{ color: "green" }}>{msg}</Typography>}
 
@@ -254,7 +265,6 @@ export default function MerchantDashboard() {
             fullWidth
             sx={{ mt: 3 }}
             variant="contained"
-            color="primary"
             disabled={isPending || !isProfileComplete()}
             onClick={() => updateField("status", "pending")}
           >
@@ -284,4 +294,3 @@ export default function MerchantDashboard() {
     </Box>
   );
 }
-
