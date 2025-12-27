@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   Box,
   Typography,
@@ -37,6 +37,7 @@ export default function AdminDashboard() {
 
   const [tab, setTab] = useState(0);
   const [merchants, setMerchants] = useState([]);
+  const [search, setSearch] = useState("");
   const [rejectingMerchant, setRejectingMerchant] = useState(null);
   const [reason, setReason] = useState("");
 
@@ -56,6 +57,20 @@ export default function AdminDashboard() {
       );
     });
   }, [currentStatus]);
+
+  /* ===== SEARCH FILTER ===== */
+  const filteredMerchants = useMemo(() => {
+    if (!search.trim()) return merchants;
+
+    const s = search.toLowerCase();
+
+    return merchants.filter((m) => {
+      return (
+        (m.shopName || "").toLowerCase().includes(s) ||
+        (m.mobile || "").includes(s)
+      );
+    });
+  }, [search, merchants]);
 
   /* ===== ACTIONS ===== */
   const approve = async (id) => {
@@ -96,6 +111,15 @@ export default function AdminDashboard() {
         Admin Dashboard
       </Typography>
 
+      {/* ===== SEARCH ===== */}
+      <TextField
+        fullWidth
+        placeholder="Search by shop name or mobile number"
+        sx={{ mt: 2 }}
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
+
       {/* ===== TABS ===== */}
       <Tabs
         value={tab}
@@ -109,16 +133,17 @@ export default function AdminDashboard() {
 
       <Divider sx={{ my: 2 }} />
 
-      {merchants.length === 0 && (
-        <Typography>No merchants in this section</Typography>
+      {filteredMerchants.length === 0 && (
+        <Typography>No merchants found</Typography>
       )}
 
-      {merchants.map((m) => (
+      {filteredMerchants.map((m) => (
         <Card key={m.id} sx={{ my: 1 }}>
           <CardContent>
             <Typography fontWeight="bold">
               {m.shopName || "Unnamed Shop"}
             </Typography>
+
             <Typography variant="body2">{m.mobile}</Typography>
             <Typography variant="body2">{m.category}</Typography>
 
