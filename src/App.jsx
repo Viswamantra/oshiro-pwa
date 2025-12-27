@@ -4,6 +4,8 @@ import LoginPage from "./pages/LoginPage";
 import SelectRole from "./pages/SelectRole";
 import MerchantDashboard from "./pages/MerchantDashboard";
 import CustomerDashboard from "./pages/CustomerDashboard";
+import AdminDashboard from "./pages/AdminDashboard";
+
 
 export default function App() {
   return (
@@ -12,7 +14,7 @@ export default function App() {
       <Route path="/select-role" element={<SelectRole />} />
       <Route path="/merchant" element={<MerchantDashboard />} />
       <Route path="/customer" element={<CustomerDashboard />} />
-
+      <Route path="/admin" element={<AdminDashboard />} />
       {/* default */}
       <Route path="/" element={<Navigate to="/login" replace />} />
 
