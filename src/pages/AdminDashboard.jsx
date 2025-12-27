@@ -6,6 +6,11 @@ import {
   CardContent,
   Button,
   Divider,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
 } from "@mui/material";
 import {
   collection,
@@ -29,6 +34,8 @@ export default function AdminDashboard() {
   }
 
   const [pendingMerchants, setPendingMerchants] = useState([]);
+  const [rejectingMerchant, setRejectingMerchant] = useState(null);
+  const [reason, setReason] = useState("");
 
   /* ===== LOAD PENDING MERCHANTS ===== */
   useEffect(() => {
@@ -48,13 +55,24 @@ export default function AdminDashboard() {
   const approve = async (id) => {
     await updateDoc(doc(db, "merchants", id), {
       status: "approved",
+      approvedAt: new Date(),
     });
   };
 
-  const reject = async (id) => {
-    await updateDoc(doc(db, "merchants", id), {
+  const confirmReject = async () => {
+    if (!reason.trim()) {
+      alert("Rejection reason is required");
+      return;
+    }
+
+    await updateDoc(doc(db, "merchants", rejectingMerchant.id), {
       status: "rejected",
+      rejectionReason: reason,
+      rejectedAt: new Date(),
     });
+
+    setRejectingMerchant(null);
+    setReason("");
   };
 
   const logout = () => {
@@ -85,13 +103,8 @@ export default function AdminDashboard() {
               {m.shopName || "Unnamed Shop"}
             </Typography>
 
-            <Typography variant="body2">
-              {m.mobile}
-            </Typography>
-
-            <Typography variant="body2">
-              {m.category}
-            </Typography>
+            <Typography variant="body2">{m.mobile}</Typography>
+            <Typography variant="body2">{m.category}</Typography>
 
             <Box sx={{ mt: 1, display: "flex", gap: 1 }}>
               <Button
@@ -105,7 +118,10 @@ export default function AdminDashboard() {
               <Button
                 variant="outlined"
                 color="error"
-                onClick={() => reject(m.id)}
+                onClick={() => {
+                  setRejectingMerchant(m);
+                  setReason("");
+                }}
               >
                 Reject
               </Button>
@@ -113,6 +129,44 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
       ))}
+
+      {/* ===== REJECT DIALOG ===== */}
+      <Dialog
+        open={Boolean(rejectingMerchant)}
+        onClose={() => setRejectingMerchant(null)}
+        fullWidth
+      >
+        <DialogTitle>Reject Merchant</DialogTitle>
+
+        <DialogContent>
+          <Typography sx={{ mb: 1 }}>
+            Reason for rejecting{" "}
+            <strong>{rejectingMerchant?.shopName}</strong>
+          </Typography>
+
+          <TextField
+            fullWidth
+            multiline
+            rows={3}
+            placeholder="Enter rejection reason"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+        </DialogContent>
+
+        <DialogActions>
+          <Button onClick={() => setRejectingMerchant(null)}>
+            Cancel
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={confirmReject}
+          >
+            Reject Merchant
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
