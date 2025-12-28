@@ -13,6 +13,8 @@ import {
   TextField,
   Tabs,
   Tab,
+  Checkbox,
+  Stack,
 } from "@mui/material";
 import {
   collection,
@@ -21,9 +23,14 @@ import {
   onSnapshot,
   updateDoc,
   doc,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
+
+/* =========================================================
+   ADMIN DASHBOARD
+========================================================= */
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -35,56 +42,141 @@ export default function AdminDashboard() {
     return null;
   }
 
-  const [tab, setTab] = useState(0);
-  const [merchants, setMerchants] = useState([]);
+  /* ===== MAIN TABS ===== */
+  const [mainTab, setMainTab] = useState(0); // 0=Merchants,1=Offers,2=Customers
+  const [statusTab, setStatusTab] = useState(0); // merchant status
+
+  /* ===== COMMON ===== */
   const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState({});
+  const [dateFrom, setDateFrom] = useState("");
+  const [testOnly, setTestOnly] = useState(false);
+
+  /* ===== MERCHANT STATES ===== */
+  const [merchants, setMerchants] = useState([]);
   const [rejectingMerchant, setRejectingMerchant] = useState(null);
   const [reason, setReason] = useState("");
 
-  const statusMap = ["pending", "approved", "rejected"];
-  const currentStatus = statusMap[tab];
+  /* ===== OFFERS / CUSTOMERS ===== */
+  const [offers, setOffers] = useState([]);
+  const [customers, setCustomers] = useState([]);
 
-  /* ===== LOAD MERCHANTS BY STATUS ===== */
+  const merchantStatusMap = ["pending", "approved", "rejected"];
+  const currentStatus = merchantStatusMap[statusTab];
+
+  /* =========================================================
+     LOAD DATA
+  ========================================================= */
+
   useEffect(() => {
-    const q = query(
-      collection(db, "merchants"),
-      where("status", "==", currentStatus)
-    );
-
-    return onSnapshot(q, (snap) => {
-      setMerchants(
-        snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    if (mainTab === 0) {
+      const q = query(
+        collection(db, "merchants"),
+        where("status", "==", currentStatus)
       );
-    });
-  }, [currentStatus]);
-
-  /* ===== SEARCH FILTER ===== */
-  const filteredMerchants = useMemo(() => {
-    if (!search.trim()) return merchants;
-
-    const s = search.toLowerCase();
-
-    return merchants.filter((m) => {
-      return (
-        (m.shopName || "").toLowerCase().includes(s) ||
-        (m.mobile || "").includes(s)
+      return onSnapshot(q, (snap) =>
+        setMerchants(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
       );
-    });
-  }, [search, merchants]);
+    }
 
-  /* ===== ACTIONS ===== */
-  const approve = async (id) => {
-    await updateDoc(doc(db, "merchants", id), {
-      status: "approved",
-      approvedAt: new Date(),
+    if (mainTab === 1) {
+      return onSnapshot(collection(db, "offers"), (snap) =>
+        setOffers(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      );
+    }
+
+    if (mainTab === 2) {
+      return onSnapshot(collection(db, "customers"), (snap) =>
+        setCustomers(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      );
+    }
+  }, [mainTab, currentStatus]);
+
+  /* =========================================================
+     FILTERING
+  ========================================================= */
+
+  const applyFilters = (list) => {
+    return list.filter((item) => {
+      if (search) {
+        const s = search.toLowerCase();
+        if (
+          !JSON.stringify(item).toLowerCase().includes(s)
+        )
+          return false;
+      }
+
+      if (testOnly && item.isTest !== true) return false;
+
+      if (dateFrom && item.createdAt?.toDate) {
+        if (item.createdAt.toDate() < new Date(dateFrom))
+          return false;
+      }
+
+      return true;
     });
   };
 
+  const data =
+    mainTab === 0
+      ? applyFilters(merchants)
+      : mainTab === 1
+      ? applyFilters(offers)
+      : applyFilters(customers);
+
+  /* =========================================================
+     SELECTION
+  ========================================================= */
+
+  const toggle = (id) =>
+    setSelected((p) => ({ ...p, [id]: !p[id] }));
+
+  const selectAll = () => {
+    const all = {};
+    data.forEach((d) => (all[d.id] = true));
+    setSelected(all);
+  };
+
+  const clearSelection = () => setSelected({});
+
+  const selectedIds = Object.keys(selected).filter((k) => selected[k]);
+
+  /* =========================================================
+     BULK DELETE
+  ========================================================= */
+
+  const bulkDelete = async () => {
+    if (!selectedIds.length) return alert("No records selected");
+    if (!window.confirm(`Delete ${selectedIds.length} records?`)) return;
+
+    const col =
+      mainTab === 0
+        ? "merchants"
+        : mainTab === 1
+        ? "offers"
+        : "customers";
+
+    const batch = writeBatch(db);
+    selectedIds.forEach((id) =>
+      batch.delete(doc(db, col, id))
+    );
+
+    await batch.commit();
+    clearSelection();
+  };
+
+  /* =========================================================
+     MERCHANT ACTIONS
+  ========================================================= */
+
+  const approve = async (id) =>
+    updateDoc(doc(db, "merchants", id), {
+      status: "approved",
+      approvedAt: new Date(),
+    });
+
   const confirmReject = async () => {
-    if (!reason.trim()) {
-      alert("Rejection reason is required");
-      return;
-    }
+    if (!reason.trim()) return alert("Reason required");
 
     await updateDoc(doc(db, "merchants", rejectingMerchant.id), {
       status: "rejected",
@@ -101,121 +193,154 @@ export default function AdminDashboard() {
     window.location.href = "/login";
   };
 
+  /* =========================================================
+     UI
+  ========================================================= */
+
   return (
     <Box sx={{ p: 2 }}>
-      <Button variant="outlined" color="error" onClick={logout}>
+      <Button color="error" onClick={logout}>
         Logout
       </Button>
 
-      <Typography variant="h6" sx={{ mt: 2 }}>
+      <Typography variant="h6" sx={{ mt: 1 }}>
         Admin Dashboard
       </Typography>
 
-      {/* ===== SEARCH ===== */}
-      <TextField
-        fullWidth
-        placeholder="Search by shop name or mobile number"
-        sx={{ mt: 2 }}
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
-
-      {/* ===== TABS ===== */}
-      <Tabs
-        value={tab}
-        onChange={(_, v) => setTab(v)}
-        sx={{ mt: 2 }}
-      >
-        <Tab label="Pending" />
-        <Tab label="Approved" />
-        <Tab label="Rejected" />
+      {/* MAIN TABS */}
+      <Tabs value={mainTab} onChange={(_, v) => setMainTab(v)}>
+        <Tab label="Merchants" />
+        <Tab label="Offers" />
+        <Tab label="Customers" />
       </Tabs>
+
+      {/* MERCHANT STATUS TABS */}
+      {mainTab === 0 && (
+        <Tabs
+          value={statusTab}
+          onChange={(_, v) => setStatusTab(v)}
+          sx={{ mt: 1 }}
+        >
+          <Tab label="Pending" />
+          <Tab label="Approved" />
+          <Tab label="Rejected" />
+        </Tabs>
+      )}
 
       <Divider sx={{ my: 2 }} />
 
-      {filteredMerchants.length === 0 && (
-        <Typography>No merchants found</Typography>
-      )}
+      {/* FILTERS */}
+      <Stack direction="row" spacing={2}>
+        <TextField
+          placeholder="Search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
 
-      {filteredMerchants.map((m) => (
-        <Card key={m.id} sx={{ my: 1 }}>
-          <CardContent>
-            <Typography fontWeight="bold">
-              {m.shopName || "Unnamed Shop"}
-            </Typography>
+        <TextField
+          type="date"
+          label="Created After"
+          InputLabelProps={{ shrink: true }}
+          value={dateFrom}
+          onChange={(e) => setDateFrom(e.target.value)}
+        />
 
-            <Typography variant="body2">{m.mobile}</Typography>
-            <Typography variant="body2">{m.category}</Typography>
+        <Checkbox
+          checked={testOnly}
+          onChange={(e) => setTestOnly(e.target.checked)}
+        />
+        <Typography>Test Only</Typography>
+      </Stack>
 
-            {m.status === "rejected" && (
-              <Typography
-                variant="body2"
-                sx={{ color: "error.main", mt: 1 }}
-              >
-                ❌ {m.rejectionReason}
+      {/* BULK ACTIONS */}
+      <Box sx={{ mt: 2 }}>
+        <Button onClick={selectAll}>Select All</Button>
+        <Button
+          color="error"
+          variant="contained"
+          onClick={bulkDelete}
+          disabled={!selectedIds.length}
+        >
+          Delete Selected ({selectedIds.length})
+        </Button>
+      </Box>
+
+      <Divider sx={{ my: 2 }} />
+
+      {/* LIST */}
+      {data.map((d) => (
+        <Card key={d.id} sx={{ mb: 1 }}>
+          <CardContent sx={{ display: "flex", gap: 2 }}>
+            <Checkbox
+              checked={!!selected[d.id]}
+              onChange={() => toggle(d.id)}
+            />
+
+            <Box>
+              <Typography fontWeight="bold">
+                {d.shopName || d.title || d.id}
               </Typography>
-            )}
 
-            {m.status === "pending" && (
-              <Box sx={{ mt: 1, display: "flex", gap: 1 }}>
-                <Button
-                  variant="contained"
-                  color="success"
-                  onClick={() => approve(m.id)}
-                >
-                  Approve
-                </Button>
+              {d.mobile && (
+                <Typography variant="body2">
+                  {d.mobile}
+                </Typography>
+              )}
 
-                <Button
-                  variant="outlined"
-                  color="error"
-                  onClick={() => {
-                    setRejectingMerchant(m);
-                    setReason("");
-                  }}
-                >
-                  Reject
-                </Button>
-              </Box>
-            )}
+              {d.category && (
+                <Typography variant="body2">
+                  {d.category}
+                </Typography>
+              )}
+
+              {/* MERCHANT ACTIONS */}
+              {mainTab === 0 && d.status === "pending" && (
+                <Box sx={{ mt: 1 }}>
+                  <Button
+                    size="small"
+                    onClick={() => approve(d.id)}
+                  >
+                    Approve
+                  </Button>
+                  <Button
+                    size="small"
+                    color="error"
+                    onClick={() => {
+                      setRejectingMerchant(d);
+                      setReason("");
+                    }}
+                  >
+                    Reject
+                  </Button>
+                </Box>
+              )}
+            </Box>
           </CardContent>
         </Card>
       ))}
 
-      {/* ===== REJECT DIALOG ===== */}
+      {/* REJECT DIALOG */}
       <Dialog
         open={Boolean(rejectingMerchant)}
         onClose={() => setRejectingMerchant(null)}
-        fullWidth
       >
         <DialogTitle>Reject Merchant</DialogTitle>
-
         <DialogContent>
-          <Typography sx={{ mb: 1 }}>
-            Reason for rejecting{" "}
-            <strong>{rejectingMerchant?.shopName}</strong>
-          </Typography>
-
           <TextField
             fullWidth
             multiline
             rows={3}
-            placeholder="Enter rejection reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
+            placeholder="Reason"
           />
         </DialogContent>
-
         <DialogActions>
           <Button onClick={() => setRejectingMerchant(null)}>
             Cancel
           </Button>
-          <Button
-            color="error"
-            variant="contained"
-            onClick={confirmReject}
-          >
-            Reject Merchant
+          <Button color="error" onClick={confirmReject}>
+            Reject
           </Button>
         </DialogActions>
       </Dialog>
