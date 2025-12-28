@@ -173,6 +173,23 @@ export default function CustomerDashboard() {
           m.lat,
           m.lng
         );
+        // 🔔 FIRE GEOFENCE EVENT (300 meters)
+if (d * 1000 <= (m.geofenceRadius || 300)) {
+  const eventId = `${customerId}_${o.merchantId}`;
+
+  setDoc(
+    doc(db, "geo_events", eventId),
+    {
+      customerId,
+      merchantId: o.merchantId,
+      distanceMeters: Math.round(d * 1000),
+      createdAt: new Date(),
+      notified: false,
+    },
+    { merge: true }
+  );
+}
+
         if (d > radiusKm + GPS_BUFFER_KM) return null;
 
         return {
