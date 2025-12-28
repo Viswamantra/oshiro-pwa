@@ -25,7 +25,7 @@ import MerchantOffers from "./MerchantOffers";
 /* 🔔 FCM */
 import { getMessaging, getToken } from "firebase/messaging";
 
-const VAPID_KEY = "PASTE_YOUR_VAPID_PUBLIC_KEY_HERE";
+const VAPID_KEY = "BEzJ7FJ2GYuDTL7DS2B4EACTBp_vX9M3rS-cV-0Va1df8ouzOD-8qwUuwn3eHtI609065jtuon9pWVUyBoY-0CU";
 
 const CATEGORIES = [
   "Food",
