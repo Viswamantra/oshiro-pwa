@@ -1,238 +1,155 @@
+/* =========================================================
+   FIREBASE CLOUD FUNCTIONS – OSHIRO
+   Geofence → Merchant Push Notification
+========================================================= */
+
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
-const bcrypt = require("bcryptjs");
 
 admin.initializeApp();
+
 const db = admin.firestore();
+const messaging = admin.messaging();
 
 /* =========================================================
-   DISTANCE (HAVERSINE)
+   CONFIGURATION
 ========================================================= */
-function distanceKm(lat1, lon1, lat2, lon2) {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1 * Math.PI / 180) *
-      Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLon / 2) ** 2;
-  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+const GEOFENCE_RADIUS_METERS = 300;
+const COOLDOWN_MINUTES = 30;
+
+/* =========================================================
+   HELPER: CHECK COOLDOWN
+========================================================= */
+async function isInCooldown(merchantId) {
+  const ref = db.collection("merchant_alerts").doc(merchantId);
+  const snap = await ref.get();
+
+  if (!snap.exists) return false;
+
+  const lastAlert = snap.data().lastAlertAt.toDate();
+  const diffMinutes =
+    (Date.now() - lastAlert.getTime()) / (1000 * 60);
+
+  return diffMinutes < COOLDOWN_MINUTES;
 }
 
 /* =========================================================
-   CONFIG
+   HELPER: UPDATE ALERT TIME
 ========================================================= */
-const GEOFENCE_KM = 1;
-const COOLDOWN_MINUTES = 30;
-const MAX_PIN_ATTEMPTS = 5;
+async function updateAlertTime(merchantId) {
+  await db.collection("merchant_alerts").doc(merchantId).set({
+    lastAlertAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+}
 
 /* =========================================================
-   🔍 CHECK USER EXISTS
+   MAIN FUNCTION
+   Triggered when customer enters geofence
 ========================================================= */
-exports.checkUserExists = functions.https.onCall(async ({ mobile }) => {
-  if (!/^\d{10}$/.test(mobile)) {
-    return { exists: false };
-  }
+exports.sendMerchantGeofenceAlert = functions.firestore
+  .document("geo_events/{eventId}")
+  .onCreate(async (snap, context) => {
+    try {
+      const event = snap.data();
 
-  const snap = await db.collection("users").doc(mobile).get();
-  return { exists: snap.exists };
-});
+      const {
+        merchantId,
+        customerId,
+        distanceMeters,
+        customerName = "A customer",
+      } = event;
 
-/* =========================================================
-   🔐 SET / RESET 4-DIGIT PIN
-   (Customer OR Merchant)
-========================================================= */
-exports.setUserPin = functions.https.onCall(async ({ mobile, pin, role }) => {
-  try {
-    if (!/^\d{10}$/.test(mobile)) {
-      return { success: false, message: "Invalid mobile number" };
-    }
+      // ❌ Ignore if outside geofence
+      if (distanceMeters > GEOFENCE_RADIUS_METERS) {
+        return null;
+      }
 
-    if (!/^\d{4}$/.test(pin)) {
-      return { success: false, message: "PIN must be 4 digits" };
-    }
+      // ⏳ Cooldown protection
+      const cooldown = await isInCooldown(merchantId);
+      if (cooldown) {
+        console.log("Cooldown active. Notification skipped.");
+        return null;
+      }
 
-    const ref = db.collection("users").doc(mobile);
-    const snap = await ref.get();
+      // 🔍 Fetch merchant
+      const merchantRef = db.collection("merchants").doc(merchantId);
+      const merchantSnap = await merchantRef.get();
 
-    const pinHash = await bcrypt.hash(pin, 10);
+      if (!merchantSnap.exists) {
+        console.error("Merchant not found");
+        return null;
+      }
 
-    // Preserve existing role (merchant stays merchant)
-    const finalRole = snap.exists
-      ? snap.data().role || "customer"
-      : role || "customer";
+      const merchant = merchantSnap.data();
 
-    await ref.set(
-      {
-        mobile,
-        role: finalRole,
-        pinHash,
-        pinAttempts: 0,
-        status: "active",
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        createdAt: snap.exists
-          ? snap.data().createdAt
-          : admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
+      if (!merchant.fcmToken) {
+        console.error("Merchant FCM token missing");
+        return null;
+      }
 
-    return { success: true, role: finalRole };
-  } catch (err) {
-    console.error("setUserPin error:", err);
-    return { success: false, message: "Failed to set PIN" };
-  }
-});
-
-/* =========================================================
-   🔐 PIN LOGIN (CUSTOMER + MERCHANT)
-========================================================= */
-exports.verifyPinLogin = functions.https.onCall(async ({ mobile, pin }) => {
-  try {
-    if (!/^\d{10}$/.test(mobile) || !/^\d{4}$/.test(pin)) {
-      return { success: false, message: "Invalid input" };
-    }
-
-    const ref = db.collection("users").doc(mobile);
-    const snap = await ref.get();
-
-    if (!snap.exists) {
-      return { success: false, message: "User not registered" };
-    }
-
-    const user = snap.data();
-
-    if (user.pinAttempts >= MAX_PIN_ATTEMPTS) {
-      return {
-        success: false,
-        message: "Account locked. Try again later",
+      /* =========================================================
+         PUSH PAYLOAD
+      ========================================================= */
+      const payload = {
+        notification: {
+          title: "👣 Customer Nearby!",
+          body: `${customerName} is within 300 meters. Tap to send an offer.`,
+        },
+        data: {
+          merchantId: merchantId,
+          customerId: customerId,
+          type: "GEOFENCE_ALERT",
+        },
+        android: {
+          priority: "high",
+          notification: {
+            sound: "default",
+          },
+        },
+        webpush: {
+          headers: {
+            Urgency: "high",
+          },
+        },
       };
-    }
 
-    const isValid = await bcrypt.compare(pin, user.pinHash);
+      // 🚀 Send Push
+      await messaging.sendToDevice(merchant.fcmToken, payload);
 
-    if (!isValid) {
-      await ref.update({
-        pinAttempts: admin.firestore.FieldValue.increment(1),
+      // 🕒 Update cooldown timestamp
+      await updateAlertTime(merchantId);
+
+      // ✅ Mark event as notified
+      await snap.ref.update({
+        notified: true,
+        notifiedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
-      return { success: false, message: "Wrong PIN" };
+
+      console.log("Push notification sent successfully");
+      return null;
+    } catch (error) {
+      console.error("Error sending notification:", error);
+      return null;
     }
-
-    // Reset attempts
-    await ref.update({ pinAttempts: 0 });
-
-    return {
-      success: true,
-      role: user.role || "customer",
-    };
-  } catch (err) {
-    console.error("verifyPinLogin error:", err);
-    return { success: false, message: "Server error" };
-  }
-});
+  });
 
 /* =========================================================
-   📍 GEOFENCE + PUSH NOTIFICATIONS
+   OPTIONAL: CLEANUP OLD GEO EVENTS (CRON – DAILY)
 ========================================================= */
-exports.notifyOnGeofenceEnter = functions.firestore
-  .document("users/{userId}")
-  .onUpdate(async (change, context) => {
-    const before = change.before.data();
-    const after = change.after.data();
-    const userId = context.params.userId;
-
-    if (!after?.lat || !after?.lng) return null;
-    if (!after?.fcmToken) return null;
-    if (after.pushEnabled === false) return null;
-
-    if (before?.lat === after.lat && before?.lng === after.lng) {
-      return null;
-    }
-
-    const now = Date.now();
-
-    if (
-      after.lastPushAt &&
-      now - after.lastPushAt < COOLDOWN_MINUTES * 60 * 1000
-    ) {
-      return null;
-    }
-
-    const userCategories = Array.isArray(after.categories)
-      ? after.categories
-      : [];
-
-    const merchantsSnap = await db
-      .collection("merchants")
-      .where("status", "==", "approved")
+exports.cleanupOldGeoEvents = functions.pubsub
+  .schedule("every 24 hours")
+  .onRun(async () => {
+    const snapshot = await db
+      .collection("geo_events")
+      .where("createdAt", "<", admin.firestore.Timestamp.fromMillis(
+        Date.now() - 24 * 60 * 60 * 1000
+      ))
       .get();
 
-    if (merchantsSnap.empty) return null;
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
 
-    const offersSnap = await db
-      .collection("offers")
-      .where("active", "==", true)
-      .get();
-
-    if (offersSnap.empty) return null;
-
-    const offersByMerchant = {};
-
-    offersSnap.forEach((doc) => {
-      const o = doc.data();
-      if (
-        userCategories.length > 0 &&
-        !userCategories.includes(o.category)
-      )
-        return;
-
-      if (!offersByMerchant[o.merchantId]) {
-        offersByMerchant[o.merchantId] = [];
-      }
-      offersByMerchant[o.merchantId].push(o);
-    });
-
-    let notifiedMerchantId = null;
-    let payload = null;
-
-    for (const mDoc of merchantsSnap.docs) {
-      const m = mDoc.data();
-      const merchantId = mDoc.id;
-
-      if (!m.lat || !m.lng) continue;
-      if (!offersByMerchant[merchantId]) continue;
-      if (after.lastNotifiedMerchantId === merchantId) continue;
-
-      const dist = distanceKm(after.lat, after.lng, m.lat, m.lng);
-
-      if (dist <= GEOFENCE_KM) {
-        payload = {
-          title: `Offers near ${m.shopName}`,
-          body:
-            offersByMerchant[merchantId]
-              .map((o) => o.title)
-              .slice(0, 2)
-              .join(", ") || "New offer available",
-        };
-        notifiedMerchantId = merchantId;
-        break;
-      }
-    }
-
-    if (!payload) return null;
-
-    await admin.messaging().send({
-      token: after.fcmToken,
-      notification: payload,
-      android: { priority: "high" },
-      data: { merchantId: notifiedMerchantId },
-    });
-
-    await db.doc(`users/${userId}`).update({
-      lastPushAt: now,
-      lastNotifiedMerchantId: notifiedMerchantId,
-    });
-
+    console.log("Old geo events cleaned up");
     return null;
   });
