@@ -285,11 +285,13 @@ export default function CustomerDashboard() {
               {o.category} • {o.distanceLabel}
             </Typography>
 
-            {o.expiryDate && (
-              <Typography variant="caption" color="error">
-                ⏰ Valid till{" "}
-                {o.expiryDate.toDate().toLocaleDateString("en-IN")}
-              </Typography>
+            {o.expiryDate?.toDate?.() && (
+  <Typography variant="caption" color="error">
+    ⏰ Valid till{" "}
+    {o.expiryDate.toDate().toLocaleDateString("en-IN")}
+  </Typography>
+)}
+
             )}
           </CardContent>
         </Card>
