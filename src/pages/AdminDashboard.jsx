@@ -25,6 +25,8 @@ import {
   doc,
   writeBatch,
   getCountFromServer,
+  deleteDoc,
+  orderBy,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
@@ -44,10 +46,7 @@ function StatCard({ label, value, onClick }) {
   return (
     <Card
       onClick={onClick}
-      sx={{
-        cursor: "pointer",
-        "&:hover": { boxShadow: 6 },
-      }}
+      sx={{ cursor: "pointer", "&:hover": { boxShadow: 6 } }}
     >
       <CardContent>
         <Typography variant="caption">{label}</Typography>
@@ -70,13 +69,14 @@ export default function AdminDashboard() {
   }
 
   /* ===== TABS ===== */
-  const [mainTab, setMainTab] = useState(0); // 0=Merchants,1=Offers,2=Customers
+  const [mainTab, setMainTab] = useState(0); // 0=Merchants,1=Offers,2=Customers,3=Geo
   const [statusTab, setStatusTab] = useState(0);
 
   /* ===== DATA ===== */
   const [merchants, setMerchants] = useState([]);
   const [offers, setOffers] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [geoEvents, setGeoEvents] = useState([]);
 
   /* ===== SELECTION ===== */
   const [selected, setSelected] = useState({});
@@ -114,20 +114,33 @@ export default function AdminDashboard() {
           setMerchants(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
       );
     }
+
     if (mainTab === 1) {
       return onSnapshot(collection(db, "offers"), (snap) =>
         setOffers(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
       );
     }
+
     if (mainTab === 2) {
       return onSnapshot(collection(db, "customers"), (snap) =>
         setCustomers(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
       );
     }
+
+    if (mainTab === 3) {
+      return onSnapshot(
+        query(
+          collection(db, "geo_events"),
+          orderBy("createdAt", "desc")
+        ),
+        (snap) =>
+          setGeoEvents(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      );
+    }
   }, [mainTab, currentStatus]);
 
   /* =========================================================
-     LOAD STATS (REUSABLE)
+     LOAD STATS
   ========================================================= */
   const loadStats = async () => {
     const merchantsSnap = await getCountFromServer(collection(db, "merchants"));
@@ -194,7 +207,13 @@ export default function AdminDashboard() {
      FILTERED DATA
   ========================================================= */
   const raw =
-    mainTab === 0 ? merchants : mainTab === 1 ? offers : customers;
+    mainTab === 0
+      ? merchants
+      : mainTab === 1
+      ? offers
+      : mainTab === 2
+      ? customers
+      : geoEvents;
 
   const data = useMemo(() => {
     return raw.filter((d) => {
@@ -229,13 +248,19 @@ export default function AdminDashboard() {
     if (!window.confirm(`Delete ${selectedIds.length} records?`)) return;
 
     const col =
-      mainTab === 0 ? "merchants" : mainTab === 1 ? "offers" : "customers";
+      mainTab === 0
+        ? "merchants"
+        : mainTab === 1
+        ? "offers"
+        : mainTab === 2
+        ? "customers"
+        : "geo_events";
 
     const batch = writeBatch(db);
     selectedIds.forEach((id) => batch.delete(doc(db, col, id)));
     await batch.commit();
     setSelected({});
-    await loadStats(); // 🔥 refresh cards immediately
+    await loadStats();
   };
 
   /* =========================================================
@@ -283,7 +308,7 @@ export default function AdminDashboard() {
         <StatCard label="Approved" value={stats.approvedMerchants} onClick={() => { setMainTab(0); setStatusTab(1); }} />
         <StatCard label="Customers" value={stats.customers} onClick={() => setMainTab(2)} />
         <StatCard label="Active Offers" value={stats.offers} onClick={() => setMainTab(1)} />
-        <StatCard label="Geo Events Today" value={stats.geoToday} onClick={() => setMainTab(1)} />
+        <StatCard label="Geo Events Today" value={stats.geoToday} onClick={() => setMainTab(3)} />
       </Box>
 
       {/* ===== GEO CHART ===== */}
@@ -306,6 +331,7 @@ export default function AdminDashboard() {
         <Tab label="Merchants" />
         <Tab label="Offers" />
         <Tab label="Customers" />
+        <Tab label="Geo Events" />
       </Tabs>
 
       {mainTab === 0 && (
@@ -343,10 +369,29 @@ export default function AdminDashboard() {
           <CardContent sx={{ display: "flex", gap: 2 }}>
             <Checkbox checked={!!selected[d.id]} onChange={() => toggle(d.id)} />
             <Box>
-              <Typography fontWeight="bold">{d.shopName || d.title || d.id}</Typography>
-              {d.mobile && <Typography>{d.mobile}</Typography>}
+              <Typography fontWeight="bold">
+                {d.shopName || d.title || d.merchantId || d.id}
+              </Typography>
 
-              {/* OFFER EXPIRY (ADMIN) */}
+              {d.customerId && (
+                <Typography variant="body2">
+                  Customer: {d.customerId}
+                </Typography>
+              )}
+
+              {d.distanceMeters && (
+                <Typography variant="body2">
+                  Distance: {d.distanceMeters} m
+                </Typography>
+              )}
+
+              {d.createdAt?.toDate && (
+                <Typography variant="caption">
+                  {d.createdAt.toDate().toLocaleString("en-IN")}
+                </Typography>
+              )}
+
+              {/* OFFER EXPIRY EDIT */}
               {mainTab === 1 && (
                 <TextField
                   type="date"
