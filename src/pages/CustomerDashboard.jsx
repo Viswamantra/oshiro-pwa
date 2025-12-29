@@ -60,7 +60,7 @@ export default function CustomerDashboard() {
   };
 
   const stored = JSON.parse(localStorage.getItem("oshiro_user") || "{}");
-  const customerId = stored.mobile; // use mobile as ID
+  const customerId = stored.mobile;
 
   const [offers, setOffers] = useState([]);
   const [merchantsMap, setMerchantsMap] = useState({});
@@ -76,7 +76,7 @@ export default function CustomerDashboard() {
   const lastLocationWrite = useRef(0);
 
   /* =========================
-     LIVE GPS (CLIENT)
+     LIVE GPS
   ========================= */
   useEffect(() => {
     if (!navigator.geolocation) return;
@@ -97,15 +97,12 @@ export default function CustomerDashboard() {
   }, []);
 
   /* =========================
-     🔔 SEND LOCATION TO FIRESTORE
-     (Triggers Cloud Function)
+     SAVE CUSTOMER LOCATION
   ========================= */
   useEffect(() => {
     if (!customerLoc || !customerId) return;
 
     const now = Date.now();
-
-    // throttle: once every 60 seconds
     if (now - lastLocationWrite.current < 60 * 1000) return;
     lastLocationWrite.current = now;
 
@@ -125,9 +122,7 @@ export default function CustomerDashboard() {
   ========================= */
   useEffect(() => {
     return onSnapshot(collection(db, "categories"), (snap) => {
-      setCategories(
-        snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-      );
+      setCategories(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
   }, []);
 
@@ -156,7 +151,7 @@ export default function CustomerDashboard() {
   }, []);
 
   /* =========================
-     FILTER OFFERS
+     FILTER & GEOFENCE
   ========================= */
   const nearbyOffers = useMemo(() => {
     if (!customerLoc) return [];
@@ -173,22 +168,22 @@ export default function CustomerDashboard() {
           m.lat,
           m.lng
         );
-        // 🔔 FIRE GEOFENCE EVENT (300 meters)
-if (d * 1000 <= (m.geofenceRadius || 300)) {
-  const eventId = `${customerId}_${o.merchantId}`;
 
-  setDoc(
-    doc(db, "geo_events", eventId),
-    {
-      customerId,
-      merchantId: o.merchantId,
-      distanceMeters: Math.round(d * 1000),
-      createdAt: new Date(),
-      notified: false,
-    },
-    { merge: true }
-  );
-}
+        // 🔔 GEO EVENT TRIGGER
+        if (d * 1000 <= (m.geofenceRadius || 300)) {
+          const eventId = `${customerId}_${o.merchantId}`;
+          setDoc(
+            doc(db, "geo_events", eventId),
+            {
+              customerId,
+              merchantId: o.merchantId,
+              distanceMeters: Math.round(d * 1000),
+              createdAt: new Date(),
+              notified: false,
+            },
+            { merge: true }
+          );
+        }
 
         if (d > radiusKm + GPS_BUFFER_KM) return null;
 
@@ -248,24 +243,33 @@ if (d * 1000 <= (m.geofenceRadius || 300)) {
         </TextField>
       </Box>
 
+      {/* ===== OFFER LIST ===== */}
       {nearbyOffers.map((o) => (
         <Card
           key={o.id}
-          sx={{ mb: 1 }}
+          sx={{ mb: 1, cursor: "pointer" }}
           onClick={() => setSelectedOffer(o)}
         >
           <CardContent>
             <Typography>
               <strong>{o.merchant.shopName}</strong> — {o.title}
             </Typography>
+
             <Typography variant="body2">
               {o.category} • {o.distanceLabel}
             </Typography>
+
+            {o.expiryDate && (
+              <Typography variant="caption" color="error">
+                ⏰ Valid till{" "}
+                {o.expiryDate.toDate().toLocaleDateString("en-IN")}
+              </Typography>
+            )}
           </CardContent>
         </Card>
       ))}
 
-      {/* ===== OFFER DIALOG ===== */}
+      {/* ===== OFFER POPUP ===== */}
       <Dialog
         open={Boolean(selectedOffer)}
         onClose={() => setSelectedOffer(null)}
@@ -277,6 +281,23 @@ if (d * 1000 <= (m.geofenceRadius || 300)) {
               <Typography>
                 {selectedOffer.merchant.shopName}
               </Typography>
+
+              {selectedOffer.description && (
+                <Typography sx={{ mt: 1 }}>
+                  {selectedOffer.description}
+                </Typography>
+              )}
+
+              {selectedOffer.expiryDate && (
+                <Typography sx={{ mt: 1 }} color="error">
+                  ⏰ Offer valid till{" "}
+                  <strong>
+                    {selectedOffer.expiryDate
+                      .toDate()
+                      .toLocaleString("en-IN")}
+                  </strong>
+                </Typography>
+              )}
             </DialogContent>
 
             <DialogActions>
