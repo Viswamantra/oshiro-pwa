@@ -74,6 +74,7 @@ export default function CustomerDashboard() {
   const [selectedOffer, setSelectedOffer] = useState(null);
 
   const lastLocationWrite = useRef(0);
+  const lastGeoFire = useRef({}); // cooldown per merchant
 
   /* =========================
      LIVE GPS
@@ -151,7 +152,48 @@ export default function CustomerDashboard() {
   }, []);
 
   /* =========================
-     FILTER & GEOFENCE
+     🔔 FIRE GEO EVENTS (SIDE EFFECT)
+  ========================= */
+  useEffect(() => {
+    if (!customerLoc || !customerId) return;
+
+    offers.forEach((o) => {
+      const m = merchantsMap[o.merchantId];
+      if (!m?.lat || !m?.lng) return;
+
+      const d = distanceKm(
+        customerLoc.lat,
+        customerLoc.lng,
+        m.lat,
+        m.lng
+      );
+
+      const radius = m.geofenceRadius || 300;
+      if (d * 1000 > radius) return;
+
+      // cooldown: 30 minutes per merchant
+      const last = lastGeoFire.current[o.merchantId] || 0;
+      if (Date.now() - last < 30 * 60 * 1000) return;
+      lastGeoFire.current[o.merchantId] = Date.now();
+
+      const eventId = `${customerId}_${o.merchantId}`;
+
+      setDoc(
+        doc(db, "geo_events", eventId),
+        {
+          customerId,
+          merchantId: o.merchantId,
+          distanceMeters: Math.round(d * 1000),
+          createdAt: new Date(),
+          notified: false,
+        },
+        { merge: true }
+      );
+    });
+  }, [customerLoc, offers, merchantsMap, customerId]);
+
+  /* =========================
+     FILTER OFFERS (PURE)
   ========================= */
   const nearbyOffers = useMemo(() => {
     if (!customerLoc) return [];
@@ -168,22 +210,6 @@ export default function CustomerDashboard() {
           m.lat,
           m.lng
         );
-
-        // 🔔 GEO EVENT TRIGGER
-        if (d * 1000 <= (m.geofenceRadius || 300)) {
-          const eventId = `${customerId}_${o.merchantId}`;
-          setDoc(
-            doc(db, "geo_events", eventId),
-            {
-              customerId,
-              merchantId: o.merchantId,
-              distanceMeters: Math.round(d * 1000),
-              createdAt: new Date(),
-              notified: false,
-            },
-            { merge: true }
-          );
-        }
 
         if (d > radiusKm + GPS_BUFFER_KM) return null;
 
