@@ -153,3 +153,38 @@ exports.cleanupOldGeoEvents = functions.pubsub
     console.log("Old geo events cleaned up");
     return null;
   });
+/* =========================================================
+   AUTO-EXPIRE OFFERS (CRON JOB)
+========================================================= */
+
+exports.autoExpireOffers = functions.pubsub
+  .schedule("every 10 minutes")
+  .onRun(async () => {
+    const now = admin.firestore.Timestamp.now();
+
+    const snapshot = await admin
+      .firestore()
+      .collection("offers")
+      .where("active", "==", true)
+      .where("expiryDate", "<=", now)
+      .get();
+
+    if (snapshot.empty) {
+      console.log("No expired offers found");
+      return null;
+    }
+
+    const batch = admin.firestore().batch();
+
+    snapshot.docs.forEach((doc) => {
+      batch.update(doc.ref, {
+        active: false,
+        expiredAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+
+    await batch.commit();
+
+    console.log(`Expired ${snapshot.size} offers`);
+    return null;
+  });
