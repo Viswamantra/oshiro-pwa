@@ -316,15 +316,17 @@ export default function CustomerDashboard() {
                 </Typography>
               )}
 
-              {selectedOffer.expiryDate && (
-                <Typography sx={{ mt: 1 }} color="error">
-                  ⏰ Offer valid till{" "}
-                  <strong>
-                    {selectedOffer.expiryDate
-                      .toDate()
-                      .toLocaleString("en-IN")}
-                  </strong>
-                </Typography>
+              {selectedOffer.expiryDate?.toDate?.() && (
+  <Typography sx={{ mt: 1 }} color="error">
+    ⏰ Offer valid till{" "}
+    <strong>
+      {selectedOffer.expiryDate
+        .toDate()
+        .toLocaleString("en-IN")}
+    </strong>
+  </Typography>
+)}
+
               )}
             </DialogContent>
 
