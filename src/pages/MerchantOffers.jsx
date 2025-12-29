@@ -23,6 +23,7 @@ export default function MerchantOffers({ merchant }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [discountText, setDiscountText] = useState("");
+  const [expiryDate, setExpiryDate] = useState("");
   const [offers, setOffers] = useState([]);
 
   /* ===== LOAD EXISTING OFFERS ===== */
@@ -39,10 +40,13 @@ export default function MerchantOffers({ merchant }) {
 
   /* ===== CREATE OFFER ===== */
   const createOffer = async () => {
-    if (!title || !discountText) {
-      alert("Offer title and discount are required");
+    if (!title || !discountText || !expiryDate) {
+      alert("Offer title, discount, and expiry date are required");
       return;
     }
+
+    const expiry = new Date(expiryDate);
+    expiry.setHours(23, 59, 59, 999); // valid till end of day
 
     await addDoc(collection(db, "offers"), {
       merchantId: merchant.id,
@@ -52,13 +56,16 @@ export default function MerchantOffers({ merchant }) {
       title,
       description,
       discountText,
+      expiryDate: expiry,       // ✅ IMPORTANT
       active: true,
       createdAt: new Date(),
     });
 
+    // Reset form
     setTitle("");
     setDescription("");
     setDiscountText("");
+    setExpiryDate("");
   };
 
   /* ===== TOGGLE OFFER ===== */
@@ -69,10 +76,12 @@ export default function MerchantOffers({ merchant }) {
   return (
     <Box sx={{ mt: 4 }}>
       <Divider />
+
       <Typography variant="h6" sx={{ mt: 2 }}>
         Create New Offer
       </Typography>
 
+      {/* ===== CREATE OFFER FORM ===== */}
       <Card sx={{ my: 2 }}>
         <CardContent>
           <TextField
@@ -84,8 +93,10 @@ export default function MerchantOffers({ merchant }) {
           />
 
           <TextField
-            label="Description (optional)"
+            label="Description (shown to customer)"
             fullWidth
+            multiline
+            rows={2}
             sx={{ mt: 2 }}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -99,34 +110,64 @@ export default function MerchantOffers({ merchant }) {
             onChange={(e) => setDiscountText(e.target.value)}
           />
 
-          <Button sx={{ mt: 2 }} variant="contained" onClick={createOffer}>
+          <TextField
+            type="date"
+            label="Offer Expiry Date"
+            fullWidth
+            sx={{ mt: 2 }}
+            InputLabelProps={{ shrink: true }}
+            value={expiryDate}
+            onChange={(e) => setExpiryDate(e.target.value)}
+            helperText="Offer will automatically expire on this date"
+          />
+
+          <Button
+            sx={{ mt: 3 }}
+            variant="contained"
+            onClick={createOffer}
+          >
             Publish Offer
           </Button>
         </CardContent>
       </Card>
 
       {/* ===== LIST OFFERS ===== */}
-      <Typography variant="subtitle1">Your Offers</Typography>
+      <Typography variant="subtitle1" sx={{ mt: 3 }}>
+        Your Offers
+      </Typography>
 
       {offers.map((o) => (
         <Card key={o.id} sx={{ my: 1 }}>
           <CardContent>
-            <Typography>
-              <strong>{o.title}</strong>
-            </Typography>
-            <Typography variant="body2">
+            <Typography fontWeight="bold">{o.title}</Typography>
+
+            {o.description && (
+              <Typography variant="body2" sx={{ mt: 0.5 }}>
+                {o.description}
+              </Typography>
+            )}
+
+            <Typography variant="body2" sx={{ mt: 0.5 }}>
               {o.discountText}
             </Typography>
 
-            <Button
-              sx={{ mt: 1 }}
-              size="small"
-              variant="outlined"
-              color={o.active ? "error" : "success"}
-              onClick={() => toggleOffer(o.id, o.active)}
-            >
-              {o.active ? "Disable" : "Enable"}
-            </Button>
+            {o.expiryDate && (
+              <Typography variant="caption" color="error">
+                ⏰ Valid till{" "}
+                {o.expiryDate.toDate().toLocaleDateString("en-IN")}
+              </Typography>
+            )}
+
+            <Box sx={{ mt: 1 }}>
+              <Button
+                size="small"
+                variant="outlined"
+                color={o.active ? "error" : "success"}
+                onClick={() => toggleOffer(o.id, o.active)}
+              >
+                {o.active ? "Disable" : "Enable"}
+              </Button>
+            </Box>
           </CardContent>
         </Card>
       ))}
