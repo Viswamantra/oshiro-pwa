@@ -69,20 +69,21 @@ export default function MerchantDashboard() {
 
     return onSnapshot(q, async (snap) => {
       if (!snap.empty) {
-        const data = snap.docs[0].data();
+        const docSnap = snap.docs[0];
+        const data = docSnap.data();
 
-        // 🔒 AUTO-FIX BAD RADIUS (CRITICAL)
+        // 🔒 AUTO-FIX BAD RADIUS
         if (
           typeof data.geofenceRadius !== "number" ||
           data.geofenceRadius < 100
         ) {
-          await updateDoc(doc(db, "merchants", snap.docs[0].id), {
+          await updateDoc(doc(db, "merchants", docSnap.id), {
             geofenceRadius: 300,
           });
           data.geofenceRadius = 300;
         }
 
-        setMerchant({ id: snap.docs[0].id, ...data });
+        setMerchant({ id: docSnap.id, ...data });
       } else {
         const ref = await addDoc(collection(db, "merchants"), {
           mobile,
@@ -112,7 +113,7 @@ export default function MerchantDashboard() {
   }, [mobile]);
 
   /* =========================================================
-     🔔 REGISTER FCM TOKEN (MERCHANT)
+     🔔 REGISTER FCM TOKEN
   ========================================================= */
   useEffect(() => {
     if (!merchant?.id) return;
@@ -146,12 +147,9 @@ export default function MerchantDashboard() {
   const updateField = async (field, value) => {
     if (!merchant?.id) return;
 
-    // 🔒 BLOCK INVALID GEOFENCE
-    if (field === "geofenceRadius") {
-      if (typeof value !== "number" || value < 100) {
-        alert("Geofence radius must be at least 100 meters");
-        return;
-      }
+    if (field === "geofenceRadius" && value < 100) {
+      alert("Geofence radius must be at least 100 meters");
+      return;
     }
 
     await updateDoc(doc(db, "merchants", merchant.id), {
@@ -159,7 +157,7 @@ export default function MerchantDashboard() {
     });
 
     setMsg("Saved successfully");
-    setTimeout(() => setMsg(""), 2000);
+    setTimeout(() => setMsg(""), 1500);
   };
 
   if (!merchant) {
@@ -171,14 +169,12 @@ export default function MerchantDashboard() {
   const isApproved = merchant.status === "approved";
   const isRejected = merchant.status === "rejected";
 
-  /* ===== VALIDATION ===== */
-  const isProfileComplete = () =>
+  const isProfileComplete =
     merchant.shopName &&
     merchant.address &&
     merchant.category &&
     typeof merchant.lat === "number" &&
     typeof merchant.lng === "number" &&
-    typeof merchant.geofenceRadius === "number" &&
     merchant.geofenceRadius >= 100;
 
   return (
@@ -191,24 +187,17 @@ export default function MerchantDashboard() {
         Merchant Dashboard
       </Typography>
 
-      {/* ===== STATUS ===== */}
       <Typography sx={{ mt: 1 }}>
-        Status:{" "}
-        <strong>
-          {merchant.status === "draft" && "Draft (Not Submitted)"}
-          {merchant.status === "pending" && "Pending Admin Approval"}
-          {merchant.status === "approved" && "Approved"}
-          {merchant.status === "rejected" && "Rejected"}
-        </strong>
+        Status: <strong>{merchant.status.toUpperCase()}</strong>
       </Typography>
 
       {isRejected && (
-        <Typography sx={{ mt: 1, color: "error.main" }}>
-          ❌ Rejected by Admin: {merchant.rejectionReason}
+        <Typography color="error">
+          ❌ Rejected: {merchant.rejectionReason}
         </Typography>
       )}
 
-      {msg && <Typography sx={{ color: "green" }}>{msg}</Typography>}
+      {msg && <Typography color="green">{msg}</Typography>}
 
       {/* ===== BUSINESS DETAILS ===== */}
       <Card sx={{ my: 2 }}>
@@ -265,7 +254,7 @@ export default function MerchantDashboard() {
       {/* ===== GEOFENCE ===== */}
       <Card sx={{ my: 2 }}>
         <CardContent>
-          <Typography variant="subtitle1">Geofence Settings</Typography>
+          <Typography variant="subtitle1">Geofence</Typography>
 
           <TextField
             label="Latitude"
@@ -286,15 +275,15 @@ export default function MerchantDashboard() {
           />
 
           <TextField
-            label="Geofence Radius (meters)"
+            label="Radius (meters)"
             type="number"
             fullWidth
             sx={{ mt: 2 }}
-            value={merchant.geofenceRadius ?? 300}
+            value={merchant.geofenceRadius}
             onChange={(e) =>
               updateField("geofenceRadius", Number(e.target.value))
             }
-            helperText="Minimum 100 meters (recommended 300m)"
+            helperText="Minimum 100m (recommended 300m)"
             disabled={isPending || isApproved}
           />
 
@@ -302,51 +291,38 @@ export default function MerchantDashboard() {
             sx={{ mt: 2 }}
             variant="outlined"
             disabled={isPending || isApproved}
-            onClick={() => {
+            onClick={() =>
               navigator.geolocation.getCurrentPosition((pos) => {
                 updateField("lat", pos.coords.latitude);
                 updateField("lng", pos.coords.longitude);
-                updateField("geofenceRadius", 300); // 🔒 auto-fix
-              });
-            }}
+                updateField("geofenceRadius", 300);
+              })
+            }
           >
             📍 Use Current Location
           </Button>
         </CardContent>
       </Card>
 
-      {/* ===== SUBMIT / RESUBMIT ===== */}
+      {/* ===== SUBMIT ===== */}
       {!isApproved && (
-        <>
-          <Button
-            fullWidth
-            sx={{ mt: 3 }}
-            variant="contained"
-            disabled={isPending || !isProfileComplete()}
-            onClick={() => updateField("status", "pending")}
-          >
-            {isPending
-              ? "Waiting for Admin Approval"
-              : isRejected
-              ? "Re-Submit for Approval"
-              : "Submit for Admin Approval"}
-          </Button>
-
-          {!isProfileComplete() && !isPending && (
-            <Typography sx={{ mt: 1, color: "red" }}>
-              ⚠️ Complete shop name, address, category, location, and geofence radius (≥100m).
-            </Typography>
-          )}
-        </>
+        <Button
+          fullWidth
+          sx={{ mt: 2 }}
+          variant="contained"
+          disabled={!isProfileComplete || isPending}
+          onClick={() => updateField("status", "pending")}
+        >
+          Submit for Admin Approval
+        </Button>
       )}
 
-      {/* ===== OFFER CREATION ===== */}
+      {/* ===== OFFERS ===== */}
       {isApproved && (
         <>
           <Typography sx={{ mt: 3, color: "green" }}>
-            ✅ Approved by Admin. You can now create offers.
+            ✅ Approved — You can create offers
           </Typography>
-
           <MerchantOffers merchant={merchant} />
         </>
       )}
