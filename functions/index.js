@@ -231,3 +231,61 @@ exports.autoExpireOffers = functions.pubsub
     console.log(`⏰ Auto-expired ${snap.size} offers`);
     return null;
   });
+
+/* =========================================================
+   ADMIN TEST PUSH NOTIFICATION
+========================================================= */
+exports.sendTestNotification = functions.firestore
+  .document("notifications_test/{docId}")
+  .onCreate(async (snap) => {
+    try {
+      const { merchantId } = snap.data();
+
+      if (!merchantId) return null;
+
+      const merchantSnap = await db
+        .collection("merchants")
+        .doc(merchantId)
+        .get();
+
+      if (!merchantSnap.exists) {
+        console.error("Merchant not found");
+        return null;
+      }
+
+      const merchant = merchantSnap.data();
+
+      if (!merchant.fcmToken) {
+        console.error("FCM token missing");
+        return null;
+      }
+
+      const message = {
+        token: merchant.fcmToken,
+        notification: {
+          title: "🔔 Test Notification",
+          body: "Admin test push is working successfully 🎉",
+        },
+        android: {
+          priority: "high",
+          notification: {
+            sound: "default",
+          },
+        },
+        webpush: {
+          headers: {
+            Urgency: "high",
+          },
+        },
+      };
+
+      await messaging.send(message);
+
+      console.log("✅ Test push sent to merchant:", merchantId);
+
+      return null;
+    } catch (err) {
+      console.error("❌ Test push failed:", err);
+      return null;
+    }
+  });
