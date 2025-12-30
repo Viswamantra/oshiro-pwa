@@ -1,6 +1,6 @@
 /* =========================================================
    FIREBASE CLOUD FUNCTIONS – OSHIRO
-   Geofence → Merchant Push Notification
+   GeoFence → Merchant Push Notification
 ========================================================= */
 
 const functions = require("firebase-functions");
@@ -12,13 +12,14 @@ const db = admin.firestore();
 const messaging = admin.messaging();
 
 /* =========================================================
-   CONFIGURATION
+   CONFIG
 ========================================================= */
-const GEOFENCE_RADIUS_METERS = 300;
 const COOLDOWN_MINUTES = 30;
+const MIN_GEOFENCE_RADIUS = 100;
+const DEFAULT_GEOFENCE_RADIUS = 300;
 
 /* =========================================================
-   HELPER: CHECK COOLDOWN
+   HELPER: COOLDOWN CHECK
 ========================================================= */
 async function isInCooldown(merchantId) {
   const ref = db.collection("merchant_alerts").doc(merchantId);
@@ -34,7 +35,7 @@ async function isInCooldown(merchantId) {
 }
 
 /* =========================================================
-   HELPER: UPDATE ALERT TIME
+   HELPER: UPDATE COOLDOWN
 ========================================================= */
 async function updateAlertTime(merchantId) {
   await db.collection("merchant_alerts").doc(merchantId).set({
@@ -43,148 +44,190 @@ async function updateAlertTime(merchantId) {
 }
 
 /* =========================================================
-   MAIN FUNCTION
-   Triggered when customer enters geofence
+   🔔 GEO EVENT → PUSH NOTIFICATION
 ========================================================= */
 exports.sendMerchantGeofenceAlert = functions.firestore
   .document("geo_events/{eventId}")
-  .onCreate(async (snap, context) => {
+  .onCreate(async (snap) => {
     try {
       const event = snap.data();
+      if (!event) return null;
 
       const {
         merchantId,
         customerId,
         distanceMeters,
-        customerName = "A customer",
+        notified,
       } = event;
 
-      // ❌ Ignore if outside geofence
-      if (distanceMeters > GEOFENCE_RADIUS_METERS) {
-        return null;
-      }
-
-      // ⏳ Cooldown protection
-      const cooldown = await isInCooldown(merchantId);
-      if (cooldown) {
-        console.log("Cooldown active. Notification skipped.");
-        return null;
-      }
+      // ❌ Ignore duplicates
+      if (notified === true) return null;
 
       // 🔍 Fetch merchant
       const merchantRef = db.collection("merchants").doc(merchantId);
       const merchantSnap = await merchantRef.get();
 
       if (!merchantSnap.exists) {
-        console.error("Merchant not found");
+        console.error("❌ Merchant not found");
         return null;
       }
 
       const merchant = merchantSnap.data();
 
+      // 🔐 Determine effective geofence radius
+      const geofenceRadius =
+        typeof merchant.geofenceRadius === "number" &&
+        merchant.geofenceRadius >= MIN_GEOFENCE_RADIUS
+          ? merchant.geofenceRadius
+          : DEFAULT_GEOFENCE_RADIUS;
+
+      // ❌ Outside geofence
+      if (distanceMeters > geofenceRadius) return null;
+
+      // ❌ No FCM token
       if (!merchant.fcmToken) {
-        console.error("Merchant FCM token missing");
+        console.error("❌ Merchant FCM token missing");
+        return null;
+      }
+
+      // ⏳ Cooldown
+      const cooldown = await isInCooldown(merchantId);
+      if (cooldown) {
+        console.log("⏳ Cooldown active, skipping alert");
         return null;
       }
 
       /* =========================================================
-         PUSH PAYLOAD
+         PUSH MESSAGE
       ========================================================= */
-      const payload = {
+      const message = {
+        token: merchant.fcmToken,
         notification: {
           title: "👣 Customer Nearby!",
-          body: `${customerName} is within 300 meters. Tap to send an offer.`,
+          body: `A customer is within ${distanceMeters} meters of your shop`,
         },
         data: {
-          merchantId: merchantId,
-          customerId: customerId,
           type: "GEOFENCE_ALERT",
+          merchantId,
+          customerId,
         },
         android: {
           priority: "high",
-          notification: {
-            sound: "default",
-          },
+          notification: { sound: "default" },
         },
         webpush: {
-          headers: {
-            Urgency: "high",
-          },
+          headers: { Urgency: "high" },
         },
       };
 
-      // 🚀 Send Push
-      await messaging.sendToDevice(merchant.fcmToken, payload);
+      // 🚀 SEND PUSH
+      await messaging.send(message);
 
-      // 🕒 Update cooldown timestamp
+      // 🕒 Update cooldown
       await updateAlertTime(merchantId);
 
-      // ✅ Mark event as notified
+      // ✅ Mark geo event
       await snap.ref.update({
         notified: true,
         notifiedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
-      console.log("Push notification sent successfully");
+      console.log("✅ Geo alert sent to merchant");
       return null;
-    } catch (error) {
-      console.error("Error sending notification:", error);
+    } catch (err) {
+      console.error("🔥 Geo alert error:", err);
       return null;
     }
   });
 
 /* =========================================================
-   OPTIONAL: CLEANUP OLD GEO EVENTS (CRON – DAILY)
+   🔔 ADMIN TEST NOTIFICATION
+========================================================= */
+exports.sendTestNotification = functions.firestore
+  .document("notifications_test/{id}")
+  .onCreate(async (snap) => {
+    try {
+      const { merchantId } = snap.data();
+      if (!merchantId) return null;
+
+      const merchantSnap = await db
+        .collection("merchants")
+        .doc(merchantId)
+        .get();
+
+      if (!merchantSnap.exists) return null;
+
+      const merchant = merchantSnap.data();
+      if (!merchant.fcmToken) return null;
+
+      const message = {
+        token: merchant.fcmToken,
+        notification: {
+          title: "🔔 OshirO Test Notification",
+          body: "Push notifications are working correctly!",
+        },
+        data: {
+          type: "ADMIN_TEST",
+        },
+      };
+
+      await messaging.send(message);
+      console.log("✅ Test notification sent");
+      return null;
+    } catch (err) {
+      console.error("🔥 Test notification error:", err);
+      return null;
+    }
+  });
+
+/* =========================================================
+   🧹 CLEANUP OLD GEO EVENTS (24h)
 ========================================================= */
 exports.cleanupOldGeoEvents = functions.pubsub
   .schedule("every 24 hours")
   .onRun(async () => {
-    const snapshot = await db
+    const cutoff = admin.firestore.Timestamp.fromMillis(
+      Date.now() - 24 * 60 * 60 * 1000
+    );
+
+    const snap = await db
       .collection("geo_events")
-      .where("createdAt", "<", admin.firestore.Timestamp.fromMillis(
-        Date.now() - 24 * 60 * 60 * 1000
-      ))
+      .where("createdAt", "<", cutoff)
       .get();
 
     const batch = db.batch();
-    snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+    snap.docs.forEach((d) => batch.delete(d.ref));
     await batch.commit();
 
-    console.log("Old geo events cleaned up");
+    console.log("🧹 Old geo events cleaned");
     return null;
   });
-/* =========================================================
-   AUTO-EXPIRE OFFERS (CRON JOB)
-========================================================= */
 
+/* =========================================================
+   ⏰ AUTO-EXPIRE OFFERS
+========================================================= */
 exports.autoExpireOffers = functions.pubsub
   .schedule("every 10 minutes")
   .onRun(async () => {
     const now = admin.firestore.Timestamp.now();
 
-    const snapshot = await admin
-      .firestore()
+    const snap = await db
       .collection("offers")
       .where("active", "==", true)
       .where("expiryDate", "<=", now)
       .get();
 
-    if (snapshot.empty) {
-      console.log("No expired offers found");
-      return null;
-    }
+    if (snap.empty) return null;
 
-    const batch = admin.firestore().batch();
-
-    snapshot.docs.forEach((doc) => {
-      batch.update(doc.ref, {
+    const batch = db.batch();
+    snap.docs.forEach((d) =>
+      batch.update(d.ref, {
         active: false,
         expiredAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-    });
+      })
+    );
 
     await batch.commit();
-
-    console.log(`Expired ${snapshot.size} offers`);
+    console.log(`⏰ Auto-expired ${snap.size} offers`);
     return null;
   });
