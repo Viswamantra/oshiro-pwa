@@ -168,7 +168,10 @@ export default function CustomerDashboard() {
         m.lng
       );
 
-      const radius = m.geofenceRadius || 300;
+      const radius =
+  typeof m.geofenceRadius === "number" && m.geofenceRadius > 0
+    ? m.geofenceRadius
+    : 300;
       if (d * 1000 > radius) return;
 
       // cooldown: 30 minutes per merchant
