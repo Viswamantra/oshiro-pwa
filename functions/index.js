@@ -44,7 +44,7 @@ async function updateAlertTime(merchantId) {
 }
 
 /* =========================================================
-   🔔 GEO EVENT → PUSH NOTIFICATION
+   🔔 GEO EVENT → MERCHANT PUSH
 ========================================================= */
 exports.sendMerchantGeofenceAlert = functions.firestore
   .document("geo_events/{eventId}")
@@ -60,10 +60,8 @@ exports.sendMerchantGeofenceAlert = functions.firestore
         notified,
       } = event;
 
-      // ❌ Ignore duplicates
       if (notified === true) return null;
 
-      // 🔍 Fetch merchant
       const merchantRef = db.collection("merchants").doc(merchantId);
       const merchantSnap = await merchantRef.get();
 
@@ -74,65 +72,58 @@ exports.sendMerchantGeofenceAlert = functions.firestore
 
       const merchant = merchantSnap.data();
 
-      // 🔐 Determine effective geofence radius
       const geofenceRadius =
         typeof merchant.geofenceRadius === "number" &&
         merchant.geofenceRadius >= MIN_GEOFENCE_RADIUS
           ? merchant.geofenceRadius
           : DEFAULT_GEOFENCE_RADIUS;
 
-      // ❌ Outside geofence
       if (distanceMeters > geofenceRadius) return null;
 
-      // ❌ No FCM token
       if (!merchant.fcmToken) {
-        console.error("❌ Merchant FCM token missing");
+        console.error("❌ FCM token missing");
         return null;
       }
 
-      // ⏳ Cooldown
       const cooldown = await isInCooldown(merchantId);
       if (cooldown) {
-        console.log("⏳ Cooldown active, skipping alert");
+        console.log("⏳ Cooldown active");
         return null;
       }
 
-      /* =========================================================
-         PUSH MESSAGE
-      ========================================================= */
+      /* ================== PUSH PAYLOAD (FIXED) ================== */
       const message = {
         token: merchant.fcmToken,
         notification: {
           title: "👣 Customer Nearby!",
           body: `A customer is within ${distanceMeters} meters of your shop`,
         },
+        webpush: {
+          notification: {
+            title: "👣 Customer Nearby!",
+            body: `A customer is within ${distanceMeters} meters of your shop`,
+            icon: "/logo192.png",
+            badge: "/logo192.png",
+            requireInteraction: true,
+          },
+        },
         data: {
           type: "GEOFENCE_ALERT",
           merchantId,
           customerId,
         },
-        android: {
-          priority: "high",
-          notification: { sound: "default" },
-        },
-        webpush: {
-          headers: { Urgency: "high" },
-        },
       };
 
-      // 🚀 SEND PUSH
       await messaging.send(message);
 
-      // 🕒 Update cooldown
       await updateAlertTime(merchantId);
 
-      // ✅ Mark geo event
       await snap.ref.update({
         notified: true,
         notifiedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
-      console.log("✅ Geo alert sent to merchant");
+      console.log("✅ Geo push sent to merchant:", merchantId);
       return null;
     } catch (err) {
       console.error("🔥 Geo alert error:", err);
@@ -141,10 +132,10 @@ exports.sendMerchantGeofenceAlert = functions.firestore
   });
 
 /* =========================================================
-   🔔 ADMIN TEST NOTIFICATION
+   🔔 ADMIN TEST PUSH (SINGLE SOURCE OF TRUTH)
 ========================================================= */
-exports.sendTestNotification = functions.firestore
-  .document("notifications_test/{id}")
+exports.sendAdminTestNotification = functions.firestore
+  .document("notifications_test/{docId}")
   .onCreate(async (snap) => {
     try {
       const { merchantId } = snap.data();
@@ -164,24 +155,29 @@ exports.sendTestNotification = functions.firestore
         token: merchant.fcmToken,
         notification: {
           title: "🔔 OshirO Test Notification",
-          body: "Push notifications are working correctly!",
+          body: "Push notifications are working 🎉",
         },
-        data: {
-          type: "ADMIN_TEST",
+        webpush: {
+          notification: {
+            title: "🔔 OshirO Test Notification",
+            body: "Push notifications are working 🎉",
+            icon: "/logo192.png",
+            requireInteraction: true,
+          },
         },
       };
 
       await messaging.send(message);
-      console.log("✅ Test notification sent");
+      console.log("✅ Admin test push sent");
       return null;
     } catch (err) {
-      console.error("🔥 Test notification error:", err);
+      console.error("❌ Test push error:", err);
       return null;
     }
   });
 
 /* =========================================================
-   🧹 CLEANUP OLD GEO EVENTS (24h)
+   🧹 CLEANUP OLD GEO EVENTS
 ========================================================= */
 exports.cleanupOldGeoEvents = functions.pubsub
   .schedule("every 24 hours")
@@ -228,64 +224,7 @@ exports.autoExpireOffers = functions.pubsub
     );
 
     await batch.commit();
+
     console.log(`⏰ Auto-expired ${snap.size} offers`);
     return null;
-  });
-
-/* =========================================================
-   ADMIN TEST PUSH NOTIFICATION
-========================================================= */
-exports.sendTestNotification = functions.firestore
-  .document("notifications_test/{docId}")
-  .onCreate(async (snap) => {
-    try {
-      const { merchantId } = snap.data();
-
-      if (!merchantId) return null;
-
-      const merchantSnap = await db
-        .collection("merchants")
-        .doc(merchantId)
-        .get();
-
-      if (!merchantSnap.exists) {
-        console.error("Merchant not found");
-        return null;
-      }
-
-      const merchant = merchantSnap.data();
-
-      if (!merchant.fcmToken) {
-        console.error("FCM token missing");
-        return null;
-      }
-
-      const message = {
-        token: merchant.fcmToken,
-        notification: {
-          title: "🔔 Test Notification",
-          body: "Admin test push is working successfully 🎉",
-        },
-        android: {
-          priority: "high",
-          notification: {
-            sound: "default",
-          },
-        },
-        webpush: {
-          headers: {
-            Urgency: "high",
-          },
-        },
-      };
-
-      await messaging.send(message);
-
-      console.log("✅ Test push sent to merchant:", merchantId);
-
-      return null;
-    } catch (err) {
-      console.error("❌ Test push failed:", err);
-      return null;
-    }
   });
