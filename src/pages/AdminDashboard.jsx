@@ -26,7 +26,7 @@ import {
   writeBatch,
   getCountFromServer,
   orderBy,
-  addDoc, // 🔔 REQUIRED
+  addDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
@@ -59,8 +59,7 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
 
   /* ===== ROLE GUARD ===== */
-  const role = localStorage.getItem("oshiro_role");
-  if (role !== "admin") {
+  if (localStorage.getItem("oshiro_role") !== "admin") {
     navigate("/login", { replace: true });
     return null;
   }
@@ -78,9 +77,8 @@ export default function AdminDashboard() {
   /* ===== SELECTION ===== */
   const [selected, setSelected] = useState({});
 
-  /* ===== FILTERS ===== */
+  /* ===== FILTER ===== */
   const [search, setSearch] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
 
   /* ===== REJECT ===== */
   const [rejectingMerchant, setRejectingMerchant] = useState(null);
@@ -106,23 +104,23 @@ export default function AdminDashboard() {
     if (mainTab === 0) {
       return onSnapshot(
         query(collection(db, "merchants"), where("status", "==", currentStatus)),
-        (snap) => setMerchants(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+        (snap) => setMerchants(snap.docs.map(d => ({ id: d.id, ...d.data() })))
       );
     }
     if (mainTab === 1) {
       return onSnapshot(collection(db, "offers"), (snap) =>
-        setOffers(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+        setOffers(snap.docs.map(d => ({ id: d.id, ...d.data() })))
       );
     }
     if (mainTab === 2) {
       return onSnapshot(collection(db, "customers"), (snap) =>
-        setCustomers(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+        setCustomers(snap.docs.map(d => ({ id: d.id, ...d.data() })))
       );
     }
     if (mainTab === 3) {
       return onSnapshot(
         query(collection(db, "geo_events"), orderBy("createdAt", "desc")),
-        (snap) => setGeoEvents(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+        (snap) => setGeoEvents(snap.docs.map(d => ({ id: d.id, ...d.data() })))
       );
     }
   }, [mainTab, currentStatus]);
@@ -130,112 +128,79 @@ export default function AdminDashboard() {
   /* =========================================================
      LOAD STATS
   ========================================================= */
-  const loadStats = async () => {
-    const merchantsSnap = await getCountFromServer(collection(db, "merchants"));
-    const approvedSnap = await getCountFromServer(
-      query(collection(db, "merchants"), where("status", "==", "approved"))
-    );
-    const customersSnap = await getCountFromServer(collection(db, "customers"));
-    const offersSnap = await getCountFromServer(
-      query(collection(db, "offers"), where("active", "==", true))
-    );
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const geoTodaySnap = await getCountFromServer(
-      query(collection(db, "geo_events"), where("createdAt", ">=", today))
-    );
-
-    setStats({
-      merchants: merchantsSnap.data().count,
-      approvedMerchants: approvedSnap.data().count,
-      customers: customersSnap.data().count,
-      offers: offersSnap.data().count,
-      geoToday: geoTodaySnap.data().count,
-    });
-  };
-
   useEffect(() => {
-    loadStats();
+    (async () => {
+      const merchantsSnap = await getCountFromServer(collection(db, "merchants"));
+      const approvedSnap = await getCountFromServer(
+        query(collection(db, "merchants"), where("status", "==", "approved"))
+      );
+      const customersSnap = await getCountFromServer(collection(db, "customers"));
+      const offersSnap = await getCountFromServer(
+        query(collection(db, "offers"), where("active", "==", true))
+      );
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const geoTodaySnap = await getCountFromServer(
+        query(collection(db, "geo_events"), where("createdAt", ">=", today))
+      );
+
+      setStats({
+        merchants: merchantsSnap.data().count,
+        approvedMerchants: approvedSnap.data().count,
+        customers: customersSnap.data().count,
+        offers: offersSnap.data().count,
+        geoToday: geoTodaySnap.data().count,
+      });
+    })();
   }, []);
 
   /* =========================================================
-     GEO CHART
-  ========================================================= */
-  useEffect(() => {
-    const loadChart = async () => {
-      const arr = [];
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        d.setHours(0, 0, 0, 0);
-        const next = new Date(d);
-        next.setDate(next.getDate() + 1);
-
-        const snap = await getCountFromServer(
-          query(
-            collection(db, "geo_events"),
-            where("createdAt", ">=", d),
-            where("createdAt", "<", next)
-          )
-        );
-
-        arr.push({
-          day: d.toLocaleDateString("en-IN", { weekday: "short" }),
-          count: snap.data().count,
-        });
-      }
-      setGeoChart(arr);
-    };
-    loadChart();
-  }, []);
-
-  /* =========================================================
-     FILTERED DATA
+     FILTER + DATA
   ========================================================= */
   const raw =
-    mainTab === 0 ? merchants : mainTab === 1 ? offers : mainTab === 2 ? customers : geoEvents;
+    mainTab === 0 ? merchants :
+    mainTab === 1 ? offers :
+    mainTab === 2 ? customers :
+    geoEvents;
 
   const data = useMemo(() => {
-    return raw.filter((d) => {
-      if (search && !JSON.stringify(d).toLowerCase().includes(search.toLowerCase()))
-        return false;
-      if (dateFrom && d.createdAt?.toDate) {
-        if (d.createdAt.toDate() < new Date(dateFrom)) return false;
-      }
-      return true;
-    });
-  }, [raw, search, dateFrom]);
+    return raw.filter(d =>
+      !search || JSON.stringify(d).toLowerCase().includes(search.toLowerCase())
+    );
+  }, [raw, search]);
 
   /* =========================================================
      SELECTION
   ========================================================= */
-  const toggle = (id) => setSelected((p) => ({ ...p, [id]: !p[id] }));
+  const toggle = (id) => setSelected(p => ({ ...p, [id]: !p[id] }));
   const selectAll = () => {
     const s = {};
-    data.forEach((d) => (s[d.id] = true));
+    data.forEach(d => s[d.id] = true);
     setSelected(s);
   };
   const deselectAll = () => setSelected({});
-  const selectedIds = Object.keys(selected).filter((k) => selected[k]);
+  const selectedIds = Object.keys(selected).filter(k => selected[k]);
 
   const bulkDelete = async () => {
     if (!selectedIds.length) return;
     if (!window.confirm(`Delete ${selectedIds.length} records?`)) return;
 
     const col =
-      mainTab === 0 ? "merchants" : mainTab === 1 ? "offers" : mainTab === 2 ? "customers" : "geo_events";
+      mainTab === 0 ? "merchants" :
+      mainTab === 1 ? "offers" :
+      mainTab === 2 ? "customers" :
+      "geo_events";
 
     const batch = writeBatch(db);
-    selectedIds.forEach((id) => batch.delete(doc(db, col, id)));
+    selectedIds.forEach(id => batch.delete(doc(db, col, id)));
     await batch.commit();
     setSelected({});
-    await loadStats();
   };
 
   /* =========================================================
-     MERCHANT ACTIONS
+     ACTIONS
   ========================================================= */
   const approve = async (id) =>
     updateDoc(doc(db, "merchants", id), {
@@ -252,7 +217,6 @@ export default function AdminDashboard() {
     });
     setRejectingMerchant(null);
     setReason("");
-    await loadStats();
   };
 
   const logout = () => {
@@ -269,7 +233,7 @@ export default function AdminDashboard() {
 
       <Typography variant="h6" sx={{ mt: 1 }}>Admin Dashboard</Typography>
 
-      {/* ===== STATS ===== */}
+      {/* STATS */}
       <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 2, my: 2 }}>
         <StatCard label="Merchants" value={stats.merchants} onClick={() => { setMainTab(0); setStatusTab(0); }} />
         <StatCard label="Approved" value={stats.approvedMerchants} onClick={() => { setMainTab(0); setStatusTab(1); }} />
@@ -278,7 +242,7 @@ export default function AdminDashboard() {
         <StatCard label="Geo Events Today" value={stats.geoToday} onClick={() => setMainTab(3)} />
       </Box>
 
-      {/* ===== MAIN TABS ===== */}
+      {/* TABS */}
       <Tabs value={mainTab} onChange={(_, v) => setMainTab(v)}>
         <Tab label="Merchants" />
         <Tab label="Offers" />
@@ -296,120 +260,62 @@ export default function AdminDashboard() {
 
       <Divider sx={{ my: 2 }} />
 
-      {/* ===== ACTIONS ===== */}
-      <Button onClick={selectAll}>Select All</Button>
-      <Button onClick={deselectAll}>Deselect All</Button>
-      <Button color="error" variant="contained" onClick={bulkDelete} disabled={!selectedIds.length}>
-        Delete Selected ({selectedIds.length})
-      </Button>
+      {/* ACTIONS */}
+      <Stack direction="row" spacing={2}>
+        <Button onClick={selectAll}>Select All</Button>
+        <Button onClick={deselectAll}>Deselect All</Button>
+        <Button color="error" variant="contained" onClick={bulkDelete} disabled={!selectedIds.length}>
+          Delete Selected ({selectedIds.length})
+        </Button>
+      </Stack>
 
       <Divider sx={{ my: 2 }} />
 
-      {/* ===== LIST ===== */}
-      {data.map((d) => (
-  <Card key={d.id} sx={{ mb: 1 }}>
-    <CardContent sx={{ display: "flex", gap: 2 }}>
-      
-      {/* ✅ CHECKBOX (RESTORED) */}
-      <Checkbox
-        checked={!!selected[d.id]}
-        onChange={() => toggle(d.id)}
-      />
+      {/* LIST */}
+      {data.map(d => (
+        <Card key={d.id} sx={{ mb: 1 }}>
+          <CardContent sx={{ display: "flex", gap: 2 }}>
+            <Checkbox checked={!!selected[d.id]} onChange={() => toggle(d.id)} />
 
-      <Box>
-        <Typography fontWeight="bold">
-          {d.shopName || d.title || d.merchantId || d.id}
-        </Typography>
+            <Box>
+              <Typography fontWeight="bold">
+                {d.shopName || d.title || d.merchantId || d.id}
+              </Typography>
 
-        {/* GEO EVENT DETAILS */}
-        {d.customerId && (
-          <Typography variant="body2">
-            Customer: {d.customerId}
-          </Typography>
-        )}
+              {d.customerId && <Typography>Customer: {d.customerId}</Typography>}
+              {d.distanceMeters && <Typography>Distance: {d.distanceMeters} m</Typography>}
 
-        {d.distanceMeters && (
-          <Typography variant="body2">
-            Distance: {d.distanceMeters} m
-          </Typography>
-        )}
-
-        {d.createdAt?.toDate && (
-          <Typography variant="caption">
-            {d.createdAt.toDate().toLocaleString("en-IN")}
-          </Typography>
-        )}
-
-        {/* 🔔 TEST NOTIFICATION BUTTON */}
-        {mainTab === 0 && d.status === "approved" && (
-          <Button
-            size="small"
-            sx={{ mt: 1 }}
-            variant="outlined"
-            onClick={async () => {
-              await addDoc(collection(db, "notifications_test"), {
-                merchantId: d.id,
-                createdAt: new Date(),
-              });
-              alert("🔔 Test notification sent");
-            }}
-          >
-            🔔 Send Test Notification
-          </Button>
-        )}
-
-        {/* MERCHANT APPROVAL ACTIONS */}
-        {mainTab === 0 && d.status === "pending" && (
-          <Box sx={{ mt: 1 }}>
-            <Button onClick={() => approve(d.id)}>Approve</Button>
-            <Button
-              color="error"
-              onClick={() => {
-                setRejectingMerchant(d);
-                setReason("");
-              }}
-            >
-              Reject
-            </Button>
-          </Box>
-        )}
-      </Box>
-    </CardContent>
-  </Card>
-))}
-
-
-            {/* 🔔 TEST NOTIFICATION BUTTON */}
-            {mainTab === 0 && d.status === "approved" && (
-              <Button
-                size="small"
-                sx={{ mt: 1 }}
-                variant="outlined"
-                onClick={async () => {
-                  await addDoc(collection(db, "notifications_test"), {
-                    merchantId: d.id,
-                    createdAt: new Date(),
-                  });
-                  alert("🔔 Test notification sent");
-                }}
-              >
-                🔔 Send Test Notification
-              </Button>
-            )}
-
-            {mainTab === 0 && d.status === "pending" && (
-              <Box sx={{ mt: 1 }}>
-                <Button onClick={() => approve(d.id)}>Approve</Button>
-                <Button color="error" onClick={() => { setRejectingMerchant(d); setReason(""); }}>
-                  Reject
+              {mainTab === 0 && d.status === "approved" && (
+                <Button
+                  size="small"
+                  sx={{ mt: 1 }}
+                  variant="outlined"
+                  onClick={async () => {
+                    await addDoc(collection(db, "notifications_test"), {
+                      merchantId: d.id,
+                      createdAt: new Date(),
+                    });
+                    alert("🔔 Test notification sent");
+                  }}
+                >
+                  🔔 Send Test Notification
                 </Button>
-              </Box>
-            )}
+              )}
+
+              {mainTab === 0 && d.status === "pending" && (
+                <Box sx={{ mt: 1 }}>
+                  <Button onClick={() => approve(d.id)}>Approve</Button>
+                  <Button color="error" onClick={() => { setRejectingMerchant(d); setReason(""); }}>
+                    Reject
+                  </Button>
+                </Box>
+              )}
+            </Box>
           </CardContent>
         </Card>
       ))}
 
-      {/* ===== REJECT DIALOG ===== */}
+      {/* REJECT DIALOG */}
       <Dialog open={Boolean(rejectingMerchant)} onClose={() => setRejectingMerchant(null)}>
         <DialogTitle>Reject Merchant</DialogTitle>
         <DialogContent>
