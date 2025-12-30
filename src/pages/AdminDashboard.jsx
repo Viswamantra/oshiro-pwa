@@ -307,11 +307,77 @@ export default function AdminDashboard() {
 
       {/* ===== LIST ===== */}
       {data.map((d) => (
-        <Card key={d.id} sx={{ mb: 1 }}>
-          <CardContent>
-            <Typography fontWeight="bold">
-              {d.shopName || d.title || d.merchantId || d.id}
-            </Typography>
+  <Card key={d.id} sx={{ mb: 1 }}>
+    <CardContent sx={{ display: "flex", gap: 2 }}>
+      
+      {/* ✅ CHECKBOX (RESTORED) */}
+      <Checkbox
+        checked={!!selected[d.id]}
+        onChange={() => toggle(d.id)}
+      />
+
+      <Box>
+        <Typography fontWeight="bold">
+          {d.shopName || d.title || d.merchantId || d.id}
+        </Typography>
+
+        {/* GEO EVENT DETAILS */}
+        {d.customerId && (
+          <Typography variant="body2">
+            Customer: {d.customerId}
+          </Typography>
+        )}
+
+        {d.distanceMeters && (
+          <Typography variant="body2">
+            Distance: {d.distanceMeters} m
+          </Typography>
+        )}
+
+        {d.createdAt?.toDate && (
+          <Typography variant="caption">
+            {d.createdAt.toDate().toLocaleString("en-IN")}
+          </Typography>
+        )}
+
+        {/* 🔔 TEST NOTIFICATION BUTTON */}
+        {mainTab === 0 && d.status === "approved" && (
+          <Button
+            size="small"
+            sx={{ mt: 1 }}
+            variant="outlined"
+            onClick={async () => {
+              await addDoc(collection(db, "notifications_test"), {
+                merchantId: d.id,
+                createdAt: new Date(),
+              });
+              alert("🔔 Test notification sent");
+            }}
+          >
+            🔔 Send Test Notification
+          </Button>
+        )}
+
+        {/* MERCHANT APPROVAL ACTIONS */}
+        {mainTab === 0 && d.status === "pending" && (
+          <Box sx={{ mt: 1 }}>
+            <Button onClick={() => approve(d.id)}>Approve</Button>
+            <Button
+              color="error"
+              onClick={() => {
+                setRejectingMerchant(d);
+                setReason("");
+              }}
+            >
+              Reject
+            </Button>
+          </Box>
+        )}
+      </Box>
+    </CardContent>
+  </Card>
+))}
+
 
             {/* 🔔 TEST NOTIFICATION BUTTON */}
             {mainTab === 0 && d.status === "approved" && (
