@@ -25,7 +25,8 @@ import MerchantOffers from "./MerchantOffers";
 /* 🔔 FCM */
 import { getMessaging, getToken } from "firebase/messaging";
 
-const VAPID_KEY = "BEzJ7FJ2GYuDTL7DS2B4EACTBp_vX9M3rS-cV-0Va1df8ouzOD-8qwUuwn3eHtI609065jtuon9pWVUyBoY-0CU";
+const VAPID_KEY =
+  "BEzJ7FJ2GYuDTL7DS2B4EACTBp_vX9M3rS-cV-0Va1df8ouzOD-8qwUuwn3eHtI609065jtuon9pWVUyBoY-0CU";
 
 const CATEGORIES = [
   "Food",
@@ -58,18 +59,30 @@ export default function MerchantDashboard() {
   const [merchant, setMerchant] = useState(null);
   const [msg, setMsg] = useState("");
 
-  /* ===== LOAD / AUTO-CREATE MERCHANT ===== */
+  /* =========================================================
+     LOAD / AUTO-CREATE MERCHANT
+  ========================================================= */
   useEffect(() => {
     if (!mobile) return;
 
-    const q = query(
-      collection(db, "merchants"),
-      where("mobile", "==", mobile)
-    );
+    const q = query(collection(db, "merchants"), where("mobile", "==", mobile));
 
     return onSnapshot(q, async (snap) => {
       if (!snap.empty) {
-        setMerchant({ id: snap.docs[0].id, ...snap.docs[0].data() });
+        const data = snap.docs[0].data();
+
+        // 🔒 AUTO-FIX BAD RADIUS (CRITICAL)
+        if (
+          typeof data.geofenceRadius !== "number" ||
+          data.geofenceRadius < 100
+        ) {
+          await updateDoc(doc(db, "merchants", snap.docs[0].id), {
+            geofenceRadius: 300,
+          });
+          data.geofenceRadius = 300;
+        }
+
+        setMerchant({ id: snap.docs[0].id, ...data });
       } else {
         const ref = await addDoc(collection(db, "merchants"), {
           mobile,
@@ -98,7 +111,9 @@ export default function MerchantDashboard() {
     });
   }, [mobile]);
 
-  /* ===== 🔔 REGISTER FCM TOKEN (MERCHANT) ===== */
+  /* =========================================================
+     🔔 REGISTER FCM TOKEN (MERCHANT)
+  ========================================================= */
   useEffect(() => {
     if (!merchant?.id) return;
 
@@ -110,9 +125,7 @@ export default function MerchantDashboard() {
         if (permission !== "granted") return;
 
         const messaging = getMessaging();
-        const token = await getToken(messaging, {
-          vapidKey: VAPID_KEY,
-        });
+        const token = await getToken(messaging, { vapidKey: VAPID_KEY });
 
         if (token) {
           await updateDoc(doc(db, "merchants", merchant.id), {
@@ -127,9 +140,19 @@ export default function MerchantDashboard() {
     registerPush();
   }, [merchant?.id]);
 
-  /* ===== UPDATE FIELD ===== */
+  /* =========================================================
+     UPDATE FIELD (SAFE)
+  ========================================================= */
   const updateField = async (field, value) => {
     if (!merchant?.id) return;
+
+    // 🔒 BLOCK INVALID GEOFENCE
+    if (field === "geofenceRadius") {
+      if (typeof value !== "number" || value < 100) {
+        alert("Geofence radius must be at least 100 meters");
+        return;
+      }
+    }
 
     await updateDoc(doc(db, "merchants", merchant.id), {
       [field]: value,
@@ -154,7 +177,9 @@ export default function MerchantDashboard() {
     merchant.address &&
     merchant.category &&
     typeof merchant.lat === "number" &&
-    typeof merchant.lng === "number";
+    typeof merchant.lng === "number" &&
+    typeof merchant.geofenceRadius === "number" &&
+    merchant.geofenceRadius >= 100;
 
   return (
     <Box sx={{ p: 2 }}>
@@ -265,10 +290,11 @@ export default function MerchantDashboard() {
             type="number"
             fullWidth
             sx={{ mt: 2 }}
-            value={merchant.geofenceRadius}
+            value={merchant.geofenceRadius ?? 300}
             onChange={(e) =>
               updateField("geofenceRadius", Number(e.target.value))
             }
+            helperText="Minimum 100 meters (recommended 300m)"
             disabled={isPending || isApproved}
           />
 
@@ -280,6 +306,7 @@ export default function MerchantDashboard() {
               navigator.geolocation.getCurrentPosition((pos) => {
                 updateField("lat", pos.coords.latitude);
                 updateField("lng", pos.coords.longitude);
+                updateField("geofenceRadius", 300); // 🔒 auto-fix
               });
             }}
           >
@@ -307,7 +334,7 @@ export default function MerchantDashboard() {
 
           {!isProfileComplete() && !isPending && (
             <Typography sx={{ mt: 1, color: "red" }}>
-              ⚠️ Complete shop name, address, category, and location before submitting.
+              ⚠️ Complete shop name, address, category, location, and geofence radius (≥100m).
             </Typography>
           )}
         </>
