@@ -27,6 +27,7 @@ import {
   getCountFromServer,
   orderBy,
   addDoc,
+  getDocs,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
@@ -44,7 +45,10 @@ import {
 /* ===== STAT CARD ===== */
 function StatCard({ label, value, onClick }) {
   return (
-    <Card onClick={onClick} sx={{ cursor: "pointer", "&:hover": { boxShadow: 6 } }}>
+    <Card
+      onClick={onClick}
+      sx={{ cursor: "pointer", "&:hover": { boxShadow: 6 } }}
+    >
       <CardContent>
         <Typography variant="caption">{label}</Typography>
         <Typography variant="h5" fontWeight="bold">
@@ -59,7 +63,8 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
 
   /* ===== ROLE GUARD ===== */
-  if (localStorage.getItem("oshiro_role") !== "admin") {
+  const role = localStorage.getItem("oshiro_role");
+  if (role !== "admin") {
     navigate("/login", { replace: true });
     return null;
   }
@@ -77,8 +82,9 @@ export default function AdminDashboard() {
   /* ===== SELECTION ===== */
   const [selected, setSelected] = useState({});
 
-  /* ===== FILTER ===== */
+  /* ===== FILTERS ===== */
   const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
 
   /* ===== REJECT ===== */
   const [rejectingMerchant, setRejectingMerchant] = useState(null);
@@ -104,23 +110,28 @@ export default function AdminDashboard() {
     if (mainTab === 0) {
       return onSnapshot(
         query(collection(db, "merchants"), where("status", "==", currentStatus)),
-        (snap) => setMerchants(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+        (snap) =>
+          setMerchants(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
       );
     }
+
     if (mainTab === 1) {
       return onSnapshot(collection(db, "offers"), (snap) =>
-        setOffers(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+        setOffers(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
       );
     }
+
     if (mainTab === 2) {
       return onSnapshot(collection(db, "customers"), (snap) =>
-        setCustomers(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+        setCustomers(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
       );
     }
+
     if (mainTab === 3) {
       return onSnapshot(
         query(collection(db, "geo_events"), orderBy("createdAt", "desc")),
-        (snap) => setGeoEvents(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+        (snap) =>
+          setGeoEvents(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
       );
     }
   }, [mainTab, currentStatus]);
@@ -128,79 +139,178 @@ export default function AdminDashboard() {
   /* =========================================================
      LOAD STATS
   ========================================================= */
+  const loadStats = async () => {
+    const merchantsSnap = await getCountFromServer(collection(db, "merchants"));
+    const approvedSnap = await getCountFromServer(
+      query(collection(db, "merchants"), where("status", "==", "approved"))
+    );
+    const customersSnap = await getCountFromServer(collection(db, "customers"));
+    const offersSnap = await getCountFromServer(
+      query(collection(db, "offers"), where("active", "==", true))
+    );
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const geoTodaySnap = await getCountFromServer(
+      query(collection(db, "geo_events"), where("createdAt", ">=", today))
+    );
+
+    setStats({
+      merchants: merchantsSnap.data().count,
+      approvedMerchants: approvedSnap.data().count,
+      customers: customersSnap.data().count,
+      offers: offersSnap.data().count,
+      geoToday: geoTodaySnap.data().count,
+    });
+  };
+
   useEffect(() => {
-    (async () => {
-      const merchantsSnap = await getCountFromServer(collection(db, "merchants"));
-      const approvedSnap = await getCountFromServer(
-        query(collection(db, "merchants"), where("status", "==", "approved"))
-      );
-      const customersSnap = await getCountFromServer(collection(db, "customers"));
-      const offersSnap = await getCountFromServer(
-        query(collection(db, "offers"), where("active", "==", true))
-      );
-
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      const geoTodaySnap = await getCountFromServer(
-        query(collection(db, "geo_events"), where("createdAt", ">=", today))
-      );
-
-      setStats({
-        merchants: merchantsSnap.data().count,
-        approvedMerchants: approvedSnap.data().count,
-        customers: customersSnap.data().count,
-        offers: offersSnap.data().count,
-        geoToday: geoTodaySnap.data().count,
-      });
-    })();
+    loadStats();
   }, []);
 
   /* =========================================================
-     FILTER + DATA
+     GEO CHART
+  ========================================================= */
+  useEffect(() => {
+    const loadChart = async () => {
+      const arr = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        d.setHours(0, 0, 0, 0);
+        const next = new Date(d);
+        next.setDate(next.getDate() + 1);
+
+        const snap = await getCountFromServer(
+          query(
+            collection(db, "geo_events"),
+            where("createdAt", ">=", d),
+            where("createdAt", "<", next)
+          )
+        );
+
+        arr.push({
+          day: d.toLocaleDateString("en-IN", { weekday: "short" }),
+          count: snap.data().count,
+        });
+      }
+      setGeoChart(arr);
+    };
+    loadChart();
+  }, []);
+
+  /* =========================================================
+     FILTERED DATA
   ========================================================= */
   const raw =
-    mainTab === 0 ? merchants :
-    mainTab === 1 ? offers :
-    mainTab === 2 ? customers :
-    geoEvents;
+    mainTab === 0
+      ? merchants
+      : mainTab === 1
+      ? offers
+      : mainTab === 2
+      ? customers
+      : geoEvents;
 
   const data = useMemo(() => {
-    return raw.filter(d =>
-      !search || JSON.stringify(d).toLowerCase().includes(search.toLowerCase())
-    );
-  }, [raw, search]);
+    return raw.filter((d) => {
+      if (
+        search &&
+        !JSON.stringify(d).toLowerCase().includes(search.toLowerCase())
+      )
+        return false;
+
+      if (dateFrom && d.createdAt?.toDate) {
+        if (d.createdAt.toDate() < new Date(dateFrom)) return false;
+      }
+      return true;
+    });
+  }, [raw, search, dateFrom]);
 
   /* =========================================================
      SELECTION
   ========================================================= */
-  const toggle = (id) => setSelected(p => ({ ...p, [id]: !p[id] }));
+  const toggle = (id) =>
+    setSelected((p) => ({ ...p, [id]: !p[id] }));
+
   const selectAll = () => {
     const s = {};
-    data.forEach(d => s[d.id] = true);
+    data.forEach((d) => (s[d.id] = true));
     setSelected(s);
   };
+
   const deselectAll = () => setSelected({});
-  const selectedIds = Object.keys(selected).filter(k => selected[k]);
+
+  const selectedIds = Object.keys(selected).filter((k) => selected[k]);
 
   const bulkDelete = async () => {
     if (!selectedIds.length) return;
     if (!window.confirm(`Delete ${selectedIds.length} records?`)) return;
 
     const col =
-      mainTab === 0 ? "merchants" :
-      mainTab === 1 ? "offers" :
-      mainTab === 2 ? "customers" :
-      "geo_events";
+      mainTab === 0
+        ? "merchants"
+        : mainTab === 1
+        ? "offers"
+        : mainTab === 2
+        ? "customers"
+        : "geo_events";
 
     const batch = writeBatch(db);
-    selectedIds.forEach(id => batch.delete(doc(db, col, id)));
+    selectedIds.forEach((id) => batch.delete(doc(db, col, id)));
     await batch.commit();
     setSelected({});
+    await loadStats();
   };
 
   /* =========================================================
-     ACTIONS
+     EXPORT GEO EVENTS CSV
+  ========================================================= */
+  const exportGeoEventsCSV = async () => {
+    if (!geoEvents.length) return alert("No geo events");
+
+    const merchantSnap = await getDocs(collection(db, "merchants"));
+    const merchantMap = {};
+    merchantSnap.forEach((d) => (merchantMap[d.id] = d.data()));
+
+    const rows = [
+      [
+        "Merchant Name",
+        "Merchant Mobile",
+        "Customer Mobile",
+        "Distance (meters)",
+        "Notified",
+        "Date & Time",
+      ],
+    ];
+
+    geoEvents.forEach((e) => {
+      const m = merchantMap[e.merchantId] || {};
+      rows.push([
+        m.shopName || "",
+        m.mobile || "",
+        e.customerId || "",
+        e.distanceMeters || "",
+        e.notified ? "Yes" : "No",
+        e.createdAt?.toDate
+          ? e.createdAt.toDate().toLocaleString("en-IN")
+          : "",
+      ]);
+    });
+
+    const csv = rows.map((r) => r.join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `geo_events_${new Date()
+      .toLocaleDateString("en-IN")
+      .replaceAll("/", "-")}.csv`;
+    link.click();
+  };
+
+  /* =========================================================
+     MERCHANT ACTIONS
   ========================================================= */
   const approve = async (id) =>
     updateDoc(doc(db, "merchants", id), {
@@ -217,6 +327,7 @@ export default function AdminDashboard() {
     });
     setRejectingMerchant(null);
     setReason("");
+    await loadStats();
   };
 
   const logout = () => {
@@ -231,10 +342,19 @@ export default function AdminDashboard() {
     <Box sx={{ p: 2 }}>
       <Button color="error" onClick={logout}>Logout</Button>
 
-      <Typography variant="h6" sx={{ mt: 1 }}>Admin Dashboard</Typography>
+      <Typography variant="h6" sx={{ mt: 1 }}>
+        Admin Dashboard
+      </Typography>
 
-      {/* STATS */}
-      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 2, my: 2 }}>
+      {/* ===== STATS ===== */}
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))",
+          gap: 2,
+          my: 2,
+        }}
+      >
         <StatCard label="Merchants" value={stats.merchants} onClick={() => { setMainTab(0); setStatusTab(0); }} />
         <StatCard label="Approved" value={stats.approvedMerchants} onClick={() => { setMainTab(0); setStatusTab(1); }} />
         <StatCard label="Customers" value={stats.customers} onClick={() => setMainTab(2)} />
@@ -242,7 +362,22 @@ export default function AdminDashboard() {
         <StatCard label="Geo Events Today" value={stats.geoToday} onClick={() => setMainTab(3)} />
       </Box>
 
-      {/* TABS */}
+      {/* ===== GEO CHART ===== */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Typography fontWeight="bold">Geo Events – Last 7 Days</Typography>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={geoChart}>
+              <XAxis dataKey="day" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="count" fill="#1976d2" />
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      {/* ===== MAIN TABS ===== */}
       <Tabs value={mainTab} onChange={(_, v) => setMainTab(v)}>
         <Tab label="Merchants" />
         <Tab label="Offers" />
@@ -260,30 +395,57 @@ export default function AdminDashboard() {
 
       <Divider sx={{ my: 2 }} />
 
-      {/* ACTIONS */}
-      <Stack direction="row" spacing={2}>
-        <Button onClick={selectAll}>Select All</Button>
-        <Button onClick={deselectAll}>Deselect All</Button>
-        <Button color="error" variant="contained" onClick={bulkDelete} disabled={!selectedIds.length}>
-          Delete Selected ({selectedIds.length})
+      {/* ===== ACTIONS ===== */}
+      <Button onClick={selectAll}>Select All</Button>
+      <Button onClick={deselectAll}>Deselect All</Button>
+      <Button
+        color="error"
+        variant="contained"
+        onClick={bulkDelete}
+        disabled={!selectedIds.length}
+      >
+        Delete Selected ({selectedIds.length})
+      </Button>
+
+      {mainTab === 3 && (
+        <Button sx={{ ml: 2 }} variant="outlined" onClick={exportGeoEventsCSV}>
+          ⬇ Export CSV
         </Button>
-      </Stack>
+      )}
 
       <Divider sx={{ my: 2 }} />
 
-      {/* LIST */}
-      {data.map(d => (
+      {/* ===== LIST ===== */}
+      {data.map((d) => (
         <Card key={d.id} sx={{ mb: 1 }}>
           <CardContent sx={{ display: "flex", gap: 2 }}>
-            <Checkbox checked={!!selected[d.id]} onChange={() => toggle(d.id)} />
+            <Checkbox
+              checked={!!selected[d.id]}
+              onChange={() => toggle(d.id)}
+            />
 
             <Box>
               <Typography fontWeight="bold">
                 {d.shopName || d.title || d.merchantId || d.id}
               </Typography>
 
-              {d.customerId && <Typography>Customer: {d.customerId}</Typography>}
-              {d.distanceMeters && <Typography>Distance: {d.distanceMeters} m</Typography>}
+              {d.customerId && (
+                <Typography variant="body2">
+                  Customer: {d.customerId}
+                </Typography>
+              )}
+
+              {d.distanceMeters && (
+                <Typography variant="body2">
+                  Distance: {d.distanceMeters} m
+                </Typography>
+              )}
+
+              {d.createdAt?.toDate && (
+                <Typography variant="caption">
+                  {d.createdAt.toDate().toLocaleString("en-IN")}
+                </Typography>
+              )}
 
               {mainTab === 0 && d.status === "approved" && (
                 <Button
@@ -305,7 +467,13 @@ export default function AdminDashboard() {
               {mainTab === 0 && d.status === "pending" && (
                 <Box sx={{ mt: 1 }}>
                   <Button onClick={() => approve(d.id)}>Approve</Button>
-                  <Button color="error" onClick={() => { setRejectingMerchant(d); setReason(""); }}>
+                  <Button
+                    color="error"
+                    onClick={() => {
+                      setRejectingMerchant(d);
+                      setReason("");
+                    }}
+                  >
                     Reject
                   </Button>
                 </Box>
@@ -315,15 +483,27 @@ export default function AdminDashboard() {
         </Card>
       ))}
 
-      {/* REJECT DIALOG */}
-      <Dialog open={Boolean(rejectingMerchant)} onClose={() => setRejectingMerchant(null)}>
+      {/* ===== REJECT DIALOG ===== */}
+      <Dialog
+        open={Boolean(rejectingMerchant)}
+        onClose={() => setRejectingMerchant(null)}
+      >
         <DialogTitle>Reject Merchant</DialogTitle>
         <DialogContent>
-          <TextField fullWidth multiline rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
+          <TextField
+            fullWidth
+            multiline
+            rows={3}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Reason"
+          />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setRejectingMerchant(null)}>Cancel</Button>
-          <Button color="error" onClick={confirmReject}>Reject</Button>
+          <Button color="error" onClick={confirmReject}>
+            Reject
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>
