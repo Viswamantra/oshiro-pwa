@@ -8,6 +8,7 @@ import {
   Card,
   CardContent,
   Chip,
+  Divider,
 } from "@mui/material";
 import {
   collection,
@@ -17,16 +18,11 @@ import {
   doc,
   updateDoc,
   addDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
 import MerchantOffers from "./MerchantOffers";
-
-/* 🔔 FCM */
-import { getMessaging, getToken } from "firebase/messaging";
-
-const VAPID_KEY =
-  "BEzJ7FJ2GYuDTL7DS2B4EACTBp_vX9M3rS-cV-0Va1df8ouzOD-8qwUuwn3eHtI609065jtuon9pWVUyBoY-0CU";
 
 const CATEGORIES = [
   "Food",
@@ -58,6 +54,7 @@ export default function MerchantDashboard() {
 
   const [merchant, setMerchant] = useState(null);
   const [msg, setMsg] = useState("");
+  const [liveAlerts, setLiveAlerts] = useState([]);
 
   /* =========================================================
      LOAD / AUTO-CREATE MERCHANT
@@ -72,7 +69,6 @@ export default function MerchantDashboard() {
         const docSnap = snap.docs[0];
         const data = docSnap.data();
 
-        // 🔒 AUTO-FIX BAD RADIUS
         if (
           typeof data.geofenceRadius !== "number" ||
           data.geofenceRadius < 100
@@ -94,7 +90,7 @@ export default function MerchantDashboard() {
           lat: null,
           lng: null,
           geofenceRadius: 300,
-          createdAt: new Date(),
+          createdAt: serverTimestamp(),
         });
 
         setMerchant({
@@ -113,32 +109,26 @@ export default function MerchantDashboard() {
   }, [mobile]);
 
   /* =========================================================
-     🔔 REGISTER FCM TOKEN
+     🔔 REAL-TIME CUSTOMER ALERTS (ZERO COST)
   ========================================================= */
   useEffect(() => {
     if (!merchant?.id) return;
 
-    const registerPush = async () => {
-      try {
-        if (!("Notification" in window)) return;
+    const q = query(
+      collection(db, "geo_events"),
+      where("merchantId", "==", merchant.id),
+      where("notified", "==", false)
+    );
 
-        const permission = await Notification.requestPermission();
-        if (permission !== "granted") return;
+    const unsub = onSnapshot(q, (snap) => {
+      const alerts = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }));
+      setLiveAlerts(alerts);
+    });
 
-        const messaging = getMessaging();
-        const token = await getToken(messaging, { vapidKey: VAPID_KEY });
-
-        if (token) {
-          await updateDoc(doc(db, "merchants", merchant.id), {
-            fcmToken: token,
-          });
-        }
-      } catch (err) {
-        console.error("FCM error:", err);
-      }
-    };
-
-    registerPush();
+    return () => unsub();
   }, [merchant?.id]);
 
   /* =========================================================
@@ -158,6 +148,16 @@ export default function MerchantDashboard() {
 
     setMsg("Saved successfully");
     setTimeout(() => setMsg(""), 1500);
+  };
+
+  /* =========================================================
+     MARK ALERT AS HANDLED
+  ========================================================= */
+  const markAlertHandled = async (alertId) => {
+    await updateDoc(doc(db, "geo_events", alertId), {
+      notified: true,
+      notifiedAt: serverTimestamp(),
+    });
   };
 
   if (!merchant) {
@@ -198,6 +198,36 @@ export default function MerchantDashboard() {
       )}
 
       {msg && <Typography color="green">{msg}</Typography>}
+
+      {/* ================= LIVE CUSTOMER ALERTS ================= */}
+      {liveAlerts.length > 0 && (
+        <Card sx={{ mt: 2, bgcolor: "#ffebee" }}>
+          <CardContent>
+            <Typography variant="h6" color="error">
+              🚨 Customer Nearby!
+            </Typography>
+
+            {liveAlerts.map((a) => (
+              <Box key={a.id} sx={{ mt: 1 }}>
+                <Typography>
+                  Customer within <b>{a.distanceMeters} meters</b>
+                </Typography>
+
+                <Button
+                  size="small"
+                  variant="contained"
+                  sx={{ mt: 1 }}
+                  onClick={() => markAlertHandled(a.id)}
+                >
+                  Mark as Handled
+                </Button>
+
+                <Divider sx={{ mt: 1 }} />
+              </Box>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* ===== BUSINESS DETAILS ===== */}
       <Card sx={{ my: 2 }}>
