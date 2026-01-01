@@ -2,360 +2,208 @@ import React, { useEffect, useState } from "react";
 import {
   Box,
   Typography,
+  Card,
+  CardContent,
   TextField,
   MenuItem,
   Button,
-  Card,
-  CardContent,
-  Chip,
   Divider,
+  Slider,
 } from "@mui/material";
 import {
   collection,
   query,
   where,
   onSnapshot,
-  doc,
-  updateDoc,
   addDoc,
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
-import { useNavigate } from "react-router-dom";
-import MerchantOffers from "./MerchantOffers";
 
-const CATEGORIES = [
-  "Food",
-  "Home Kitchen",
-  "Fashion & Clothing",
-  "Beauty & Spa",
-  "Hospitals",
-  "Medicals",
-];
+/* ================= HELPERS ================= */
+function distanceMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) ** 2;
+  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
 
 export default function MerchantDashboard() {
-  const navigate = useNavigate();
-
-  /* ===== ROLE GUARD ===== */
-  const role = localStorage.getItem("oshiro_role");
-  if (role !== "merchant") {
-    navigate("/login", { replace: true });
-    return null;
-  }
-
-  /* ===== LOGOUT ===== */
-  const logout = () => {
-    localStorage.clear();
-    window.location.href = "/login";
-  };
-
   const stored = JSON.parse(localStorage.getItem("oshiro_user") || "{}");
-  const mobile = stored.mobile;
+  const merchantId = stored.merchantId;
 
   const [merchant, setMerchant] = useState(null);
-  const [msg, setMsg] = useState("");
-  const [liveAlerts, setLiveAlerts] = useState([]);
+  const [offers, setOffers] = useState([]);
+  const [customers, setCustomers] = useState([]);
 
-  /* =========================================================
-     LOAD / AUTO-CREATE MERCHANT
-  ========================================================= */
+  const [offerId, setOfferId] = useState("");
+  const [category, setCategory] = useState("All");
+  const [radius, setRadius] = useState(300);
+  const [message, setMessage] = useState("");
+  const [sentCount, setSentCount] = useState(0);
+
+  /* ================= LOAD MERCHANT ================= */
   useEffect(() => {
-    if (!mobile) return;
-
-    const q = query(collection(db, "merchants"), where("mobile", "==", mobile));
-
-    return onSnapshot(q, async (snap) => {
-      if (!snap.empty) {
-        const docSnap = snap.docs[0];
-        const data = docSnap.data();
-
-        if (
-          typeof data.geofenceRadius !== "number" ||
-          data.geofenceRadius < 100
-        ) {
-          await updateDoc(doc(db, "merchants", docSnap.id), {
-            geofenceRadius: 300,
-          });
-          data.geofenceRadius = 300;
-        }
-
-        setMerchant({ id: docSnap.id, ...data });
-      } else {
-        const ref = await addDoc(collection(db, "merchants"), {
-          mobile,
-          status: "draft",
-          category: "",
-          shopName: "",
-          address: "",
-          lat: null,
-          lng: null,
-          geofenceRadius: 300,
-          createdAt: serverTimestamp(),
-        });
-
-        setMerchant({
-          id: ref.id,
-          mobile,
-          status: "draft",
-          category: "",
-          shopName: "",
-          address: "",
-          lat: null,
-          lng: null,
-          geofenceRadius: 300,
-        });
+    if (!merchantId) return;
+    return onSnapshot(
+      collection(db, "merchants"),
+      snap => {
+        const m = snap.docs.find(d => d.id === merchantId);
+        if (m) setMerchant({ id: m.id, ...m.data() });
       }
-    });
-  }, [mobile]);
-
-  /* =========================================================
-     🔔 REAL-TIME CUSTOMER ALERTS (ZERO COST)
-  ========================================================= */
-  useEffect(() => {
-    if (!merchant?.id) return;
-
-    const q = query(
-      collection(db, "geo_events"),
-      where("merchantId", "==", merchant.id),
-      where("notified", "==", false)
     );
+  }, [merchantId]);
 
-    const unsub = onSnapshot(q, (snap) => {
-      const alerts = snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
-      setLiveAlerts(alerts);
-    });
+  /* ================= LOAD OFFERS ================= */
+  useEffect(() => {
+    if (!merchantId) return;
+    const q = query(
+      collection(db, "offers"),
+      where("merchantId", "==", merchantId),
+      where("active", "==", true)
+    );
+    return onSnapshot(q, snap =>
+      setOffers(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    );
+  }, [merchantId]);
 
-    return () => unsub();
-  }, [merchant?.id]);
+  /* ================= LOAD CUSTOMERS ================= */
+  useEffect(() => {
+    return onSnapshot(collection(db, "customers"), snap =>
+      setCustomers(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    );
+  }, []);
 
-  /* =========================================================
-     UPDATE FIELD (SAFE)
-  ========================================================= */
-  const updateField = async (field, value) => {
-    if (!merchant?.id) return;
+  /* ================= SEND MESSAGE ================= */
+  const sendMessages = async () => {
+    if (!merchant || !message.trim()) return alert("Missing data");
 
-    if (field === "geofenceRadius" && value < 100) {
-      alert("Geofence radius must be at least 100 meters");
-      return;
+    let count = 0;
+
+    for (const c of customers) {
+      if (!c.lat || !c.lng) continue;
+
+      if (category !== "All" && c.category !== category) continue;
+
+      const dist = distanceMeters(
+        merchant.lat,
+        merchant.lng,
+        c.lat,
+        c.lng
+      );
+
+      if (dist > radius) continue;
+
+      await addDoc(collection(db, "customer_alerts"), {
+        customerId: c.id,
+        merchantId,
+        offerId,
+        message: message.trim(),
+        category,
+        distanceMeters: Math.round(dist),
+        createdAt: serverTimestamp(),
+        read: false,
+      });
+
+      count++;
     }
 
-    await updateDoc(doc(db, "merchants", merchant.id), {
-      [field]: value,
-    });
-
-    setMsg("Saved successfully");
-    setTimeout(() => setMsg(""), 1500);
+    setSentCount(count);
+    setMessage("");
   };
 
-  /* =========================================================
-     MARK ALERT AS HANDLED
-  ========================================================= */
-  const markAlertHandled = async (alertId) => {
-    await updateDoc(doc(db, "geo_events", alertId), {
-      notified: true,
-      notifiedAt: serverTimestamp(),
-    });
-  };
-
-  if (!merchant) {
-    return <Typography sx={{ p: 2 }}>Loading merchant...</Typography>;
-  }
-
-  const isHomeKitchen = merchant.category === "Home Kitchen";
-  const isPending = merchant.status === "pending";
-  const isApproved = merchant.status === "approved";
-  const isRejected = merchant.status === "rejected";
-
-  const isProfileComplete =
-    merchant.shopName &&
-    merchant.address &&
-    merchant.category &&
-    typeof merchant.lat === "number" &&
-    typeof merchant.lng === "number" &&
-    merchant.geofenceRadius >= 100;
+  if (!merchant)
+    return <Typography sx={{ p: 2 }}>Loading...</Typography>;
 
   return (
     <Box sx={{ p: 2 }}>
-      <Button variant="outlined" color="error" onClick={logout}>
-        Logout
-      </Button>
+      <Typography variant="h6">Merchant Dashboard</Typography>
 
-      <Typography variant="h6" sx={{ mt: 2 }}>
-        Merchant Dashboard
-      </Typography>
+      <Divider sx={{ my: 2 }} />
 
-      <Typography sx={{ mt: 1 }}>
-        Status: <strong>{merchant.status.toUpperCase()}</strong>
-      </Typography>
-
-      {isRejected && (
-        <Typography color="error">
-          ❌ Rejected: {merchant.rejectionReason}
-        </Typography>
-      )}
-
-      {msg && <Typography color="green">{msg}</Typography>}
-
-      {/* ================= LIVE CUSTOMER ALERTS ================= */}
-      {liveAlerts.length > 0 && (
-        <Card sx={{ mt: 2, bgcolor: "#ffebee" }}>
-          <CardContent>
-            <Typography variant="h6" color="error">
-              🚨 Customer Nearby!
-            </Typography>
-
-            {liveAlerts.map((a) => (
-              <Box key={a.id} sx={{ mt: 1 }}>
-                <Typography>
-                  Customer within <b>{a.distanceMeters} meters</b>
-                </Typography>
-
-                <Button
-                  size="small"
-                  variant="contained"
-                  sx={{ mt: 1 }}
-                  onClick={() => markAlertHandled(a.id)}
-                >
-                  Mark as Handled
-                </Button>
-
-                <Divider sx={{ mt: 1 }} />
-              </Box>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ===== BUSINESS DETAILS ===== */}
-      <Card sx={{ my: 2 }}>
+      <Card>
         <CardContent>
-          <Typography variant="subtitle1">Business Details</Typography>
+          <Typography variant="subtitle1">
+            📣 Send Message to Nearby Customers
+          </Typography>
 
-          <TextField
-            label="Shop Name"
-            fullWidth
-            sx={{ mt: 2 }}
-            value={merchant.shopName}
-            onChange={(e) => updateField("shopName", e.target.value)}
-            disabled={isPending || isApproved}
-          />
-
-          <TextField
-            label="Business Address"
-            fullWidth
-            sx={{ mt: 2 }}
-            value={merchant.address}
-            onChange={(e) => updateField("address", e.target.value)}
-            disabled={isPending || isApproved}
-          />
-        </CardContent>
-      </Card>
-
-      {/* ===== CATEGORY ===== */}
-      <Card sx={{ my: 2 }}>
-        <CardContent>
-          <Typography variant="subtitle1">Business Category</Typography>
-
+          {/* OFFER */}
           <TextField
             select
             fullWidth
-            value={merchant.category}
-            onChange={(e) => updateField("category", e.target.value)}
-            disabled={isPending || isApproved}
+            label="Select Offer"
+            value={offerId}
+            onChange={e => setOfferId(e.target.value)}
+            sx={{ mt: 2 }}
           >
-            {CATEGORIES.map((c) => (
-              <MenuItem key={c} value={c}>
-                {c === "Home Kitchen"
-                  ? "Home Kitchen – Ghar ka khana • Limited orders"
-                  : c}
+            <MenuItem value="">No Offer</MenuItem>
+            {offers.map(o => (
+              <MenuItem key={o.id} value={o.id}>
+                {o.title}
               </MenuItem>
             ))}
           </TextField>
 
-          {isHomeKitchen && (
-            <Chip label="🍱 Limited Orders" color="warning" sx={{ mt: 1 }} />
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ===== GEOFENCE ===== */}
-      <Card sx={{ my: 2 }}>
-        <CardContent>
-          <Typography variant="subtitle1">Geofence</Typography>
-
+          {/* CATEGORY */}
           <TextField
-            label="Latitude"
+            select
             fullWidth
+            label="Target Category"
+            value={category}
+            onChange={e => setCategory(e.target.value)}
             sx={{ mt: 2 }}
-            value={merchant.lat ?? ""}
-            onChange={(e) => updateField("lat", Number(e.target.value))}
-            disabled={isPending || isApproved}
+          >
+            <MenuItem value="All">All</MenuItem>
+            <MenuItem value="Food">Food</MenuItem>
+            <MenuItem value="Fashion & Clothing">Fashion & Clothing</MenuItem>
+            <MenuItem value="Medicals">Medicals</MenuItem>
+            <MenuItem value="Hospitals">Hospitals</MenuItem>
+            <MenuItem value="Home Kitchen">Home Kitchen</MenuItem>
+          </TextField>
+
+          {/* RADIUS */}
+          <Typography sx={{ mt: 2 }}>
+            Radius: {radius} meters
+          </Typography>
+          <Slider
+            min={100}
+            max={1000}
+            step={50}
+            value={radius}
+            onChange={(_, v) => setRadius(v)}
           />
 
+          {/* MESSAGE */}
           <TextField
-            label="Longitude"
             fullWidth
+            multiline
+            rows={3}
+            label="Message"
+            value={message}
+            onChange={e => setMessage(e.target.value)}
             sx={{ mt: 2 }}
-            value={merchant.lng ?? ""}
-            onChange={(e) => updateField("lng", Number(e.target.value))}
-            disabled={isPending || isApproved}
-          />
-
-          <TextField
-            label="Radius (meters)"
-            type="number"
-            fullWidth
-            sx={{ mt: 2 }}
-            value={merchant.geofenceRadius}
-            onChange={(e) =>
-              updateField("geofenceRadius", Number(e.target.value))
-            }
-            helperText="Minimum 100m (recommended 300m)"
-            disabled={isPending || isApproved}
           />
 
           <Button
+            variant="contained"
             sx={{ mt: 2 }}
-            variant="outlined"
-            disabled={isPending || isApproved}
-            onClick={() =>
-              navigator.geolocation.getCurrentPosition((pos) => {
-                updateField("lat", pos.coords.latitude);
-                updateField("lng", pos.coords.longitude);
-                updateField("geofenceRadius", 300);
-              })
-            }
+            onClick={sendMessages}
           >
-            📍 Use Current Location
+            Send Message
           </Button>
+
+          {sentCount > 0 && (
+            <Typography sx={{ mt: 1, color: "green" }}>
+              ✅ Sent to {sentCount} customers
+            </Typography>
+          )}
         </CardContent>
       </Card>
-
-      {/* ===== SUBMIT ===== */}
-      {!isApproved && (
-        <Button
-          fullWidth
-          sx={{ mt: 2 }}
-          variant="contained"
-          disabled={!isProfileComplete || isPending}
-          onClick={() => updateField("status", "pending")}
-        >
-          Submit for Admin Approval
-        </Button>
-      )}
-
-      {/* ===== OFFERS ===== */}
-      {isApproved && (
-        <>
-          <Typography sx={{ mt: 3, color: "green" }}>
-            ✅ Approved — You can create offers
-          </Typography>
-          <MerchantOffers merchant={merchant} />
-        </>
-      )}
     </Box>
   );
 }
