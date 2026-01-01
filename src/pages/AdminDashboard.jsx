@@ -22,6 +22,7 @@ import {
   collection,
   onSnapshot,
   updateDoc,
+  deleteDoc,
   doc,
   orderBy,
   query,
@@ -89,14 +90,37 @@ export default function AdminDashboard() {
     );
   }, []);
 
-  /* ================= HELPERS ================= */
+  /* ================= SELECTION ================= */
   const toggleSelect = id => {
     setSelected(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
   };
 
-  const resetSelection = () => setSelected([]);
+  const clearSelection = () => setSelected([]);
+
+  /* ================= BULK DELETE ================= */
+  const bulkDelete = async () => {
+    if (!selected.length) return;
+
+    const map = {
+      merchants: "merchants",
+      approved: "merchants",
+      customers: "customers",
+      offers: "offers",
+      geo: "geo_events",
+      alerts: "admin_alerts",
+    };
+
+    const collectionName = map[view];
+    if (!collectionName) return;
+
+    for (const id of selected) {
+      await deleteDoc(doc(db, collectionName, id));
+    }
+
+    clearSelection();
+  };
 
   /* ================= APPROVAL ================= */
   const approveMerchant = async () => {
@@ -108,7 +132,7 @@ export default function AdminDashboard() {
   };
 
   const rejectMerchant = async () => {
-    if (!rejectReason.trim()) return alert("Enter reason");
+    if (!rejectReason.trim()) return alert("Enter rejection reason");
     await updateDoc(doc(db, "merchants", activeMerchant.id), {
       status: "rejected",
       rejectionReason: rejectReason.trim(),
@@ -117,38 +141,51 @@ export default function AdminDashboard() {
     setActiveMerchant(null);
   };
 
-  /* ================= TABLE RENDER ================= */
+  /* ================= TABLE ================= */
   const renderTable = (rows, columns) => (
-    <Table size="small">
-      <TableHead>
-        <TableRow>
-          <TableCell />
-          {columns.map(c => (
-            <TableCell key={c}>{c}</TableCell>
-          ))}
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {rows.map(r => (
-          <TableRow
-            key={r.id}
-            hover
-            sx={{ cursor: view === "merchants" ? "pointer" : "default" }}
-            onClick={() => view === "merchants" && setActiveMerchant(r)}
-          >
-            <TableCell>
-              <Checkbox
-                checked={selected.includes(r.id)}
-                onChange={() => toggleSelect(r.id)}
-              />
-            </TableCell>
+    <>
+      {selected.length > 0 && (
+        <Button
+          color="error"
+          variant="contained"
+          sx={{ mb: 1 }}
+          onClick={bulkDelete}
+        >
+          Delete Selected ({selected.length})
+        </Button>
+      )}
+
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell />
             {columns.map(c => (
-              <TableCell key={c}>{r[c] || "-"}</TableCell>
+              <TableCell key={c}>{c}</TableCell>
             ))}
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHead>
+        <TableBody>
+          {rows.map(r => (
+            <TableRow
+              key={r.id}
+              hover
+              sx={{ cursor: view === "merchants" ? "pointer" : "default" }}
+              onClick={() => view === "merchants" && setActiveMerchant(r)}
+            >
+              <TableCell>
+                <Checkbox
+                  checked={selected.includes(r.id)}
+                  onChange={() => toggleSelect(r.id)}
+                />
+              </TableCell>
+              {columns.map(c => (
+                <TableCell key={c}>{r[c] ?? "-"}</TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </>
   );
 
   return (
@@ -174,7 +211,7 @@ export default function AdminDashboard() {
           <Grid item xs={6} md={2} key={key}>
             <Card sx={{ cursor: "pointer" }} onClick={() => {
               setView(key);
-              resetSelection();
+              clearSelection();
             }}>
               <CardContent>
                 <Typography>{label}</Typography>
@@ -187,7 +224,6 @@ export default function AdminDashboard() {
 
       <Divider sx={{ my: 3 }} />
 
-      {/* ===== VIEWS ===== */}
       {view === "merchants" &&
         renderTable(merchants, ["shopName", "mobile", "category", "status"])}
 
