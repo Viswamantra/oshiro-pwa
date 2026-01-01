@@ -5,17 +5,19 @@ import {
   Card,
   CardContent,
   Button,
+  Divider,
   TextField,
   MenuItem,
-  Divider,
 } from "@mui/material";
 import {
   collection,
+  query,
+  where,
   onSnapshot,
+  updateDoc,
+  doc,
   addDoc,
   serverTimestamp,
-  query,
-  orderBy,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
@@ -36,46 +38,80 @@ export default function AdminDashboard() {
     window.location.href = "/login";
   };
 
+  /* ===== STATE ===== */
   const [merchants, setMerchants] = useState([]);
+  const [pendingMerchants, setPendingMerchants] = useState([]);
+  const [approvedCount, setApprovedCount] = useState(0);
+  const [customerCount, setCustomerCount] = useState(0);
+
+  /* ===== LIVE ALERT STATE ===== */
   const [selectedMerchant, setSelectedMerchant] = useState("");
-  const [message, setMessage] = useState("");
+  const [alertMessage, setAlertMessage] = useState("");
   const [statusMsg, setStatusMsg] = useState("");
 
   /* =========================================================
      LOAD MERCHANTS
   ========================================================= */
   useEffect(() => {
-    const q = query(
-      collection(db, "merchants"),
-      orderBy("createdAt", "desc")
-    );
+    const q = query(collection(db, "merchants"));
 
     return onSnapshot(q, (snap) => {
       const list = snap.docs.map((d) => ({
         id: d.id,
         ...d.data(),
       }));
+
       setMerchants(list);
+      setPendingMerchants(list.filter((m) => m.status === "pending"));
+      setApprovedCount(list.filter((m) => m.status === "approved").length);
     });
   }, []);
 
   /* =========================================================
-     SEND LIVE ALERT TO MERCHANT
+     LOAD CUSTOMERS COUNT
   ========================================================= */
-  const sendAlert = async () => {
-    if (!selectedMerchant || !message.trim()) {
-      alert("Select merchant and enter message");
+  useEffect(() => {
+    const q = query(collection(db, "customers"));
+    return onSnapshot(q, (snap) => setCustomerCount(snap.size));
+  }, []);
+
+  /* =========================================================
+     MERCHANT APPROVAL ACTIONS
+  ========================================================= */
+  const approveMerchant = async (id) => {
+    await updateDoc(doc(db, "merchants", id), {
+      status: "approved",
+      approvedAt: serverTimestamp(),
+    });
+  };
+
+  const rejectMerchant = async (id) => {
+    const reason = prompt("Enter rejection reason");
+    if (!reason) return;
+
+    await updateDoc(doc(db, "merchants", id), {
+      status: "rejected",
+      rejectionReason: reason,
+    });
+  };
+
+  /* =========================================================
+     SEND LIVE ALERT (OPTION A)
+  ========================================================= */
+  const sendLiveAlert = async () => {
+    if (!selectedMerchant || !alertMessage.trim()) {
+      alert("Select merchant and enter alert message");
       return;
     }
 
     await addDoc(collection(db, "admin_alerts"), {
       merchantId: selectedMerchant,
-      message: message.trim(),
+      message: alertMessage.trim(),
       read: false,
       createdAt: serverTimestamp(),
     });
 
-    setMessage("");
+    setAlertMessage("");
     setStatusMsg("✅ Alert sent successfully");
 
     setTimeout(() => setStatusMsg(""), 2000);
@@ -91,7 +127,73 @@ export default function AdminDashboard() {
         Admin Dashboard
       </Typography>
 
-      {/* ================= SEND ALERT ================= */}
+      {/* ================= STATS ================= */}
+      <Box sx={{ display: "flex", gap: 2, mt: 2, flexWrap: "wrap" }}>
+        <Card sx={{ minWidth: 180 }}>
+          <CardContent>
+            <Typography variant="subtitle2">Merchants</Typography>
+            <Typography variant="h6">{merchants.length}</Typography>
+          </CardContent>
+        </Card>
+
+        <Card sx={{ minWidth: 180 }}>
+          <CardContent>
+            <Typography variant="subtitle2">Approved</Typography>
+            <Typography variant="h6">{approvedCount}</Typography>
+          </CardContent>
+        </Card>
+
+        <Card sx={{ minWidth: 180 }}>
+          <CardContent>
+            <Typography variant="subtitle2">Customers</Typography>
+            <Typography variant="h6">{customerCount}</Typography>
+          </CardContent>
+        </Card>
+      </Box>
+
+      {/* ================= MERCHANT APPROVALS ================= */}
+      <Card sx={{ mt: 3 }}>
+        <CardContent>
+          <Typography variant="subtitle1">
+            Pending Merchant Approvals
+          </Typography>
+
+          {pendingMerchants.length === 0 && (
+            <Typography sx={{ mt: 1 }}>No pending merchants</Typography>
+          )}
+
+          {pendingMerchants.map((m) => (
+            <Box key={m.id} sx={{ mt: 2 }}>
+              <Typography>
+                <b>{m.shopName || "Unnamed Shop"}</b> — {m.mobile}
+              </Typography>
+
+              <Button
+                size="small"
+                variant="contained"
+                sx={{ mt: 1, mr: 1 }}
+                onClick={() => approveMerchant(m.id)}
+              >
+                Approve
+              </Button>
+
+              <Button
+                size="small"
+                variant="outlined"
+                color="error"
+                sx={{ mt: 1 }}
+                onClick={() => rejectMerchant(m.id)}
+              >
+                Reject
+              </Button>
+
+              <Divider sx={{ mt: 1 }} />
+            </Box>
+          ))}
+        </CardContent>
+      </Card>
+
+      {/* ================= SEND LIVE ALERT ================= */}
       <Card sx={{ mt: 3 }}>
         <CardContent>
           <Typography variant="subtitle1">
@@ -119,8 +221,8 @@ export default function AdminDashboard() {
             rows={3}
             sx={{ mt: 2 }}
             label="Alert Message"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
+            value={alertMessage}
+            onChange={(e) => setAlertMessage(e.target.value)}
             placeholder="Customer nearby – send offer now"
           />
 
@@ -128,7 +230,7 @@ export default function AdminDashboard() {
             variant="contained"
             fullWidth
             sx={{ mt: 2 }}
-            onClick={sendAlert}
+            onClick={sendLiveAlert}
           >
             Send Alert
           </Button>
@@ -140,15 +242,6 @@ export default function AdminDashboard() {
           )}
         </CardContent>
       </Card>
-
-      <Divider sx={{ my: 3 }} />
-
-      {/* ================= INFO ================= */}
-      <Typography variant="body2" color="text.secondary">
-        ℹ️ Alerts are delivered instantly when merchant dashboard is open.
-        <br />
-        This is a zero-cost, real-time in-app alert system.
-      </Typography>
     </Box>
   );
 }
