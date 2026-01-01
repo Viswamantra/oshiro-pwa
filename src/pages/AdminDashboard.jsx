@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   Box,
   Typography,
@@ -14,6 +14,8 @@ import {
   TableCell,
   TableBody,
   Checkbox,
+  Grid,
+  Paper,
 } from "@mui/material";
 import {
   collection,
@@ -44,81 +46,73 @@ export default function AdminDashboard() {
   };
 
   /* ================= STATE ================= */
-  const [view, setView] = useState("overview");
+  const [view, setView] = useState("merchants");
+  const [categoryFilter, setCategoryFilter] = useState("All");
 
   const [merchants, setMerchants] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [geoEvents, setGeoEvents] = useState([]);
+  const [offers, setOffers] = useState([]);
 
   const [alerts, setAlerts] = useState([]);
   const [selectedAlerts, setSelectedAlerts] = useState([]);
 
   const [categories, setCategories] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState("");
   const [newCategory, setNewCategory] = useState("");
 
   const [alertMerchant, setAlertMerchant] = useState("");
   const [alertMsg, setAlertMsg] = useState("");
 
   /* ================= LOAD DATA ================= */
-  useEffect(() => {
-    return onSnapshot(collection(db, "merchants"), (s) =>
-      setMerchants(s.docs.map((d) => ({ id: d.id, ...d.data() })))
-    );
-  }, []);
+  useEffect(() =>
+    onSnapshot(collection(db, "merchants"), s =>
+      setMerchants(s.docs.map(d => ({ id: d.id, ...d.data() })))
+    ), []);
 
-  useEffect(() => {
-    return onSnapshot(collection(db, "customers"), (s) =>
-      setCustomers(s.docs.map((d) => ({ id: d.id, ...d.data() })))
-    );
-  }, []);
+  useEffect(() =>
+    onSnapshot(collection(db, "customers"), s =>
+      setCustomers(s.docs.map(d => ({ id: d.id, ...d.data() })))
+    ), []);
 
-  useEffect(() => {
-    const q = query(collection(db, "geo_events"), orderBy("createdAt", "desc"));
-    return onSnapshot(q, (s) =>
-      setGeoEvents(s.docs.map((d) => ({ id: d.id, ...d.data() })))
-    );
-  }, []);
+  useEffect(() =>
+    onSnapshot(query(collection(db, "geo_events"), orderBy("createdAt", "desc")),
+      s => setGeoEvents(s.docs.map(d => ({ id: d.id, ...d.data() })))
+    ), []);
 
-  useEffect(() => {
-    const q = query(
-      collection(db, "admin_alerts"),
-      orderBy("createdAt", "desc")
-    );
-    return onSnapshot(q, (s) =>
-      setAlerts(s.docs.map((d) => ({ id: d.id, ...d.data() })))
-    );
-  }, []);
+  useEffect(() =>
+    onSnapshot(collection(db, "offers"), s =>
+      setOffers(s.docs.map(d => ({ id: d.id, ...d.data() })))
+    ), []);
 
-  useEffect(() => {
-    return onSnapshot(collection(db, "categories"), (s) =>
-      setCategories(s.docs.map((d) => ({ id: d.id, ...d.data() })))
-    );
-  }, []);
+  useEffect(() =>
+    onSnapshot(query(collection(db, "admin_alerts"), orderBy("createdAt", "desc")),
+      s => setAlerts(s.docs.map(d => ({ id: d.id, ...d.data() })))
+    ), []);
 
-  /* ================= ALERT ACTIONS ================= */
+  useEffect(() =>
+    onSnapshot(collection(db, "categories"), s =>
+      setCategories(s.docs.map(d => ({ id: d.id, ...d.data() })))
+    ), []);
+
+  /* ================= FILTERED DATA ================= */
+  const filteredMerchants = useMemo(() => {
+    let data = merchants;
+    if (view === "approved") data = data.filter(m => m.status === "approved");
+    if (categoryFilter !== "All")
+      data = data.filter(m => m.category === categoryFilter);
+    return data;
+  }, [merchants, view, categoryFilter]);
+
+  /* ================= ALERT ================= */
   const sendAlert = async () => {
     if (!alertMerchant || !alertMsg.trim()) return;
-
     await addDoc(collection(db, "admin_alerts"), {
       merchantId: alertMerchant,
       message: alertMsg.trim(),
       createdAt: serverTimestamp(),
     });
-
     setAlertMsg("");
-  };
-
-  const toggleAlert = (id) => {
-    setSelectedAlerts((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-  };
-
-  const deleteSelectedAlerts = async () => {
-    for (const id of selectedAlerts) {
-      await deleteDoc(doc(db, "admin_alerts", id));
-    }
-    setSelectedAlerts([]);
   };
 
   /* ================= CATEGORY ================= */
@@ -131,8 +125,10 @@ export default function AdminDashboard() {
     setNewCategory("");
   };
 
-  const deleteCategory = async (id) => {
-    await deleteDoc(doc(db, "categories", id));
+  const deleteCategory = async () => {
+    if (!selectedCategory) return;
+    await deleteDoc(doc(db, "categories", selectedCategory));
+    setSelectedCategory("");
   };
 
   /* ================= UI ================= */
@@ -147,146 +143,110 @@ export default function AdminDashboard() {
       </Typography>
 
       {/* ===== STATS ===== */}
-      <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
-        <Card onClick={() => setView("merchants")} sx={{ cursor: "pointer" }}>
-          <CardContent>
-            <Typography>Merchants</Typography>
-            <Typography>{merchants.length}</Typography>
-          </CardContent>
-        </Card>
-        <Card onClick={() => setView("customers")} sx={{ cursor: "pointer" }}>
-          <CardContent>
-            <Typography>Customers</Typography>
-            <Typography>{customers.length}</Typography>
-          </CardContent>
-        </Card>
-        <Card onClick={() => setView("geo")} sx={{ cursor: "pointer" }}>
-          <CardContent>
-            <Typography>Geo Events</Typography>
-            <Typography>{geoEvents.length}</Typography>
-          </CardContent>
-        </Card>
-        <Card onClick={() => setView("alerts")} sx={{ cursor: "pointer" }}>
-          <CardContent>
-            <Typography>Alerts</Typography>
-            <Typography>{alerts.length}</Typography>
-          </CardContent>
-        </Card>
-      </Box>
+      <Grid container spacing={2} sx={{ mt: 2 }}>
+        {[
+          ["Merchants", merchants.length, "merchants"],
+          ["Approved", merchants.filter(m => m.status === "approved").length, "approved"],
+          ["Customers", customers.length, "customers"],
+          ["Offers", offers.length, "offers"],
+          ["Geo Events", geoEvents.length, "geo"],
+          ["Alerts", alerts.length, "alerts"],
+        ].map(([label, count, v]) => (
+          <Grid item xs={6} md={2} key={label}>
+            <Card onClick={() => setView(v)} sx={{ cursor: "pointer" }}>
+              <CardContent sx={{ textAlign: "center" }}>
+                <Typography variant="body2">{label}</Typography>
+                <Typography variant="h6">{count}</Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
+      </Grid>
 
       <Divider sx={{ my: 3 }} />
 
-      {/* ===== ALERT HISTORY TABLE ===== */}
-      {view === "alerts" && (
-        <>
-          <Typography variant="subtitle1">Alert History</Typography>
+      {/* ===== FILTER BAR ===== */}
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={4}>
+            <TextField
+              select
+              fullWidth
+              label="Category Filter"
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+            >
+              <MenuItem value="All">All</MenuItem>
+              {categories.map(c => (
+                <MenuItem key={c.id} value={c.name}>{c.name}</MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+        </Grid>
+      </Paper>
 
-          <Button
-            color="error"
-            disabled={!selectedAlerts.length}
-            onClick={deleteSelectedAlerts}
-          >
-            Delete Selected
-          </Button>
-
-          <Table>
+      {/* ===== MERCHANTS TABLE ===== */}
+      {(view === "merchants" || view === "approved") && (
+        <Paper sx={{ p: 2 }}>
+          <Typography variant="subtitle1">Merchants</Typography>
+          <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell />
-                <TableCell>Merchant</TableCell>
-                <TableCell>Message</TableCell>
-                <TableCell>Time</TableCell>
+                <TableCell>Shop</TableCell>
+                <TableCell>Mobile</TableCell>
+                <TableCell>Category</TableCell>
+                <TableCell>Status</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {alerts.map((a) => (
-                <TableRow key={a.id}>
-                  <TableCell>
-                    <Checkbox
-                      checked={selectedAlerts.includes(a.id)}
-                      onChange={() => toggleAlert(a.id)}
-                    />
-                  </TableCell>
-                  <TableCell>{a.merchantId}</TableCell>
-                  <TableCell>{a.message}</TableCell>
-                  <TableCell>
-                    {a.createdAt?.toDate?.().toLocaleString()}
-                  </TableCell>
+              {filteredMerchants.map(m => (
+                <TableRow key={m.id}>
+                  <TableCell>{m.shopName}</TableCell>
+                  <TableCell>{m.mobile}</TableCell>
+                  <TableCell>{m.category}</TableCell>
+                  <TableCell>{m.status}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-        </>
+        </Paper>
       )}
 
-      {/* ===== SEND ALERT ===== */}
+      {/* ===== CATEGORY MANAGEMENT (COMPACT) ===== */}
       <Divider sx={{ my: 3 }} />
-      <Typography variant="subtitle1">Send Alert</Typography>
+      <Paper sx={{ p: 2 }}>
+        <Typography variant="subtitle1">Manage Categories</Typography>
 
-      <TextField
-        select
-        fullWidth
-        label="Merchant"
-        value={alertMerchant}
-        onChange={(e) => setAlertMerchant(e.target.value)}
-        sx={{ mt: 1 }}
-      >
-        {merchants.map((m) => (
-          <MenuItem key={m.id} value={m.id}>
-            {m.shopName || "Unnamed"} — {m.mobile}
-          </MenuItem>
-        ))}
-      </TextField>
-
-      <TextField
-        fullWidth
-        multiline
-        rows={3}
-        sx={{ mt: 1 }}
-        label="Message"
-        value={alertMsg}
-        onChange={(e) => setAlertMsg(e.target.value)}
-      />
-
-      <Button sx={{ mt: 1 }} variant="contained" onClick={sendAlert}>
-        Send Alert
-      </Button>
-
-      {/* ===== CATEGORY MANAGEMENT ===== */}
-      <Divider sx={{ my: 3 }} />
-      <Typography variant="subtitle1">Manage Categories</Typography>
-
-      <TextField
-        fullWidth
-        label="New Category"
-        value={newCategory}
-        onChange={(e) => setNewCategory(e.target.value)}
-        sx={{ mt: 1 }}
-      />
-      <Button sx={{ mt: 1 }} onClick={addCategory} variant="contained">
-        Add Category
-      </Button>
-
-      <Table sx={{ mt: 2 }}>
-        <TableHead>
-          <TableRow>
-            <TableCell>Category</TableCell>
-            <TableCell />
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {categories.map((c) => (
-            <TableRow key={c.id}>
-              <TableCell>{c.name}</TableCell>
-              <TableCell>
-                <Button color="error" onClick={() => deleteCategory(c.id)}>
-                  Delete
-                </Button>
-              </TableCell>
-            </TableRow>
+        <TextField
+          select
+          fullWidth
+          sx={{ mt: 1 }}
+          label="Select Category"
+          value={selectedCategory}
+          onChange={(e) => setSelectedCategory(e.target.value)}
+        >
+          {categories.map(c => (
+            <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
           ))}
-        </TableBody>
-      </Table>
+        </TextField>
+
+        <Box sx={{ display: "flex", gap: 2, mt: 1 }}>
+          <Button color="error" onClick={deleteCategory} disabled={!selectedCategory}>
+            Delete
+          </Button>
+        </Box>
+
+        <TextField
+          fullWidth
+          sx={{ mt: 2 }}
+          label="Add New Category"
+          value={newCategory}
+          onChange={(e) => setNewCategory(e.target.value)}
+        />
+        <Button sx={{ mt: 1 }} onClick={addCategory} variant="contained">
+          Add Category
+        </Button>
+      </Paper>
     </Box>
   );
 }
