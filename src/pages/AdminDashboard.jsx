@@ -17,7 +17,9 @@ import {
   updateDoc,
   doc,
   addDoc,
+  deleteDoc,
   serverTimestamp,
+  orderBy,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
@@ -38,85 +40,66 @@ export default function AdminDashboard() {
     window.location.href = "/login";
   };
 
-  /* ===== STATE ===== */
+  /* ================= STATE ================= */
+  const [activeView, setActiveView] = useState("overview");
+
   const [merchants, setMerchants] = useState([]);
-  const [pendingMerchants, setPendingMerchants] = useState([]);
-  const [approvedCount, setApprovedCount] = useState(0);
-  const [customerCount, setCustomerCount] = useState(0);
+  const [customers, setCustomers] = useState([]);
+  const [geoEvents, setGeoEvents] = useState([]);
 
-  /* ===== LIVE ALERT STATE ===== */
-  const [selectedMerchant, setSelectedMerchant] = useState("");
-  const [alertMessage, setAlertMessage] = useState("");
-  const [statusMsg, setStatusMsg] = useState("");
+  const [categories, setCategories] = useState([]);
+  const [newCategory, setNewCategory] = useState("");
 
-  /* =========================================================
-     LOAD MERCHANTS
-  ========================================================= */
+  /* ================= LOAD DATA ================= */
   useEffect(() => {
-    const q = query(collection(db, "merchants"));
-
-    return onSnapshot(q, (snap) => {
-      const list = snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
-
-      setMerchants(list);
-      setPendingMerchants(list.filter((m) => m.status === "pending"));
-      setApprovedCount(list.filter((m) => m.status === "approved").length);
-    });
+    return onSnapshot(collection(db, "merchants"), (snap) =>
+      setMerchants(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
   }, []);
 
-  /* =========================================================
-     LOAD CUSTOMERS COUNT
-  ========================================================= */
   useEffect(() => {
-    const q = query(collection(db, "customers"));
-    return onSnapshot(q, (snap) => setCustomerCount(snap.size));
+    return onSnapshot(collection(db, "customers"), (snap) =>
+      setCustomers(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
   }, []);
 
-  /* =========================================================
-     MERCHANT APPROVAL ACTIONS
-  ========================================================= */
-  const approveMerchant = async (id) => {
-    await updateDoc(doc(db, "merchants", id), {
-      status: "approved",
-      approvedAt: serverTimestamp(),
-    });
-  };
+  useEffect(() => {
+    const q = query(
+      collection(db, "geo_events"),
+      orderBy("createdAt", "desc")
+    );
+    return onSnapshot(q, (snap) =>
+      setGeoEvents(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+  }, []);
 
-  const rejectMerchant = async (id) => {
-    const reason = prompt("Enter rejection reason");
-    if (!reason) return;
+  useEffect(() => {
+    return onSnapshot(collection(db, "categories"), (snap) =>
+      setCategories(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+  }, []);
 
-    await updateDoc(doc(db, "merchants", id), {
-      status: "rejected",
-      rejectionReason: reason,
-    });
-  };
-
-  /* =========================================================
-     SEND LIVE ALERT (OPTION A)
-  ========================================================= */
-  const sendLiveAlert = async () => {
-    if (!selectedMerchant || !alertMessage.trim()) {
-      alert("Select merchant and enter alert message");
-      return;
-    }
-
-    await addDoc(collection(db, "admin_alerts"), {
-      merchantId: selectedMerchant,
-      message: alertMessage.trim(),
-      read: false,
+  /* ================= CATEGORY CRUD ================= */
+  const addCategory = async () => {
+    if (!newCategory.trim()) return;
+    await addDoc(collection(db, "categories"), {
+      name: newCategory.trim(),
       createdAt: serverTimestamp(),
     });
-
-    setAlertMessage("");
-    setStatusMsg("✅ Alert sent successfully");
-
-    setTimeout(() => setStatusMsg(""), 2000);
+    setNewCategory("");
   };
 
+  const deleteCategory = async (id) => {
+    if (!window.confirm("Delete category?")) return;
+    await deleteDoc(doc(db, "categories", id));
+  };
+
+  /* ================= HELPERS ================= */
+  const approvedMerchants = merchants.filter(
+    (m) => m.status === "approved"
+  );
+
+  /* ================= UI ================= */
   return (
     <Box sx={{ p: 2 }}>
       <Button variant="outlined" color="error" onClick={logout}>
@@ -129,119 +112,89 @@ export default function AdminDashboard() {
 
       {/* ================= STATS ================= */}
       <Box sx={{ display: "flex", gap: 2, mt: 2, flexWrap: "wrap" }}>
-        <Card sx={{ minWidth: 180 }}>
+        <Card onClick={() => setActiveView("merchants")} sx={{ cursor: "pointer" }}>
           <CardContent>
-            <Typography variant="subtitle2">Merchants</Typography>
+            <Typography>Merchants</Typography>
             <Typography variant="h6">{merchants.length}</Typography>
           </CardContent>
         </Card>
 
-        <Card sx={{ minWidth: 180 }}>
+        <Card onClick={() => setActiveView("approved")} sx={{ cursor: "pointer" }}>
           <CardContent>
-            <Typography variant="subtitle2">Approved</Typography>
-            <Typography variant="h6">{approvedCount}</Typography>
+            <Typography>Approved</Typography>
+            <Typography variant="h6">{approvedMerchants.length}</Typography>
           </CardContent>
         </Card>
 
-        <Card sx={{ minWidth: 180 }}>
+        <Card onClick={() => setActiveView("customers")} sx={{ cursor: "pointer" }}>
           <CardContent>
-            <Typography variant="subtitle2">Customers</Typography>
-            <Typography variant="h6">{customerCount}</Typography>
+            <Typography>Customers</Typography>
+            <Typography variant="h6">{customers.length}</Typography>
+          </CardContent>
+        </Card>
+
+        <Card onClick={() => setActiveView("geo")} sx={{ cursor: "pointer" }}>
+          <CardContent>
+            <Typography>Geo Events</Typography>
+            <Typography variant="h6">{geoEvents.length}</Typography>
           </CardContent>
         </Card>
       </Box>
 
-      {/* ================= MERCHANT APPROVALS ================= */}
-      <Card sx={{ mt: 3 }}>
-        <CardContent>
-          <Typography variant="subtitle1">
-            Pending Merchant Approvals
+      <Divider sx={{ my: 3 }} />
+
+      {/* ================= LIST VIEWS ================= */}
+      {activeView === "merchants" &&
+        merchants.map((m) => (
+          <Typography key={m.id}>
+            {m.shopName || "Unnamed"} — {m.mobile} — {m.status}
           </Typography>
+        ))}
 
-          {pendingMerchants.length === 0 && (
-            <Typography sx={{ mt: 1 }}>No pending merchants</Typography>
-          )}
-
-          {pendingMerchants.map((m) => (
-            <Box key={m.id} sx={{ mt: 2 }}>
-              <Typography>
-                <b>{m.shopName || "Unnamed Shop"}</b> — {m.mobile}
-              </Typography>
-
-              <Button
-                size="small"
-                variant="contained"
-                sx={{ mt: 1, mr: 1 }}
-                onClick={() => approveMerchant(m.id)}
-              >
-                Approve
-              </Button>
-
-              <Button
-                size="small"
-                variant="outlined"
-                color="error"
-                sx={{ mt: 1 }}
-                onClick={() => rejectMerchant(m.id)}
-              >
-                Reject
-              </Button>
-
-              <Divider sx={{ mt: 1 }} />
-            </Box>
-          ))}
-        </CardContent>
-      </Card>
-
-      {/* ================= SEND LIVE ALERT ================= */}
-      <Card sx={{ mt: 3 }}>
-        <CardContent>
-          <Typography variant="subtitle1">
-            🔔 Send Live Alert to Merchant
+      {activeView === "approved" &&
+        approvedMerchants.map((m) => (
+          <Typography key={m.id}>
+            {m.shopName || "Unnamed"} — {m.mobile}
           </Typography>
+        ))}
 
-          <TextField
-            select
-            fullWidth
-            sx={{ mt: 2 }}
-            label="Select Merchant"
-            value={selectedMerchant}
-            onChange={(e) => setSelectedMerchant(e.target.value)}
-          >
-            {merchants.map((m) => (
-              <MenuItem key={m.id} value={m.id}>
-                {m.shopName || "Unnamed Shop"} — {m.mobile}
-              </MenuItem>
-            ))}
-          </TextField>
+      {activeView === "customers" &&
+        customers.map((c) => (
+          <Typography key={c.id}>{c.mobile}</Typography>
+        ))}
 
-          <TextField
-            fullWidth
-            multiline
-            rows={3}
-            sx={{ mt: 2 }}
-            label="Alert Message"
-            value={alertMessage}
-            onChange={(e) => setAlertMessage(e.target.value)}
-            placeholder="Customer nearby – send offer now"
-          />
+      {activeView === "geo" &&
+        geoEvents.map((g) => (
+          <Typography key={g.id}>
+            Merchant: {g.merchantId} — {g.distanceMeters}m
+          </Typography>
+        ))}
 
-          <Button
-            variant="contained"
-            fullWidth
-            sx={{ mt: 2 }}
-            onClick={sendLiveAlert}
-          >
-            Send Alert
+      <Divider sx={{ my: 3 }} />
+
+      {/* ================= CATEGORY MANAGEMENT ================= */}
+      <Typography variant="subtitle1">Manage Categories</Typography>
+
+      <TextField
+        label="New Category"
+        fullWidth
+        sx={{ mt: 1 }}
+        value={newCategory}
+        onChange={(e) => setNewCategory(e.target.value)}
+      />
+
+      <Button sx={{ mt: 1 }} variant="contained" onClick={addCategory}>
+        Add Category
+      </Button>
+
+      {categories.map((c) => (
+        <Box key={c.id} sx={{ mt: 1 }}>
+          <Typography>{c.name}</Typography>
+          <Button size="small" color="error" onClick={() => deleteCategory(c.id)}>
+            Delete
           </Button>
-
-          {statusMsg && (
-            <Typography sx={{ mt: 1, color: "green" }}>
-              {statusMsg}
-            </Typography>
-          )}
-        </CardContent>
-      </Card>
+        </Box>
+      ))}
     </Box>
   );
 }
