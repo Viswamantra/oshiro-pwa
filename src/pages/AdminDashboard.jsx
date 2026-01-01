@@ -8,16 +8,20 @@ import {
   Divider,
   TextField,
   MenuItem,
+  Table,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableBody,
+  Checkbox,
 } from "@mui/material";
 import {
   collection,
   query,
-  where,
   onSnapshot,
-  updateDoc,
-  doc,
   addDoc,
   deleteDoc,
+  doc,
   serverTimestamp,
   orderBy,
 } from "firebase/firestore";
@@ -34,52 +38,90 @@ export default function AdminDashboard() {
     return null;
   }
 
-  /* ===== LOGOUT ===== */
   const logout = () => {
     localStorage.clear();
     window.location.href = "/login";
   };
 
   /* ================= STATE ================= */
-  const [activeView, setActiveView] = useState("overview");
+  const [view, setView] = useState("overview");
 
   const [merchants, setMerchants] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [geoEvents, setGeoEvents] = useState([]);
 
+  const [alerts, setAlerts] = useState([]);
+  const [selectedAlerts, setSelectedAlerts] = useState([]);
+
   const [categories, setCategories] = useState([]);
   const [newCategory, setNewCategory] = useState("");
 
+  const [alertMerchant, setAlertMerchant] = useState("");
+  const [alertMsg, setAlertMsg] = useState("");
+
   /* ================= LOAD DATA ================= */
   useEffect(() => {
-    return onSnapshot(collection(db, "merchants"), (snap) =>
-      setMerchants(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    return onSnapshot(collection(db, "merchants"), (s) =>
+      setMerchants(s.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
   }, []);
 
   useEffect(() => {
-    return onSnapshot(collection(db, "customers"), (snap) =>
-      setCustomers(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    return onSnapshot(collection(db, "customers"), (s) =>
+      setCustomers(s.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+  }, []);
+
+  useEffect(() => {
+    const q = query(collection(db, "geo_events"), orderBy("createdAt", "desc"));
+    return onSnapshot(q, (s) =>
+      setGeoEvents(s.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
   }, []);
 
   useEffect(() => {
     const q = query(
-      collection(db, "geo_events"),
+      collection(db, "admin_alerts"),
       orderBy("createdAt", "desc")
     );
-    return onSnapshot(q, (snap) =>
-      setGeoEvents(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    return onSnapshot(q, (s) =>
+      setAlerts(s.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
   }, []);
 
   useEffect(() => {
-    return onSnapshot(collection(db, "categories"), (snap) =>
-      setCategories(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    return onSnapshot(collection(db, "categories"), (s) =>
+      setCategories(s.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
   }, []);
 
-  /* ================= CATEGORY CRUD ================= */
+  /* ================= ALERT ACTIONS ================= */
+  const sendAlert = async () => {
+    if (!alertMerchant || !alertMsg.trim()) return;
+
+    await addDoc(collection(db, "admin_alerts"), {
+      merchantId: alertMerchant,
+      message: alertMsg.trim(),
+      createdAt: serverTimestamp(),
+    });
+
+    setAlertMsg("");
+  };
+
+  const toggleAlert = (id) => {
+    setSelectedAlerts((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const deleteSelectedAlerts = async () => {
+    for (const id of selectedAlerts) {
+      await deleteDoc(doc(db, "admin_alerts", id));
+    }
+    setSelectedAlerts([]);
+  };
+
+  /* ================= CATEGORY ================= */
   const addCategory = async () => {
     if (!newCategory.trim()) return;
     await addDoc(collection(db, "categories"), {
@@ -90,14 +132,8 @@ export default function AdminDashboard() {
   };
 
   const deleteCategory = async (id) => {
-    if (!window.confirm("Delete category?")) return;
     await deleteDoc(doc(db, "categories", id));
   };
-
-  /* ================= HELPERS ================= */
-  const approvedMerchants = merchants.filter(
-    (m) => m.status === "approved"
-  );
 
   /* ================= UI ================= */
   return (
@@ -110,91 +146,147 @@ export default function AdminDashboard() {
         Admin Dashboard
       </Typography>
 
-      {/* ================= STATS ================= */}
-      <Box sx={{ display: "flex", gap: 2, mt: 2, flexWrap: "wrap" }}>
-        <Card onClick={() => setActiveView("merchants")} sx={{ cursor: "pointer" }}>
+      {/* ===== STATS ===== */}
+      <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
+        <Card onClick={() => setView("merchants")} sx={{ cursor: "pointer" }}>
           <CardContent>
             <Typography>Merchants</Typography>
-            <Typography variant="h6">{merchants.length}</Typography>
+            <Typography>{merchants.length}</Typography>
           </CardContent>
         </Card>
-
-        <Card onClick={() => setActiveView("approved")} sx={{ cursor: "pointer" }}>
-          <CardContent>
-            <Typography>Approved</Typography>
-            <Typography variant="h6">{approvedMerchants.length}</Typography>
-          </CardContent>
-        </Card>
-
-        <Card onClick={() => setActiveView("customers")} sx={{ cursor: "pointer" }}>
+        <Card onClick={() => setView("customers")} sx={{ cursor: "pointer" }}>
           <CardContent>
             <Typography>Customers</Typography>
-            <Typography variant="h6">{customers.length}</Typography>
+            <Typography>{customers.length}</Typography>
           </CardContent>
         </Card>
-
-        <Card onClick={() => setActiveView("geo")} sx={{ cursor: "pointer" }}>
+        <Card onClick={() => setView("geo")} sx={{ cursor: "pointer" }}>
           <CardContent>
             <Typography>Geo Events</Typography>
-            <Typography variant="h6">{geoEvents.length}</Typography>
+            <Typography>{geoEvents.length}</Typography>
+          </CardContent>
+        </Card>
+        <Card onClick={() => setView("alerts")} sx={{ cursor: "pointer" }}>
+          <CardContent>
+            <Typography>Alerts</Typography>
+            <Typography>{alerts.length}</Typography>
           </CardContent>
         </Card>
       </Box>
 
       <Divider sx={{ my: 3 }} />
 
-      {/* ================= LIST VIEWS ================= */}
-      {activeView === "merchants" &&
-        merchants.map((m) => (
-          <Typography key={m.id}>
-            {m.shopName || "Unnamed"} — {m.mobile} — {m.status}
-          </Typography>
-        ))}
+      {/* ===== ALERT HISTORY TABLE ===== */}
+      {view === "alerts" && (
+        <>
+          <Typography variant="subtitle1">Alert History</Typography>
 
-      {activeView === "approved" &&
-        approvedMerchants.map((m) => (
-          <Typography key={m.id}>
-            {m.shopName || "Unnamed"} — {m.mobile}
-          </Typography>
-        ))}
+          <Button
+            color="error"
+            disabled={!selectedAlerts.length}
+            onClick={deleteSelectedAlerts}
+          >
+            Delete Selected
+          </Button>
 
-      {activeView === "customers" &&
-        customers.map((c) => (
-          <Typography key={c.id}>{c.mobile}</Typography>
-        ))}
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell />
+                <TableCell>Merchant</TableCell>
+                <TableCell>Message</TableCell>
+                <TableCell>Time</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {alerts.map((a) => (
+                <TableRow key={a.id}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedAlerts.includes(a.id)}
+                      onChange={() => toggleAlert(a.id)}
+                    />
+                  </TableCell>
+                  <TableCell>{a.merchantId}</TableCell>
+                  <TableCell>{a.message}</TableCell>
+                  <TableCell>
+                    {a.createdAt?.toDate?.().toLocaleString()}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </>
+      )}
 
-      {activeView === "geo" &&
-        geoEvents.map((g) => (
-          <Typography key={g.id}>
-            Merchant: {g.merchantId} — {g.distanceMeters}m
-          </Typography>
-        ))}
-
+      {/* ===== SEND ALERT ===== */}
       <Divider sx={{ my: 3 }} />
+      <Typography variant="subtitle1">Send Alert</Typography>
 
-      {/* ================= CATEGORY MANAGEMENT ================= */}
+      <TextField
+        select
+        fullWidth
+        label="Merchant"
+        value={alertMerchant}
+        onChange={(e) => setAlertMerchant(e.target.value)}
+        sx={{ mt: 1 }}
+      >
+        {merchants.map((m) => (
+          <MenuItem key={m.id} value={m.id}>
+            {m.shopName || "Unnamed"} — {m.mobile}
+          </MenuItem>
+        ))}
+      </TextField>
+
+      <TextField
+        fullWidth
+        multiline
+        rows={3}
+        sx={{ mt: 1 }}
+        label="Message"
+        value={alertMsg}
+        onChange={(e) => setAlertMsg(e.target.value)}
+      />
+
+      <Button sx={{ mt: 1 }} variant="contained" onClick={sendAlert}>
+        Send Alert
+      </Button>
+
+      {/* ===== CATEGORY MANAGEMENT ===== */}
+      <Divider sx={{ my: 3 }} />
       <Typography variant="subtitle1">Manage Categories</Typography>
 
       <TextField
-        label="New Category"
         fullWidth
-        sx={{ mt: 1 }}
+        label="New Category"
         value={newCategory}
         onChange={(e) => setNewCategory(e.target.value)}
+        sx={{ mt: 1 }}
       />
-
-      <Button sx={{ mt: 1 }} variant="contained" onClick={addCategory}>
+      <Button sx={{ mt: 1 }} onClick={addCategory} variant="contained">
         Add Category
       </Button>
 
-      {categories.map((c) => (
-        <Box key={c.id} sx={{ mt: 1 }}>
-          <Typography>{c.name}</Typography>
-          <Button size="small" color="error" onClick={() => deleteCategory(c.id)}>
-            Delete
-          </Button>
-        </Box>
-      ))}
+      <Table sx={{ mt: 2 }}>
+        <TableHead>
+          <TableRow>
+            <TableCell>Category</TableCell>
+            <TableCell />
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {categories.map((c) => (
+            <TableRow key={c.id}>
+              <TableCell>{c.name}</TableCell>
+              <TableCell>
+                <Button color="error" onClick={() => deleteCategory(c.id)}>
+                  Delete
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </Box>
   );
 }
