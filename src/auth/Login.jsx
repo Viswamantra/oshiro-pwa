@@ -11,9 +11,9 @@ import { useNavigate } from "react-router-dom";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 
-/* =========================
+/* ======================
    ADMIN CONFIG
-========================= */
+====================== */
 const ADMIN_MOBILE = "7386361725";
 const ADMIN_PASSWORD = "45#67";
 
@@ -24,105 +24,82 @@ export default function Login() {
   const [role, setRole] = useState(null);
   const [adminPassword, setAdminPassword] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
 
-  /* =========================
-     CHECK MERCHANT EXISTS
-  ========================= */
-  async function merchantExists(mobile) {
+  /* ======================
+     MERCHANT CHECK
+  ====================== */
+  const checkMerchantExists = async (mobile) => {
     const q = query(
       collection(db, "merchants"),
       where("mobile", "==", mobile)
     );
     const snap = await getDocs(q);
     return !snap.empty;
-  }
+  };
 
-  /* =========================
-     LOGIN HANDLER
-  ========================= */
+  /* ======================
+     LOGIN
+  ====================== */
   const handleLogin = async () => {
     setError("");
 
     if (!/^\d{10}$/.test(mobile)) {
-      setError("Enter exactly 10 digit mobile number");
+      setError("Enter valid 10 digit mobile number");
       return;
     }
 
-    setLoading(true);
-
-    /* =========================
-       🔐 ADMIN FLOW (NO ROLE)
-    ========================= */
+    /* ======================
+       🔐 ADMIN LOGIN (NO ROLE)
+    ====================== */
     if (mobile === ADMIN_MOBILE) {
       if (adminPassword !== ADMIN_PASSWORD) {
         setError("Invalid admin password");
-        setLoading(false);
         return;
       }
 
       localStorage.clear();
       localStorage.setItem("oshiro_role", "admin");
-      localStorage.setItem("oshiro_admin", "true");
 
       navigate("/admin", { replace: true });
       return;
     }
 
-    /* =========================
-       ROLE REQUIRED FOR OTHERS
-    ========================= */
+    /* ======================
+       ROLE REQUIRED BELOW
+    ====================== */
     if (!role) {
       setError("Please select Merchant or Customer");
-      setLoading(false);
       return;
     }
 
-    /* =========================
-       CUSTOMER FLOW
-    ========================= */
-    if (role === "customer") {
-      localStorage.clear();
-      localStorage.setItem("oshiro_role", "customer");
-      localStorage.setItem(
-        "oshiro_user",
-        JSON.stringify({ mobile })
-      );
+    localStorage.clear();
+    localStorage.setItem("oshiro_role", role);
+    localStorage.setItem(
+      "oshiro_user",
+      JSON.stringify({ mobile })
+    );
 
+    /* ======================
+       CUSTOMER
+    ====================== */
+    if (role === "customer") {
       navigate("/customer", { replace: true });
       return;
     }
 
-    /* =========================
-       MERCHANT FLOW
-    ========================= */
-    try {
-      localStorage.clear();
-      localStorage.setItem("oshiro_role", "merchant");
-      localStorage.setItem(
-        "oshiro_user",
-        JSON.stringify({ mobile })
-      );
+    /* ======================
+       MERCHANT
+    ====================== */
+    const exists = await checkMerchantExists(mobile);
 
-      const exists = await merchantExists(mobile);
-
-      if (exists) {
-        localStorage.setItem("oshiro_merchant_id", mobile);
-        navigate("/merchant", { replace: true });
-      } else {
-        navigate("/merchant-register", { replace: true });
-      }
-    } catch (err) {
-      console.error(err);
-      setError("Login failed. Try again.");
-    } finally {
-      setLoading(false);
+    if (exists) {
+      localStorage.setItem("oshiro_merchant_id", mobile);
+      navigate("/merchant", { replace: true });
+    } else {
+      navigate("/merchant-register", { replace: true });
     }
   };
 
-  /* =========================
-     UI
-  ========================= */
   return (
     <Box sx={{ p: 3, maxWidth: 420, mx: "auto", mt: 6 }}>
       <Typography variant="h5">Login</Typography>
@@ -150,7 +127,7 @@ export default function Login() {
         />
       )}
 
-      {/* ROLE SELECTION (NOT FOR ADMIN) */}
+      {/* ROLE (HIDDEN FOR ADMIN) */}
       {mobile !== ADMIN_MOBILE && (
         <ToggleButtonGroup
           exclusive
@@ -174,13 +151,8 @@ export default function Login() {
         </Typography>
       )}
 
-      <Button
-        variant="contained"
-        fullWidth
-        disabled={loading}
-        onClick={handleLogin}
-      >
-        {loading ? "Please wait..." : "Continue"}
+      <Button variant="contained" fullWidth onClick={handleLogin}>
+        Continue
       </Button>
     </Box>
   );
