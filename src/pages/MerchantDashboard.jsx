@@ -2,364 +2,139 @@ import React, { useEffect, useState } from "react";
 import {
   Box,
   Typography,
-  TextField,
-  MenuItem,
-  Button,
   Card,
   CardContent,
-  Chip,
-  CircularProgress,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
 } from "@mui/material";
 import {
   collection,
   query,
   where,
+  orderBy,
+  limit,
   onSnapshot,
-  doc,
-  updateDoc,
   addDoc,
+  Timestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
-import { useNavigate } from "react-router-dom";
-
-/* 🔔 FCM */
-import { getMessaging, getToken } from "firebase/messaging";
-
-const VAPID_KEY =
-  "BEzJ7FJ2GYuDTL7DS2B4EACTBp_vX9M3rS-cV-0Va1df8ouzOD-8qwUuwn3eHtI609065jtuon9pWVUyBoY-0CU";
-
-const CATEGORIES = [
-  "Food",
-  "Home Kitchen",
-  "Fashion & Clothing",
-  "Beauty & Spa",
-  "Hospitals",
-  "Medicals",
-];
 
 export default function MerchantDashboard() {
-  const navigate = useNavigate();
+  const merchantId = localStorage.getItem("oshiro_merchant_id");
 
-  /* ===== ROLE GUARD ===== */
-  const role = localStorage.getItem("oshiro_role");
-  if (role !== "merchant") {
-    navigate("/login", { replace: true });
-    return null;
-  }
+  const [nearbyCustomers, setNearbyCustomers] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [offerText, setOfferText] = useState("");
 
-  /* ===== LOGOUT (ALWAYS AVAILABLE) ===== */
-  const logout = () => {
-    localStorage.clear();
-    window.location.href = "/login";
-  };
-
-  const stored = JSON.parse(localStorage.getItem("oshiro_user") || "{}");
-  const rawMobile = stored.mobile || "";
-
-  // normalize mobile: remove +91 if present
-  const mobile = rawMobile.replace("+91", "");
-
-  const [merchant, setMerchant] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [msg, setMsg] = useState("");
-
-  /* =========================================================
-     LOAD EXISTING MERCHANT (NO HANG)
-  ========================================================= */
+  /* ============================
+     LIVE GEO EVENTS LISTENER
+  ============================ */
   useEffect(() => {
-    if (!mobile) {
-      logout();
-      return;
-    }
+    if (!merchantId) return;
 
     const q = query(
-      collection(db, "merchants"),
-      where("mobile", "in", [mobile, "+91" + mobile])
+      collection(db, "geo_events"),
+      where("merchantId", "==", merchantId),
+      where("notified", "==", true),
+      orderBy("createdAt", "desc"),
+      limit(5)
     );
 
-    const unsub = onSnapshot(
-      q,
-      async (snap) => {
-        if (!snap.empty) {
-          const docSnap = snap.docs[0];
-          const data = docSnap.data();
+    return onSnapshot(q, (snap) => {
+      const rows = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }));
+      setNearbyCustomers(rows);
+    });
+  }, [merchantId]);
 
-          // Auto-fix geofence if bad
-          if (
-            typeof data.geofenceRadius !== "number" ||
-            data.geofenceRadius < 100
-          ) {
-            await updateDoc(doc(db, "merchants", docSnap.id), {
-              geofenceRadius: 300,
-            });
-            data.geofenceRadius = 300;
-          }
+  /* ============================
+     SEND OFFER
+  ============================ */
+  const sendOffer = async () => {
+    if (!offerText || !selectedCustomer) return;
 
-          setMerchant({ id: docSnap.id, ...data });
-          setLoading(false);
-        } else {
-          // Create only if truly new
-          const ref = await addDoc(collection(db, "merchants"), {
-            mobile: "+91" + mobile,
-            status: "draft",
-            category: "",
-            shopName: "",
-            address: "",
-            lat: null,
-            lng: null,
-            geofenceRadius: 300,
-            createdAt: new Date(),
-          });
-
-          setMerchant({
-            id: ref.id,
-            mobile: "+91" + mobile,
-            status: "draft",
-            category: "",
-            shopName: "",
-            address: "",
-            lat: null,
-            lng: null,
-            geofenceRadius: 300,
-          });
-          setLoading(false);
-        }
-      },
-      (err) => {
-        console.error("Merchant load error:", err);
-        setLoading(false);
-      }
-    );
-
-    // SAFETY: never hang forever
-    const timeout = setTimeout(() => {
-      setLoading(false);
-    }, 8000);
-
-    return () => {
-      unsub();
-      clearTimeout(timeout);
-    };
-  }, [mobile]);
-
-  /* =========================================================
-     🔔 REGISTER FCM TOKEN
-  ========================================================= */
-  useEffect(() => {
-    if (!merchant?.id) return;
-
-    const registerPush = async () => {
-      try {
-        if (!("Notification" in window)) return;
-
-        const permission = await Notification.requestPermission();
-        if (permission !== "granted") return;
-
-        const messaging = getMessaging();
-        const token = await getToken(messaging, { vapidKey: VAPID_KEY });
-
-        if (token) {
-          await updateDoc(doc(db, "merchants", merchant.id), {
-            fcmToken: token,
-          });
-        }
-      } catch (err) {
-        console.error("FCM error:", err);
-      }
-    };
-
-    registerPush();
-  }, [merchant?.id]);
-
-  /* =========================================================
-     UPDATE FIELD
-  ========================================================= */
-  const updateField = async (field, value) => {
-    if (!merchant?.id) return;
-
-    if (field === "geofenceRadius" && value < 100) {
-      alert("Geofence radius must be at least 100 meters");
-      return;
-    }
-
-    await updateDoc(doc(db, "merchants", merchant.id), {
-      [field]: value,
+    await addDoc(collection(db, "merchant_messages"), {
+      merchantId,
+      customerId: selectedCustomer.customerId,
+      message: offerText,
+      createdAt: Timestamp.now(),
+      expiresAt: Timestamp.fromDate(
+        new Date(Date.now() + 30 * 60 * 1000) // 30 mins
+      ),
+      read: false,
     });
 
-    setMsg("Saved successfully");
-    setTimeout(() => setMsg(""), 1500);
+    setOfferText("");
+    setSelectedCustomer(null);
+    setOpen(false);
   };
 
-  /* ================= LOADING UI ================= */
-  if (loading) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Button variant="outlined" color="error" onClick={logout}>
-          Logout
-        </Button>
-
-        <Box sx={{ mt: 4, textAlign: "center" }}>
-          <CircularProgress />
-          <Typography sx={{ mt: 2 }}>Loading merchant profile…</Typography>
-        </Box>
-      </Box>
-    );
-  }
-
-  if (!merchant) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Button variant="outlined" color="error" onClick={logout}>
-          Logout
-        </Button>
-        <Typography color="error" sx={{ mt: 2 }}>
-          Unable to load merchant profile. Please login again.
-        </Typography>
-      </Box>
-    );
-  }
-
-  /* ================= FLAGS ================= */
-  const isHomeKitchen = merchant.category === "Home Kitchen";
-  const isPending = merchant.status === "pending";
-  const isApproved = merchant.status === "approved";
-  const isRejected = merchant.status === "rejected";
-
-  const isProfileComplete =
-    merchant.shopName &&
-    merchant.address &&
-    merchant.category &&
-    typeof merchant.lat === "number" &&
-    typeof merchant.lng === "number" &&
-    merchant.geofenceRadius >= 100;
-
-  /* ================= UI ================= */
   return (
-    <Box sx={{ p: 2 }}>
-      <Button variant="outlined" color="error" onClick={logout}>
-        Logout
-      </Button>
-
-      <Typography variant="h6" sx={{ mt: 2 }}>
-        Merchant Dashboard
+    <Box p={3}>
+      <Typography variant="h5" gutterBottom>
+        📍 Live Nearby Customers
       </Typography>
 
-      <Typography sx={{ mt: 1 }}>
-        Status: <strong>{merchant.status}</strong>
-      </Typography>
-
-      {isRejected && (
-        <Typography color="error">
-          ❌ Rejected: {merchant.rejectionReason}
+      {nearbyCustomers.length === 0 && (
+        <Typography color="text.secondary">
+          No customers nearby right now
         </Typography>
       )}
 
-      {msg && <Typography color="green">{msg}</Typography>}
+      {nearbyCustomers.map((c) => (
+        <Card key={c.id} sx={{ mb: 2 }}>
+          <CardContent>
+            <Typography>
+              👤 Anonymous Customer
+            </Typography>
+            <Typography variant="body2">
+              Distance: {Math.round(c.distanceMeters)} meters
+            </Typography>
+            <Typography variant="body2">
+              Time: just now
+            </Typography>
 
-      {/* ===== BUSINESS DETAILS ===== */}
-      <Card sx={{ my: 2 }}>
-        <CardContent>
-          <Typography variant="subtitle1">Business Details</Typography>
+            <Button
+              variant="contained"
+              sx={{ mt: 1 }}
+              onClick={() => {
+                setSelectedCustomer(c);
+                setOpen(true);
+              }}
+            >
+              Send Offer
+            </Button>
+          </CardContent>
+        </Card>
+      ))}
 
+      {/* ================= SEND OFFER DIALOG ================= */}
+      <Dialog open={open} onClose={() => setOpen(false)} fullWidth>
+        <DialogTitle>Send Instant Offer</DialogTitle>
+        <DialogContent>
           <TextField
-            label="Shop Name"
             fullWidth
-            sx={{ mt: 2 }}
-            value={merchant.shopName}
-            onChange={(e) => updateField("shopName", e.target.value)}
-            disabled={isPending || isApproved}
+            multiline
+            minRows={3}
+            placeholder="Eg: 10% OFF for next 30 mins"
+            value={offerText}
+            onChange={(e) => setOfferText(e.target.value)}
           />
-
-          <TextField
-            label="Business Address"
-            fullWidth
-            sx={{ mt: 2 }}
-            value={merchant.address}
-            onChange={(e) => updateField("address", e.target.value)}
-            disabled={isPending || isApproved}
-          />
-        </CardContent>
-      </Card>
-
-      {/* ===== CATEGORY ===== */}
-      <Card sx={{ my: 2 }}>
-        <CardContent>
-          <Typography variant="subtitle1">Business Category</Typography>
-
-          <TextField
-            select
-            fullWidth
-            value={merchant.category}
-            onChange={(e) => updateField("category", e.target.value)}
-            disabled={isPending || isApproved}
-          >
-            {CATEGORIES.map((c) => (
-              <MenuItem key={c} value={c}>
-                {c}
-              </MenuItem>
-            ))}
-          </TextField>
-
-          {isHomeKitchen && (
-            <Chip label="🍱 Limited Orders" color="warning" sx={{ mt: 1 }} />
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ===== GEOFENCE ===== */}
-      <Card sx={{ my: 2 }}>
-        <CardContent>
-          <Typography variant="subtitle1">Geofence</Typography>
-
-          <TextField
-            label="Latitude"
-            fullWidth
-            sx={{ mt: 2 }}
-            value={merchant.lat ?? ""}
-            onChange={(e) => updateField("lat", Number(e.target.value))}
-            disabled={isPending || isApproved}
-          />
-
-          <TextField
-            label="Longitude"
-            fullWidth
-            sx={{ mt: 2 }}
-            value={merchant.lng ?? ""}
-            onChange={(e) => updateField("lng", Number(e.target.value))}
-            disabled={isPending || isApproved}
-          />
-
-          <TextField
-            label="Radius (meters)"
-            type="number"
-            fullWidth
-            sx={{ mt: 2 }}
-            value={merchant.geofenceRadius}
-            onChange={(e) =>
-              updateField("geofenceRadius", Number(e.target.value))
-            }
-            disabled={isPending || isApproved}
-          />
-        </CardContent>
-      </Card>
-
-      {!isApproved && (
-        <Button
-          fullWidth
-          sx={{ mt: 2 }}
-          variant="contained"
-          disabled={!isProfileComplete || isPending}
-          onClick={() => updateField("status", "pending")}
-        >
-          Submit for Admin Approval
-        </Button>
-      )}
-
-      {isApproved && (
-        <Typography sx={{ mt: 3, color: "green" }}>
-          ✅ Approved — Ready for offers & alerts
-        </Typography>
-      )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={sendOffer}>
+            Send
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
