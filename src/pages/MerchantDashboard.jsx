@@ -106,6 +106,9 @@ export default function MerchantDashboard() {
   /* ==================================================
      UI
   ================================================== */
+  <Typography variant="body2" color="text.secondary">
+  Merchant ID: {merchantId}
+</Typography>
   return (
     <Box p={3}>
       {/* HEADER */}
