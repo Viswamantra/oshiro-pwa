@@ -13,25 +13,37 @@ import MerchantRegister from "./pages/MerchantRegister";
 export default function App() {
   return (
     <Routes>
-      {/* DEFAULT */}
+      {/* ======================
+          DEFAULT
+      ====================== */}
       <Route path="/" element={<Navigate to="/login" replace />} />
 
-      {/* LOGIN */}
+      {/* ======================
+          LOGIN
+      ====================== */}
       <Route path="/login" element={<Login />} />
 
-      {/* CUSTOMER */}
+      {/* ======================
+          CUSTOMER FLOW
+      ====================== */}
       <Route path="/customer" element={<CustomerDashboard />} />
 
-      {/* MERCHANT */}
+      {/* ======================
+          MERCHANT FLOW
+      ====================== */}
       <Route path="/merchant" element={<MerchantDashboard />} />
 
-      {/* 🔥 NEW MERCHANT REGISTRATION */}
+      {/* ======================
+          NEW MERCHANT REGISTRATION
+      ====================== */}
       <Route
         path="/merchant-register"
         element={<MerchantRegister />}
       />
 
-      {/* FALLBACK */}
+      {/* ======================
+          FALLBACK
+      ====================== */}
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
