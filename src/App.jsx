@@ -1,12 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthContext";
 
-/* PAGES */
-import Login from "./pages/Login";
+/* ✅ CORRECT IMPORT PATHS */
+import Login from "./auth/Login";
 import MerchantDashboard from "./pages/MerchantDashboard";
 import CustomerDashboard from "./pages/CustomerDashboard";
 
-/* ROUTE GUARDS */
+/* ROUTE GUARD */
 import MerchantRoute from "./routes/MerchantRoute";
 
 export default function App() {
@@ -30,7 +30,7 @@ export default function App() {
             }
           />
 
-          {/* CUSTOMER (TEMP UNPROTECTED — OK FOR NOW) */}
+          {/* CUSTOMER */}
           <Route path="/customer" element={<CustomerDashboard />} />
 
           {/* FALLBACK */}
