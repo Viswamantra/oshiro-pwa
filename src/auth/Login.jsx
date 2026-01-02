@@ -8,16 +8,11 @@ import {
   ToggleButtonGroup,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-} from "firebase/firestore";
+import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 
 /* =========================
-   ADMIN CREDENTIALS
+   ADMIN CONFIG
 ========================= */
 const ADMIN_MOBILE = "7386361725";
 const ADMIN_PASSWORD = "45#67";
@@ -28,8 +23,8 @@ export default function Login() {
   const [mobile, setMobile] = useState("");
   const [role, setRole] = useState(null);
   const [adminPassword, setAdminPassword] = useState("");
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   /* =========================
      CHECK MERCHANT EXISTS
@@ -54,15 +49,10 @@ export default function Login() {
       return;
     }
 
-    if (!role) {
-      setError("Please select Merchant or Customer");
-      return;
-    }
-
     setLoading(true);
 
     /* =========================
-       ADMIN FLOW
+       🔐 ADMIN FLOW (NO ROLE)
     ========================= */
     if (mobile === ADMIN_MOBILE) {
       if (adminPassword !== ADMIN_PASSWORD) {
@@ -71,11 +61,20 @@ export default function Login() {
         return;
       }
 
+      localStorage.clear();
       localStorage.setItem("oshiro_role", "admin");
-      localStorage.setItem("oshiro_admin_mobile", ADMIN_MOBILE);
-      localStorage.setItem("oshiro_admin_auth", "true");
+      localStorage.setItem("oshiro_admin", "true");
 
       navigate("/admin", { replace: true });
+      return;
+    }
+
+    /* =========================
+       ROLE REQUIRED FOR OTHERS
+    ========================= */
+    if (!role) {
+      setError("Please select Merchant or Customer");
+      setLoading(false);
       return;
     }
 
@@ -83,6 +82,7 @@ export default function Login() {
        CUSTOMER FLOW
     ========================= */
     if (role === "customer") {
+      localStorage.clear();
       localStorage.setItem("oshiro_role", "customer");
       localStorage.setItem(
         "oshiro_user",
@@ -97,6 +97,7 @@ export default function Login() {
        MERCHANT FLOW
     ========================= */
     try {
+      localStorage.clear();
       localStorage.setItem("oshiro_role", "merchant");
       localStorage.setItem(
         "oshiro_user",
@@ -124,9 +125,7 @@ export default function Login() {
   ========================= */
   return (
     <Box sx={{ p: 3, maxWidth: 420, mx: "auto", mt: 6 }}>
-      <Typography variant="h5" gutterBottom>
-        Login
-      </Typography>
+      <Typography variant="h5">Login</Typography>
 
       <TextField
         label="Mobile Number"
@@ -183,12 +182,6 @@ export default function Login() {
       >
         {loading ? "Please wait..." : "Continue"}
       </Button>
-
-      {role === "merchant" && (
-        <Typography variant="caption" sx={{ mt: 2, display: "block" }}>
-          New merchants will be asked to register
-        </Typography>
-      )}
     </Box>
   );
 }
