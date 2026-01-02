@@ -14,15 +14,17 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
+  /* ================= MOBILE INPUT ================= */
   const handleMobileChange = (e) => {
     const digits = e.target.value.replace(/\D/g, "");
     if (digits.length <= 10) {
       setMobile(digits);
       setError("");
-      setPassword(""); // reset password if mobile changes
+      setPassword(""); // reset admin password if mobile changes
     }
   };
 
+  /* ================= CONTINUE ================= */
   const handleContinue = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -32,7 +34,9 @@ export default function Login() {
       return;
     }
 
-    /* ===== ADMIN LOGIN ===== */
+    const fullMobile = "+91" + mobile;
+
+    /* ================= ADMIN LOGIN ================= */
     if (mobile === "7386361725") {
       if (password !== "45#67") {
         setError("Invalid admin password");
@@ -42,25 +46,30 @@ export default function Login() {
       localStorage.setItem("oshiro_role", "admin");
       localStorage.setItem(
         "oshiro_user",
-        JSON.stringify({ mobile: "+91" + mobile })
+        JSON.stringify({ mobile: fullMobile })
       );
+
       navigate("/admin", { replace: true });
       return;
     }
 
-    /* ===== NORMAL USER ===== */
+    /* ================= NORMAL USER ================= */
+    // IMPORTANT: role is NOT set here
+    // Role will be selected in SelectRole screen
+    localStorage.removeItem("oshiro_role");
     localStorage.setItem(
       "oshiro_user",
-      JSON.stringify({ mobile: "+91" + mobile })
+      JSON.stringify({ mobile: fullMobile })
     );
-    localStorage.removeItem("oshiro_role");
+
     navigate("/select-role", { replace: true });
   };
 
+  /* ================= UI ================= */
   return (
     <Box sx={{ maxWidth: 360, mx: "auto", mt: 6 }}>
       <Typography variant="h6" align="center">
-        Login Screen
+        Login
       </Typography>
 
       <TextField
@@ -78,7 +87,7 @@ export default function Login() {
         }}
       />
 
-      {/* ADMIN PASSWORD ONLY IF ADMIN MOBILE */}
+      {/* ===== ADMIN PASSWORD (ONLY FOR ADMIN MOBILE) ===== */}
       {mobile === "7386361725" && (
         <TextField
           label="Admin Password"
