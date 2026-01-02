@@ -47,13 +47,7 @@ export default function CustomerDashboard() {
   const navigate = useNavigate();
 
   /* ===== ROLE GUARD ===== */
-  const role = localStorage.getItem("oshiro_role");
-  if (role !== "customer") {
-    navigate("/login", { replace: true });
-    return null;
-  }
-
-  /* ===== LOGOUT ===== */
+    /* ===== LOGOUT ===== */
   const logout = () => {
     localStorage.clear();
     window.location.href = "/login";
