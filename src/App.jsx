@@ -7,13 +7,9 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/login" replace />} />
-
       <Route path="/login" element={<Login />} />
-
-      {/* 🚫 TEMP: NO ROUTE GUARDS */}
       <Route path="/merchant" element={<MerchantDashboard />} />
       <Route path="/customer" element={<CustomerDashboard />} />
-
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
