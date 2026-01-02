@@ -74,7 +74,7 @@ export default function CustomerDashboard() {
   const [selectedOffer, setSelectedOffer] = useState(null);
 
   const lastLocationWrite = useRef(0);
-  const lastGeoFire = useRef({}); // cooldown per merchant
+  const lastGeoFire = useRef({});
 
   /* =========================
      LIVE GPS
@@ -152,7 +152,7 @@ export default function CustomerDashboard() {
   }, []);
 
   /* =========================
-     🔔 FIRE GEO EVENTS (SIDE EFFECT)
+     FIRE GEO EVENTS
   ========================= */
   useEffect(() => {
     if (!customerLoc || !customerId) return;
@@ -169,12 +169,12 @@ export default function CustomerDashboard() {
       );
 
       const radius =
-  typeof m.geofenceRadius === "number" && m.geofenceRadius > 0
-    ? m.geofenceRadius
-    : 300;
+        typeof m.geofenceRadius === "number" && m.geofenceRadius > 0
+          ? m.geofenceRadius
+          : 300;
+
       if (d * 1000 > radius) return;
 
-      // cooldown: 30 minutes per merchant
       const last = lastGeoFire.current[o.merchantId] || 0;
       if (Date.now() - last < 30 * 60 * 1000) return;
       lastGeoFire.current[o.merchantId] = Date.now();
@@ -196,7 +196,7 @@ export default function CustomerDashboard() {
   }, [customerLoc, offers, merchantsMap, customerId]);
 
   /* =========================
-     FILTER OFFERS (PURE)
+     FILTER OFFERS
   ========================= */
   const nearbyOffers = useMemo(() => {
     if (!customerLoc) return [];
@@ -242,7 +242,7 @@ export default function CustomerDashboard() {
         </Typography>
       )}
 
-      {/* ===== FILTERS ===== */}
+      {/* FILTERS */}
       <Box sx={{ display: "flex", gap: 2, my: 2 }}>
         <TextField
           select
@@ -272,7 +272,7 @@ export default function CustomerDashboard() {
         </TextField>
       </Box>
 
-      {/* ===== OFFER LIST ===== */}
+      {/* OFFER LIST */}
       {nearbyOffers.map((o) => (
         <Card
           key={o.id}
@@ -289,18 +289,16 @@ export default function CustomerDashboard() {
             </Typography>
 
             {o.expiryDate?.toDate?.() && (
-  <Typography variant="caption" color="error">
-    ⏰ Valid till{" "}
-    {o.expiryDate.toDate().toLocaleDateString("en-IN")}
-  </Typography>
-)}
-
+              <Typography variant="caption" color="error">
+                ⏰ Valid till{" "}
+                {o.expiryDate.toDate().toLocaleDateString("en-IN")}
+              </Typography>
             )}
           </CardContent>
         </Card>
       ))}
 
-      {/* ===== OFFER POPUP ===== */}
+      {/* OFFER POPUP */}
       <Dialog
         open={Boolean(selectedOffer)}
         onClose={() => setSelectedOffer(null)}
@@ -320,16 +318,14 @@ export default function CustomerDashboard() {
               )}
 
               {selectedOffer.expiryDate?.toDate?.() && (
-  <Typography sx={{ mt: 1 }} color="error">
-    ⏰ Offer valid till{" "}
-    <strong>
-      {selectedOffer.expiryDate
-        .toDate()
-        .toLocaleString("en-IN")}
-    </strong>
-  </Typography>
-)}
-
+                <Typography sx={{ mt: 1 }} color="error">
+                  ⏰ Offer valid till{" "}
+                  <strong>
+                    {selectedOffer.expiryDate
+                      .toDate()
+                      .toLocaleString("en-IN")}
+                  </strong>
+                </Typography>
               )}
             </DialogContent>
 
