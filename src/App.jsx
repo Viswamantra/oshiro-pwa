@@ -1,28 +1,24 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-
-/* AUTH */
 import Login from "./auth/Login";
-
-/* DASHBOARDS */
 import AdminDashboard from "./pages/AdminDashboard";
 import CustomerDashboard from "./pages/CustomerDashboard";
+import MerchantDashboard from "./pages/MerchantDashboard";
+import MerchantRegister from "./pages/MerchantRegister";
 
 export default function App() {
   return (
     <Routes>
-      {/* DEFAULT */}
       <Route path="/" element={<Navigate to="/login" replace />} />
-
-      {/* LOGIN */}
       <Route path="/login" element={<Login />} />
 
-      {/* ADMIN */}
       <Route path="/admin" element={<AdminDashboard />} />
-
-      {/* CUSTOMER */}
       <Route path="/customer" element={<CustomerDashboard />} />
+      <Route path="/merchant" element={<MerchantDashboard />} />
+      <Route
+        path="/merchant-register"
+        element={<MerchantRegister />}
+      />
 
-      {/* FALLBACK */}
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
