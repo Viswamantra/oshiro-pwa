@@ -1,10 +1,18 @@
 import React, { useState } from "react";
-import { Box, Button, TextField, Typography } from "@mui/material";
+import {
+  Box,
+  Button,
+  TextField,
+  Typography,
+  ToggleButton,
+  ToggleButtonGroup,
+} from "@mui/material";
 import { useNavigate } from "react-router-dom";
 
 export default function Login() {
   const navigate = useNavigate();
   const [mobile, setMobile] = useState("");
+  const [role, setRole] = useState(null);
 
   const handleLogin = () => {
     if (mobile.length !== 10) {
@@ -12,15 +20,16 @@ export default function Login() {
       return;
     }
 
-    const role = mobile === "9999999999" ? "merchant" : "customer";
+    if (!role) {
+      alert("Please select Merchant or Customer");
+      return;
+    }
 
     localStorage.setItem("oshiro_role", role);
     localStorage.setItem(
       "oshiro_user",
       JSON.stringify({ mobile })
     );
-
-    console.log("LOGIN OK →", role);
 
     navigate(role === "merchant" ? "/merchant" : "/customer");
   };
@@ -40,7 +49,27 @@ export default function Login() {
         }
       />
 
-      <Button variant="contained" onClick={handleLogin}>
+      <ToggleButtonGroup
+        color="primary"
+        exclusive
+        value={role}
+        onChange={(e, v) => setRole(v)}
+        sx={{ my: 2 }}
+        fullWidth
+      >
+        <ToggleButton value="customer">
+          Customer
+        </ToggleButton>
+        <ToggleButton value="merchant">
+          Merchant
+        </ToggleButton>
+      </ToggleButtonGroup>
+
+      <Button
+        variant="contained"
+        fullWidth
+        onClick={handleLogin}
+      >
         Continue
       </Button>
     </Box>
