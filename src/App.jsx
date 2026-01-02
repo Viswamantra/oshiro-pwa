@@ -1,15 +1,37 @@
 import { Routes, Route, Navigate } from "react-router-dom";
+
+/* AUTH */
 import Login from "./auth/Login";
+
+/* DASHBOARDS */
 import MerchantDashboard from "./pages/MerchantDashboard";
 import CustomerDashboard from "./pages/CustomerDashboard";
+
+/* REGISTRATION */
+import MerchantRegister from "./pages/MerchantRegister";
 
 export default function App() {
   return (
     <Routes>
+      {/* DEFAULT */}
       <Route path="/" element={<Navigate to="/login" replace />} />
+
+      {/* LOGIN */}
       <Route path="/login" element={<Login />} />
-      <Route path="/merchant" element={<MerchantDashboard />} />
+
+      {/* CUSTOMER */}
       <Route path="/customer" element={<CustomerDashboard />} />
+
+      {/* MERCHANT */}
+      <Route path="/merchant" element={<MerchantDashboard />} />
+
+      {/* 🔥 NEW MERCHANT REGISTRATION */}
+      <Route
+        path="/merchant-register"
+        element={<MerchantRegister />}
+      />
+
+      {/* FALLBACK */}
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
