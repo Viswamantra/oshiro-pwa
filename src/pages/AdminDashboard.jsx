@@ -11,6 +11,7 @@ import {
   DialogActions,
   TextField,
   Grid,
+  Chip,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import {
@@ -18,8 +19,6 @@ import {
   onSnapshot,
   addDoc,
   serverTimestamp,
-  query,
-  where,
 } from "firebase/firestore";
 import { db } from "../firebase";
 
@@ -56,15 +55,10 @@ export default function AdminDashboard() {
   const [offerDesc, setOfferDesc] = useState("");
 
   /* ======================
-     LOAD APPROVED MERCHANTS
+     LOAD ALL MERCHANTS
   ====================== */
   useEffect(() => {
-    const q = query(
-      collection(db, "merchants"),
-      where("status", "==", "approved")
-    );
-
-    return onSnapshot(q, (snap) => {
+    return onSnapshot(collection(db, "merchants"), (snap) => {
       setMerchants(
         snap.docs.map((d) => ({
           id: d.id,
@@ -153,7 +147,7 @@ export default function AdminDashboard() {
           MERCHANT LIST
       ====================== */}
       <Typography variant="h6" sx={{ mt: 4 }}>
-        Approved Merchants
+        Merchants
       </Typography>
 
       <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -162,23 +156,52 @@ export default function AdminDashboard() {
             <Card>
               <CardContent>
                 <Typography variant="subtitle1">
-                  {m.shopName}
-                </Typography>
-                <Typography variant="body2">
-                  {m.mobile} • {m.category}
+                  {m.shopName || "Unnamed Shop"}
                 </Typography>
 
-                <Button
-                  sx={{ mt: 1 }}
-                  variant="contained"
+                <Typography variant="body2">
+                  {m.mobile} • {m.category || "—"}
+                </Typography>
+
+                <Chip
+                  label={m.status || "unknown"}
+                  color={
+                    m.status === "approved"
+                      ? "success"
+                      : m.status === "pending"
+                      ? "warning"
+                      : "default"
+                  }
                   size="small"
-                  onClick={() => {
-                    setActiveMerchant(m);
-                    setOfferOpen(true);
-                  }}
-                >
-                  Create Offer
-                </Button>
+                  sx={{ mt: 1 }}
+                />
+
+                {/* ✅ CREATE OFFER ONLY IF APPROVED */}
+                {m.status === "approved" && (
+                  <Button
+                    sx={{ mt: 2 }}
+                    variant="contained"
+                    size="small"
+                    fullWidth
+                    onClick={() => {
+                      setActiveMerchant(m);
+                      setOfferOpen(true);
+                    }}
+                  >
+                    Create Offer
+                  </Button>
+                )}
+
+                {/* INFO FOR NON-APPROVED */}
+                {m.status !== "approved" && (
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ mt: 1, display: "block" }}
+                  >
+                    Offer can be created after approval
+                  </Typography>
+                )}
               </CardContent>
             </Card>
           </Grid>
