@@ -31,25 +31,24 @@ import {
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
 
-/* 🔐 ADMIN CONSTANTS */
+/* ======================
+   🔐 SUPER ADMIN CONFIG
+====================== */
 const ADMIN_MOBILE = "7386361725";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
 
   /* ======================
-     🔐 ADMIN AUTH GUARD
+     🔐 ADMIN AUTH GUARD (FIXED)
   ====================== */
   useEffect(() => {
     const role = localStorage.getItem("oshiro_role");
-    const adminMobile = localStorage.getItem("oshiro_admin_mobile");
-    const isAuthed = localStorage.getItem("oshiro_admin_auth");
+    const user = JSON.parse(
+      localStorage.getItem("oshiro_user") || "{}"
+    );
 
-    if (
-      role !== "admin" ||
-      adminMobile !== ADMIN_MOBILE ||
-      isAuthed !== "true"
-    ) {
+    if (role !== "admin" || user.mobile !== ADMIN_MOBILE) {
       localStorage.clear();
       navigate("/login", { replace: true });
     }
@@ -246,10 +245,12 @@ export default function AdminDashboard() {
       </Button>
 
       <Typography variant="h5" sx={{ mt: 2 }}>
-        Admin Dashboard
+        Super Admin Dashboard
       </Typography>
 
-      <Grid container spacing={2} sx={{ mt: 2 }}>
+      <Divider sx={{ my: 2 }} />
+
+      <Grid container spacing={2}>
         {[
           ["Merchants", merchants.length, "merchants"],
           [
