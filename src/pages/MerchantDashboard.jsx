@@ -8,6 +8,7 @@ import {
   Card,
   CardContent,
   Chip,
+  CircularProgress,
 } from "@mui/material";
 import {
   collection,
@@ -16,6 +17,7 @@ import {
   onSnapshot,
   doc,
   updateDoc,
+  addDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
@@ -38,48 +40,111 @@ const CATEGORIES = [
 export default function MerchantDashboard() {
   const navigate = useNavigate();
 
-  /* 🔐 ROLE GUARD (CRITICAL) */
+  /* ===== ROLE GUARD ===== */
   const role = localStorage.getItem("oshiro_role");
   if (role !== "merchant") {
     navigate("/login", { replace: true });
     return null;
   }
 
+  /* ===== LOGOUT (ALWAYS AVAILABLE) ===== */
+  const logout = () => {
+    localStorage.clear();
+    window.location.href = "/login";
+  };
+
   const stored = JSON.parse(localStorage.getItem("oshiro_user") || "{}");
-  const mobile = stored.mobile;
+  const rawMobile = stored.mobile || "";
+
+  // normalize mobile: remove +91 if present
+  const mobile = rawMobile.replace("+91", "");
 
   const [merchant, setMerchant] = useState(null);
-  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [msg, setMsg] = useState("");
 
-  /* ================= LOAD MERCHANT ================= */
+  /* =========================================================
+     LOAD EXISTING MERCHANT (NO HANG)
+  ========================================================= */
   useEffect(() => {
     if (!mobile) {
-      setError("Mobile not found. Please login again.");
+      logout();
       return;
     }
 
     const q = query(
       collection(db, "merchants"),
-      where("mobile", "==", mobile)
+      where("mobile", "in", [mobile, "+91" + mobile])
     );
 
-    const unsub = onSnapshot(q, (snap) => {
-      if (snap.empty) {
-        setError(
-          "❌ Merchant profile not found.\nPlease register as Merchant."
-        );
-        setMerchant(null);
-        return;
+    const unsub = onSnapshot(
+      q,
+      async (snap) => {
+        if (!snap.empty) {
+          const docSnap = snap.docs[0];
+          const data = docSnap.data();
+
+          // Auto-fix geofence if bad
+          if (
+            typeof data.geofenceRadius !== "number" ||
+            data.geofenceRadius < 100
+          ) {
+            await updateDoc(doc(db, "merchants", docSnap.id), {
+              geofenceRadius: 300,
+            });
+            data.geofenceRadius = 300;
+          }
+
+          setMerchant({ id: docSnap.id, ...data });
+          setLoading(false);
+        } else {
+          // Create only if truly new
+          const ref = await addDoc(collection(db, "merchants"), {
+            mobile: "+91" + mobile,
+            status: "draft",
+            category: "",
+            shopName: "",
+            address: "",
+            lat: null,
+            lng: null,
+            geofenceRadius: 300,
+            createdAt: new Date(),
+          });
+
+          setMerchant({
+            id: ref.id,
+            mobile: "+91" + mobile,
+            status: "draft",
+            category: "",
+            shopName: "",
+            address: "",
+            lat: null,
+            lng: null,
+            geofenceRadius: 300,
+          });
+          setLoading(false);
+        }
+      },
+      (err) => {
+        console.error("Merchant load error:", err);
+        setLoading(false);
       }
+    );
 
-      const docSnap = snap.docs[0];
-      setMerchant({ id: docSnap.id, ...docSnap.data() });
-    });
+    // SAFETY: never hang forever
+    const timeout = setTimeout(() => {
+      setLoading(false);
+    }, 8000);
 
-    return () => unsub();
+    return () => {
+      unsub();
+      clearTimeout(timeout);
+    };
   }, [mobile]);
 
-  /* ================= REGISTER FCM ================= */
+  /* =========================================================
+     🔔 REGISTER FCM TOKEN
+  ========================================================= */
   useEffect(() => {
     if (!merchant?.id) return;
 
@@ -98,52 +163,98 @@ export default function MerchantDashboard() {
             fcmToken: token,
           });
         }
-      } catch (e) {
-        console.error("FCM error:", e);
+      } catch (err) {
+        console.error("FCM error:", err);
       }
     };
 
     registerPush();
   }, [merchant?.id]);
 
-  /* ================= UPDATE FIELD ================= */
+  /* =========================================================
+     UPDATE FIELD
+  ========================================================= */
   const updateField = async (field, value) => {
     if (!merchant?.id) return;
+
+    if (field === "geofenceRadius" && value < 100) {
+      alert("Geofence radius must be at least 100 meters");
+      return;
+    }
 
     await updateDoc(doc(db, "merchants", merchant.id), {
       [field]: value,
     });
 
-    setMerchant((m) => ({ ...m, [field]: value }));
+    setMsg("Saved successfully");
+    setTimeout(() => setMsg(""), 1500);
   };
 
-  /* ================= UI STATES ================= */
-  if (error) {
+  /* ================= LOADING UI ================= */
+  if (loading) {
     return (
       <Box sx={{ p: 3 }}>
-        <Typography color="error" whiteSpace="pre-line">
-          {error}
-        </Typography>
-        <Button sx={{ mt: 2 }} onClick={() => navigate("/login")}>
-          Go to Login
+        <Button variant="outlined" color="error" onClick={logout}>
+          Logout
         </Button>
+
+        <Box sx={{ mt: 4, textAlign: "center" }}>
+          <CircularProgress />
+          <Typography sx={{ mt: 2 }}>Loading merchant profile…</Typography>
+        </Box>
       </Box>
     );
   }
 
   if (!merchant) {
-    return <Typography sx={{ p: 3 }}>Loading merchant...</Typography>;
+    return (
+      <Box sx={{ p: 3 }}>
+        <Button variant="outlined" color="error" onClick={logout}>
+          Logout
+        </Button>
+        <Typography color="error" sx={{ mt: 2 }}>
+          Unable to load merchant profile. Please login again.
+        </Typography>
+      </Box>
+    );
   }
 
+  /* ================= FLAGS ================= */
   const isHomeKitchen = merchant.category === "Home Kitchen";
+  const isPending = merchant.status === "pending";
+  const isApproved = merchant.status === "approved";
+  const isRejected = merchant.status === "rejected";
 
+  const isProfileComplete =
+    merchant.shopName &&
+    merchant.address &&
+    merchant.category &&
+    typeof merchant.lat === "number" &&
+    typeof merchant.lng === "number" &&
+    merchant.geofenceRadius >= 100;
+
+  /* ================= UI ================= */
   return (
     <Box sx={{ p: 2 }}>
-      <Typography variant="h6">Merchant Dashboard</Typography>
+      <Button variant="outlined" color="error" onClick={logout}>
+        Logout
+      </Button>
+
+      <Typography variant="h6" sx={{ mt: 2 }}>
+        Merchant Dashboard
+      </Typography>
 
       <Typography sx={{ mt: 1 }}>
         Status: <strong>{merchant.status}</strong>
       </Typography>
+
+      {isRejected && (
+        <Typography color="error">
+          ❌ Rejected: {merchant.rejectionReason}
+        </Typography>
+      )}
+
+      {msg && <Typography color="green">{msg}</Typography>}
 
       {/* ===== BUSINESS DETAILS ===== */}
       <Card sx={{ my: 2 }}>
@@ -154,16 +265,18 @@ export default function MerchantDashboard() {
             label="Shop Name"
             fullWidth
             sx={{ mt: 2 }}
-            value={merchant.shopName || ""}
+            value={merchant.shopName}
             onChange={(e) => updateField("shopName", e.target.value)}
+            disabled={isPending || isApproved}
           />
 
           <TextField
-            label="Address"
+            label="Business Address"
             fullWidth
             sx={{ mt: 2 }}
-            value={merchant.address || ""}
+            value={merchant.address}
             onChange={(e) => updateField("address", e.target.value)}
+            disabled={isPending || isApproved}
           />
         </CardContent>
       </Card>
@@ -171,13 +284,14 @@ export default function MerchantDashboard() {
       {/* ===== CATEGORY ===== */}
       <Card sx={{ my: 2 }}>
         <CardContent>
-          <Typography variant="subtitle1">Category</Typography>
+          <Typography variant="subtitle1">Business Category</Typography>
 
           <TextField
             select
             fullWidth
-            value={merchant.category || ""}
+            value={merchant.category}
             onChange={(e) => updateField("category", e.target.value)}
+            disabled={isPending || isApproved}
           >
             {CATEGORIES.map((c) => (
               <MenuItem key={c} value={c}>
@@ -192,7 +306,7 @@ export default function MerchantDashboard() {
         </CardContent>
       </Card>
 
-      {/* ===== GEO ===== */}
+      {/* ===== GEOFENCE ===== */}
       <Card sx={{ my: 2 }}>
         <CardContent>
           <Typography variant="subtitle1">Geofence</Typography>
@@ -201,16 +315,18 @@ export default function MerchantDashboard() {
             label="Latitude"
             fullWidth
             sx={{ mt: 2 }}
-            value={merchant.lat || ""}
+            value={merchant.lat ?? ""}
             onChange={(e) => updateField("lat", Number(e.target.value))}
+            disabled={isPending || isApproved}
           />
 
           <TextField
             label="Longitude"
             fullWidth
             sx={{ mt: 2 }}
-            value={merchant.lng || ""}
+            value={merchant.lng ?? ""}
             onChange={(e) => updateField("lng", Number(e.target.value))}
+            disabled={isPending || isApproved}
           />
 
           <TextField
@@ -218,13 +334,32 @@ export default function MerchantDashboard() {
             type="number"
             fullWidth
             sx={{ mt: 2 }}
-            value={merchant.geofenceRadius || 300}
+            value={merchant.geofenceRadius}
             onChange={(e) =>
               updateField("geofenceRadius", Number(e.target.value))
             }
+            disabled={isPending || isApproved}
           />
         </CardContent>
       </Card>
+
+      {!isApproved && (
+        <Button
+          fullWidth
+          sx={{ mt: 2 }}
+          variant="contained"
+          disabled={!isProfileComplete || isPending}
+          onClick={() => updateField("status", "pending")}
+        >
+          Submit for Admin Approval
+        </Button>
+      )}
+
+      {isApproved && (
+        <Typography sx={{ mt: 3, color: "green" }}>
+          ✅ Approved — Ready for offers & alerts
+        </Typography>
+      )}
     </Box>
   );
 }
