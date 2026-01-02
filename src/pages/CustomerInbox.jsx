@@ -5,76 +5,93 @@ import {
   Card,
   CardContent,
   Chip,
-  Divider,
 } from "@mui/material";
 import {
   collection,
   query,
   where,
+  orderBy,
   onSnapshot,
   updateDoc,
   doc,
+  Timestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
+import { useAuth } from "../auth/AuthContext";
 
 export default function CustomerInbox() {
-  const stored = JSON.parse(localStorage.getItem("oshiro_user") || "{}");
-  const customerId = stored.customerId;
+  const { user } = useAuth(); // customer auth
+  const customerId = user?.uid;
 
   const [messages, setMessages] = useState([]);
 
+  /* ============================
+     LOAD CUSTOMER MESSAGES
+  ============================ */
   useEffect(() => {
     if (!customerId) return;
 
     const q = query(
-      collection(db, "customer_alerts"),
-      where("customerId", "==", customerId)
+      collection(db, "merchant_messages"),
+      where("customerId", "==", customerId),
+      orderBy("createdAt", "desc")
     );
 
-    return onSnapshot(q, snap =>
-      setMessages(
-        snap.docs.map(d => ({ id: d.id, ...d.data() }))
-      )
-    );
+    return onSnapshot(q, (snap) => {
+      const now = Timestamp.now();
+
+      const rows = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((m) => !m.expiresAt || m.expiresAt.toMillis() > now.toMillis());
+
+      setMessages(rows);
+    });
   }, [customerId]);
 
-  const markAsRead = async id => {
-    await updateDoc(doc(db, "customer_alerts", id), {
+  /* ============================
+     MARK AS READ
+  ============================ */
+  const markRead = async (id) => {
+    await updateDoc(doc(db, "merchant_messages", id), {
       read: true,
     });
   };
 
   return (
-    <Box sx={{ p: 2 }}>
-      <Typography variant="h6">🔔 Inbox</Typography>
-      <Divider sx={{ my: 2 }} />
+    <Box p={3}>
+      <Typography variant="h5" gutterBottom>
+        📥 Nearby Offers
+      </Typography>
 
       {messages.length === 0 && (
-        <Typography>No messages yet</Typography>
+        <Typography color="text.secondary">
+          No offers right now
+        </Typography>
       )}
 
-      {messages.map(m => (
+      {messages.map((m) => (
         <Card
           key={m.id}
           sx={{
             mb: 2,
-            background: m.read ? "#fafafa" : "#e3f2fd",
+            backgroundColor: m.read ? "#fafafa" : "#e3f2fd",
             cursor: "pointer",
           }}
-          onClick={() => !m.read && markAsRead(m.id)}
+          onClick={() => markRead(m.id)}
         >
           <CardContent>
-            <Typography>{m.message}</Typography>
-            <Typography variant="caption">
-              {m.distanceMeters}m away
+            <Typography variant="body1">
+              🎁 {m.message}
             </Typography>
+
+            <Typography variant="caption" color="text.secondary">
+              Received just now
+            </Typography>
+
             {!m.read && (
-              <Chip
-                label="NEW"
-                size="small"
-                color="primary"
-                sx={{ ml: 1 }}
-              />
+              <Box mt={1}>
+                <Chip label="NEW" color="primary" size="small" />
+              </Box>
             )}
           </CardContent>
         </Card>
