@@ -1,6 +1,6 @@
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker
+    // navigator.serviceWorker
       .register("/firebase-messaging-sw.js")
       .then(() => console.log("✅ Firebase SW registered"))
       .catch((err) => console.error("❌ Firebase SW error", err));
