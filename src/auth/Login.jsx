@@ -8,11 +8,16 @@ import {
   ToggleButtonGroup,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+} from "firebase/firestore";
 import { db } from "../firebase";
 
 /* ======================
-   ADMIN CONFIG
+   SUPER ADMIN CONFIG
 ====================== */
 const ADMIN_MOBILE = "7386361725";
 const ADMIN_PASSWORD = "45#67";
@@ -27,9 +32,9 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
 
   /* ======================
-     CHECK MERCHANT EXISTS
+     CHECK MERCHANT
   ====================== */
-  const checkMerchantExists = async (mobile) => {
+  const getMerchantByMobile = async (mobile) => {
     const q = query(
       collection(db, "merchants"),
       where("mobile", "==", mobile)
@@ -52,7 +57,7 @@ export default function Login() {
     setLoading(true);
 
     /* ======================
-       🔐 ADMIN LOGIN
+       🔐 SUPER ADMIN LOGIN
     ====================== */
     if (mobile === ADMIN_MOBILE) {
       if (password !== ADMIN_PASSWORD) {
@@ -89,7 +94,7 @@ export default function Login() {
     );
 
     /* ======================
-       CUSTOMER LOGIN
+       👤 CUSTOMER LOGIN
     ====================== */
     if (role === "customer") {
       navigate("/customer", { replace: true });
@@ -97,25 +102,39 @@ export default function Login() {
     }
 
     /* ======================
-       MERCHANT LOGIN
+       🏪 MERCHANT LOGIN
     ====================== */
     if (role === "merchant") {
-      const snap = await checkMerchantExists(mobile);
+      const snap = await getMerchantByMobile(mobile);
 
+      // 🆕 New Merchant
       if (snap.empty) {
-        // 🆕 NEW MERCHANT
         navigate("/merchant-register", { replace: true });
-      } else {
-        // ✅ EXISTING MERCHANT
-        localStorage.setItem(
-          "oshiro_merchant_id",
-          snap.docs[0].id
-        );
-        navigate("/merchant", { replace: true });
+        return;
       }
-    }
 
-    setLoading(false);
+      const merchantDoc = snap.docs[0];
+      const merchant = merchantDoc.data();
+
+      // ⏳ Pending / Rejected
+      if (merchant.status !== "approved") {
+        setError(
+          merchant.status === "pending"
+            ? "Merchant approval pending"
+            : "Merchant registration rejected"
+        );
+        setLoading(false);
+        return;
+      }
+
+      // ✅ Approved Merchant
+      localStorage.setItem(
+        "oshiro_merchant_id",
+        merchantDoc.id
+      );
+
+      navigate("/merchant", { replace: true });
+    }
   };
 
   return (
