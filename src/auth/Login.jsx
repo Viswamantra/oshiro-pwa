@@ -8,13 +8,11 @@ import {
   ToggleButtonGroup,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-} from "firebase/firestore";
+import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
+
+/* 🔑 ADMIN MOBILE */
+const ADMIN_MOBILE = "7386361725";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -23,6 +21,21 @@ export default function Login() {
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  /* =========================
+     CHECK MERCHANT EXISTS
+  ========================= */
+  async function merchantExists(mobile) {
+    const q = query(
+      collection(db, "merchants"),
+      where("mobile", "==", mobile)
+    );
+    const snap = await getDocs(q);
+    return !snap.empty;
+  }
+
+  /* =========================
+     LOGIN HANDLER
+  ========================= */
   const handleLogin = async () => {
     if (mobile.length !== 10) {
       alert("Enter exactly 10 digit mobile number");
@@ -36,7 +49,7 @@ export default function Login() {
 
     setLoading(true);
 
-    // Save common data
+    /* SAVE SESSION */
     localStorage.setItem("oshiro_role", role);
     localStorage.setItem(
       "oshiro_user",
@@ -44,7 +57,16 @@ export default function Login() {
     );
 
     /* =========================
-       CUSTOMER FLOW
+       ADMIN
+    ========================= */
+    if (mobile === ADMIN_MOBILE) {
+      localStorage.setItem("oshiro_role", "admin");
+      navigate("/admin", { replace: true });
+      return;
+    }
+
+    /* =========================
+       CUSTOMER
     ========================= */
     if (role === "customer") {
       navigate("/customer", { replace: true });
@@ -52,49 +74,38 @@ export default function Login() {
     }
 
     /* =========================
-       MERCHANT FLOW
+       MERCHANT
     ========================= */
-    try {
-      const q = query(
-        collection(db, "merchants"),
-        where("mobile", "==", mobile)
-      );
+    const exists = await merchantExists(mobile);
 
-      const snap = await getDocs(q);
-
-      if (snap.empty) {
-        // 🆕 New merchant → registration
-        navigate("/merchant-register", { replace: true });
-      } else {
-        // ✅ Existing merchant → dashboard
-        const merchantDoc = snap.docs[0];
-        localStorage.setItem(
-          "oshiro_merchant_id",
-          merchantDoc.id
-        );
-        navigate("/merchant", { replace: true });
-      }
-    } catch (err) {
-      console.error("Login error:", err);
-      alert("Something went wrong. Please try again.");
-    } finally {
-      setLoading(false);
+    if (exists) {
+      localStorage.setItem("oshiro_merchant_id", mobile);
+      navigate("/merchant", { replace: true });
+    } else {
+      navigate("/merchant-register", { replace: true });
     }
+
+    setLoading(false);
   };
 
+  /* =========================
+     UI
+  ========================= */
   return (
     <Box p={3} maxWidth={400} mx="auto">
-      <Typography variant="h6">Login</Typography>
+      <Typography variant="h6" mb={2}>
+        Login
+      </Typography>
 
       <TextField
         label="Mobile Number"
         fullWidth
-        sx={{ my: 2 }}
         value={mobile}
         inputProps={{ maxLength: 10 }}
         onChange={(e) =>
           setMobile(e.target.value.replace(/\D/g, ""))
         }
+        sx={{ mb: 2 }}
       />
 
       <ToggleButtonGroup
@@ -102,8 +113,8 @@ export default function Login() {
         exclusive
         value={role}
         onChange={(e, v) => setRole(v)}
-        sx={{ my: 2 }}
         fullWidth
+        sx={{ mb: 2 }}
       >
         <ToggleButton value="customer">
           Customer
@@ -116,20 +127,11 @@ export default function Login() {
       <Button
         variant="contained"
         fullWidth
-        onClick={handleLogin}
         disabled={loading}
+        onClick={handleLogin}
       >
         {loading ? "Checking..." : "Continue"}
       </Button>
-
-      {role === "merchant" && (
-        <Typography
-          variant="caption"
-          sx={{ mt: 2, display: "block" }}
-        >
-          New merchants will be asked to register
-        </Typography>
-      )}
     </Box>
   );
 }
