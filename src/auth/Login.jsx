@@ -1,8 +1,17 @@
 import React, { useState } from "react";
-import { Box, Button, TextField, Typography } from "@mui/material";
+import {
+  Box,
+  Button,
+  TextField,
+  Typography,
+  ToggleButton,
+  ToggleButtonGroup,
+} from "@mui/material";
 import { useNavigate } from "react-router-dom";
 
-/* ADMIN CREDENTIALS */
+/* ======================
+   ADMIN CONFIG
+====================== */
 const ADMIN_MOBILE = "7386361725";
 const ADMIN_PASSWORD = "45#67";
 
@@ -11,6 +20,7 @@ export default function Login() {
 
   const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState(null);
   const [error, setError] = useState("");
 
   const handleLogin = () => {
@@ -21,35 +31,51 @@ export default function Login() {
       return;
     }
 
-    if (mobile !== ADMIN_MOBILE) {
-      setError("Not an admin number");
+    /* ======================
+       🔐 ADMIN LOGIN
+    ====================== */
+    if (mobile === ADMIN_MOBILE) {
+      if (password !== ADMIN_PASSWORD) {
+        setError("Invalid admin password");
+        return;
+      }
+
+      localStorage.clear();
+      localStorage.setItem("oshiro_role", "admin");
+      localStorage.setItem(
+        "oshiro_user",
+        JSON.stringify({ mobile })
+      );
+
+      navigate("/admin", { replace: true });
       return;
     }
 
-    if (password !== ADMIN_PASSWORD) {
-      setError("Invalid admin password");
+    /* ======================
+       CUSTOMER LOGIN
+    ====================== */
+    if (role === "customer") {
+      localStorage.clear();
+      localStorage.setItem("oshiro_role", "customer");
+      localStorage.setItem(
+        "oshiro_user",
+        JSON.stringify({ mobile })
+      );
+
+      navigate("/customer", { replace: true });
       return;
     }
 
-    /* ✅ SAVE ADMIN SESSION */
-    localStorage.clear();
-    localStorage.setItem("oshiro_role", "admin");
-    localStorage.setItem(
-      "oshiro_user",
-      JSON.stringify({ mobile })
-    );
-
-    navigate("/admin", { replace: true });
+    setError("Please select Customer");
   };
 
   return (
-    <Box sx={{ p: 3, maxWidth: 400, mx: "auto", mt: 6 }}>
-      <Typography variant="h5" gutterBottom>
-        Admin Login
-      </Typography>
+    <Box sx={{ p: 3, maxWidth: 420, mx: "auto", mt: 6 }}>
+      <Typography variant="h5">Login</Typography>
 
+      {/* MOBILE */}
       <TextField
-        label="Admin Mobile"
+        label="Mobile Number"
         fullWidth
         margin="normal"
         value={mobile}
@@ -59,28 +85,41 @@ export default function Login() {
         }
       />
 
-      <TextField
-        label="Admin Password"
-        type="password"
-        fullWidth
-        margin="normal"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-      />
+      {/* ADMIN PASSWORD */}
+      {mobile === ADMIN_MOBILE && (
+        <TextField
+          label="Admin Password"
+          type="password"
+          fullWidth
+          margin="normal"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+      )}
+
+      {/* ROLE (CUSTOMER ONLY FOR NOW) */}
+      {mobile !== ADMIN_MOBILE && (
+        <ToggleButtonGroup
+          exclusive
+          value={role}
+          onChange={(e, v) => setRole(v)}
+          fullWidth
+          sx={{ my: 2 }}
+        >
+          <ToggleButton value="customer">
+            Customer
+          </ToggleButton>
+        </ToggleButtonGroup>
+      )}
 
       {error && (
-        <Typography color="error" sx={{ mt: 1 }}>
+        <Typography color="error" sx={{ mb: 1 }}>
           {error}
         </Typography>
       )}
 
-      <Button
-        variant="contained"
-        fullWidth
-        sx={{ mt: 2 }}
-        onClick={handleLogin}
-      >
-        Login
+      <Button variant="contained" fullWidth onClick={handleLogin}>
+        Continue
       </Button>
     </Box>
   );
