@@ -2,25 +2,36 @@ import React, { useEffect, useState } from "react";
 import {
   Box,
   Typography,
-  Button,
   Card,
   CardContent,
+  Button,
+  Divider,
+  Table,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableBody,
+  Checkbox,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField,
   Grid,
-  Chip,
+  TextField,
 } from "@mui/material";
-import { useNavigate } from "react-router-dom";
 import {
   collection,
   onSnapshot,
+  updateDoc,
+  deleteDoc,
+  doc,
+  orderBy,
+  query,
   addDoc,
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
+import { useNavigate } from "react-router-dom";
 
 /* 🔐 ADMIN CONFIG */
 const ADMIN_MOBILE = "7386361725";
@@ -29,7 +40,7 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
 
   /* ======================
-     ADMIN AUTH GUARD
+     🔐 ADMIN AUTH GUARD
   ====================== */
   useEffect(() => {
     const role = localStorage.getItem("oshiro_role");
@@ -43,234 +54,293 @@ export default function AdminDashboard() {
     }
   }, [navigate]);
 
-  /* ======================
-     STATE
-  ====================== */
-  const [merchants, setMerchants] = useState([]);
-  const [offers, setOffers] = useState([]);
-  const [activeMerchant, setActiveMerchant] = useState(null);
-
-  const [offerOpen, setOfferOpen] = useState(false);
-  const [offerTitle, setOfferTitle] = useState("");
-  const [offerDesc, setOfferDesc] = useState("");
-
-  /* ======================
-     LOAD ALL MERCHANTS
-  ====================== */
-  useEffect(() => {
-    return onSnapshot(collection(db, "merchants"), (snap) => {
-      setMerchants(
-        snap.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-        }))
-      );
-    });
-  }, []);
-
-  /* ======================
-     LOAD OFFERS
-  ====================== */
-  useEffect(() => {
-    return onSnapshot(collection(db, "offers"), (snap) => {
-      setOffers(
-        snap.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-        }))
-      );
-    });
-  }, []);
-
-  /* ======================
-     CREATE OFFER
-  ====================== */
-  const createOffer = async () => {
-    if (!offerTitle.trim()) {
-      alert("Offer title required");
-      return;
-    }
-
-    await addDoc(collection(db, "offers"), {
-      merchantId: activeMerchant.id,
-      merchantMobile: activeMerchant.mobile,
-      merchantName: activeMerchant.shopName,
-      category: activeMerchant.category,
-      title: offerTitle,
-      description: offerDesc,
-      active: true,
-      createdAt: serverTimestamp(),
-    });
-
-    setOfferTitle("");
-    setOfferDesc("");
-    setOfferOpen(false);
-    alert("✅ Offer created successfully");
-  };
-
-  /* ======================
-     LOGOUT
-  ====================== */
   const logout = () => {
     localStorage.clear();
     navigate("/login", { replace: true });
   };
 
   /* ======================
+     STATE
+  ====================== */
+  const [view, setView] = useState("merchants");
+  const [merchants, setMerchants] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [offers, setOffers] = useState([]);
+  const [geoEvents, setGeoEvents] = useState([]);
+
+  const [selected, setSelected] = useState([]);
+  const [activeMerchant, setActiveMerchant] = useState(null);
+  const [rejectReason, setRejectReason] = useState("");
+
+  /* OFFER STATE */
+  const [offerOpen, setOfferOpen] = useState(false);
+  const [offerTitle, setOfferTitle] = useState("");
+  const [offerDesc, setOfferDesc] = useState("");
+  const [offerMerchant, setOfferMerchant] = useState(null);
+
+  /* ======================
+     LOAD DATA
+  ====================== */
+  useEffect(() => {
+    return onSnapshot(collection(db, "merchants"), (s) =>
+      setMerchants(s.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+  }, []);
+
+  useEffect(() => {
+    return onSnapshot(collection(db, "customers"), (s) =>
+      setCustomers(s.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+  }, []);
+
+  useEffect(() => {
+    return onSnapshot(collection(db, "offers"), (s) =>
+      setOffers(s.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+  }, []);
+
+  useEffect(() => {
+    const q = query(
+      collection(db, "geo_events"),
+      orderBy("createdAt", "desc")
+    );
+    return onSnapshot(q, (s) =>
+      setGeoEvents(s.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+  }, []);
+
+  /* ======================
+     SELECTION
+  ====================== */
+  const toggleSelect = (id) => {
+    setSelected((prev) =>
+      prev.includes(id)
+        ? prev.filter((x) => x !== id)
+        : [...prev, id]
+    );
+  };
+
+  const clearSelection = () => setSelected([]);
+
+  /* ======================
+     MERCHANT APPROVAL
+  ====================== */
+  const approveMerchant = async () => {
+    await updateDoc(doc(db, "merchants", activeMerchant.id), {
+      status: "approved",
+      rejectionReason: "",
+      approvedAt: serverTimestamp(),
+    });
+    setActiveMerchant(null);
+  };
+
+  const rejectMerchant = async () => {
+    if (!rejectReason.trim()) {
+      alert("Enter rejection reason");
+      return;
+    }
+
+    await updateDoc(doc(db, "merchants", activeMerchant.id), {
+      status: "rejected",
+      rejectionReason: rejectReason.trim(),
+    });
+
+    setRejectReason("");
+    setActiveMerchant(null);
+  };
+
+  /* ======================
+     CREATE OFFER
+  ====================== */
+  const createOffer = async () => {
+    if (!offerMerchant || offerMerchant.status !== "approved") {
+      alert("Merchant not approved");
+      return;
+    }
+
+    if (!offerTitle.trim()) {
+      alert("Offer title required");
+      return;
+    }
+
+    await addDoc(collection(db, "offers"), {
+      merchantId: offerMerchant.id,
+      merchantMobile: offerMerchant.mobile,
+      merchantName: offerMerchant.shopName,
+      category: offerMerchant.category,
+      title: offerTitle,
+      description: offerDesc,
+      active: true,
+      createdAt: serverTimestamp(),
+    });
+
+    setOfferOpen(false);
+    setOfferTitle("");
+    setOfferDesc("");
+    setOfferMerchant(null);
+  };
+
+  /* ======================
+     TABLE
+  ====================== */
+  const renderMerchants = () => (
+    <Table size="small">
+      <TableHead>
+        <TableRow>
+          <TableCell />
+          <TableCell>Shop</TableCell>
+          <TableCell>Mobile</TableCell>
+          <TableCell>Category</TableCell>
+          <TableCell>Status</TableCell>
+          <TableCell>Action</TableCell>
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {merchants.map((m) => (
+          <TableRow key={m.id} hover>
+            <TableCell>
+              <Checkbox
+                checked={selected.includes(m.id)}
+                onChange={() => toggleSelect(m.id)}
+              />
+            </TableCell>
+            <TableCell>{m.shopName}</TableCell>
+            <TableCell>{m.mobile}</TableCell>
+            <TableCell>{m.category}</TableCell>
+            <TableCell>{m.status}</TableCell>
+            <TableCell>
+              <Button
+                size="small"
+                onClick={() => setActiveMerchant(m)}
+              >
+                Review
+              </Button>
+
+              {m.status === "approved" && (
+                <Button
+                  size="small"
+                  variant="contained"
+                  sx={{ ml: 1 }}
+                  onClick={() => {
+                    setOfferMerchant(m);
+                    setOfferOpen(true);
+                  }}
+                >
+                  Create Offer
+                </Button>
+              )}
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+
+  /* ======================
      UI
   ====================== */
   return (
-    <Box sx={{ p: 3 }}>
-      {/* HEADER */}
-      <Box
-        display="flex"
-        justifyContent="space-between"
-        alignItems="center"
-      >
-        <Typography variant="h4">
-          Admin Dashboard
-        </Typography>
-        <Button
-          variant="outlined"
-          color="error"
-          onClick={logout}
-        >
-          Logout
-        </Button>
-      </Box>
+    <Box sx={{ p: 2 }}>
+      <Button variant="outlined" color="error" onClick={logout}>
+        Logout
+      </Button>
 
-      <Typography sx={{ mt: 1 }}>
-        Logged in as: {ADMIN_MOBILE}
+      <Typography variant="h5" sx={{ mt: 2 }}>
+        Admin Dashboard
       </Typography>
 
-      {/* ======================
-          MERCHANT LIST
-      ====================== */}
-      <Typography variant="h6" sx={{ mt: 4 }}>
-        Merchants
-      </Typography>
+      <Divider sx={{ my: 2 }} />
 
-      <Grid container spacing={2} sx={{ mt: 1 }}>
-        {merchants.map((m) => (
-          <Grid item xs={12} md={4} key={m.id}>
-            <Card>
-              <CardContent>
-                <Typography variant="subtitle1">
-                  {m.shopName || "Unnamed Shop"}
-                </Typography>
+      {renderMerchants()}
 
-                <Typography variant="body2">
-                  {m.mobile} • {m.category || "—"}
-                </Typography>
-
-                <Chip
-                  label={m.status || "unknown"}
-                  color={
-                    m.status === "approved"
-                      ? "success"
-                      : m.status === "pending"
-                      ? "warning"
-                      : "default"
-                  }
-                  size="small"
-                  sx={{ mt: 1 }}
-                />
-
-                {/* ✅ CREATE OFFER ONLY IF APPROVED */}
-                {m.status === "approved" && (
-                  <Button
-                    sx={{ mt: 2 }}
-                    variant="contained"
-                    size="small"
-                    fullWidth
-                    onClick={() => {
-                      setActiveMerchant(m);
-                      setOfferOpen(true);
-                    }}
-                  >
-                    Create Offer
-                  </Button>
-                )}
-
-                {/* INFO FOR NON-APPROVED */}
-                {m.status !== "approved" && (
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ mt: 1, display: "block" }}
-                  >
-                    Offer can be created after approval
-                  </Typography>
-                )}
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
-
-      {/* ======================
-          OFFERS LIST
-      ====================== */}
-      <Typography variant="h6" sx={{ mt: 4 }}>
-        All Offers
-      </Typography>
-
-      {offers.map((o) => (
-        <Card key={o.id} sx={{ mt: 1 }}>
-          <CardContent>
+      {/* MERCHANT REVIEW */}
+      {activeMerchant && (
+        <Dialog open fullWidth maxWidth="sm">
+          <DialogTitle>Merchant Review</DialogTitle>
+          <DialogContent dividers>
             <Typography>
-              <b>{o.title}</b> — {o.merchantName}
+              <b>Shop:</b> {activeMerchant.shopName}
             </Typography>
-            <Typography variant="body2">
-              {o.description}
+            <Typography>
+              <b>Mobile:</b> {activeMerchant.mobile}
             </Typography>
-          </CardContent>
-        </Card>
-      ))}
+            <Typography>
+              <b>Category:</b> {activeMerchant.category}
+            </Typography>
+            <Typography>
+              <b>Status:</b> {activeMerchant.status}
+            </Typography>
 
-      {/* ======================
-          CREATE OFFER DIALOG
-      ====================== */}
-      <Dialog
-        open={offerOpen}
-        onClose={() => setOfferOpen(false)}
-        fullWidth
-      >
-        <DialogTitle>
-          Create Offer for {activeMerchant?.shopName}
-        </DialogTitle>
-        <DialogContent>
-          <TextField
-            label="Offer Title"
-            fullWidth
-            margin="normal"
-            value={offerTitle}
-            onChange={(e) =>
-              setOfferTitle(e.target.value)
-            }
-          />
+            {activeMerchant.status === "pending" && (
+              <TextField
+                fullWidth
+                label="Rejection Reason"
+                sx={{ mt: 2 }}
+                value={rejectReason}
+                onChange={(e) =>
+                  setRejectReason(e.target.value)
+                }
+              />
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setActiveMerchant(null)}>
+              Close
+            </Button>
+            {activeMerchant.status === "pending" && (
+              <>
+                <Button color="error" onClick={rejectMerchant}>
+                  Reject
+                </Button>
+                <Button
+                  variant="contained"
+                  onClick={approveMerchant}
+                >
+                  Approve
+                </Button>
+              </>
+            )}
+          </DialogActions>
+        </Dialog>
+      )}
 
-          <TextField
-            label="Offer Description"
-            fullWidth
-            multiline
-            minRows={3}
-            margin="normal"
-            value={offerDesc}
-            onChange={(e) =>
-              setOfferDesc(e.target.value)
-            }
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOfferOpen(false)}>
-            Cancel
-          </Button>
-          <Button variant="contained" onClick={createOffer}>
-            Publish Offer
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {/* CREATE OFFER */}
+      {offerOpen && (
+        <Dialog open fullWidth maxWidth="sm">
+          <DialogTitle>
+            Create Offer – {offerMerchant?.shopName}
+          </DialogTitle>
+          <DialogContent>
+            <TextField
+              fullWidth
+              label="Offer Title"
+              sx={{ mb: 2 }}
+              value={offerTitle}
+              onChange={(e) =>
+                setOfferTitle(e.target.value)
+              }
+            />
+            <TextField
+              fullWidth
+              multiline
+              minRows={3}
+              label="Offer Description"
+              value={offerDesc}
+              onChange={(e) =>
+                setOfferDesc(e.target.value)
+              }
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOfferOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="contained" onClick={createOffer}>
+              Publish Offer
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
     </Box>
   );
 }
