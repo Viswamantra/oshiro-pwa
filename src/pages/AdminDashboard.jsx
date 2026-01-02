@@ -17,6 +17,7 @@ import {
   DialogContent,
   DialogActions,
   Grid,
+  TextField,
 } from "@mui/material";
 import {
   collection,
@@ -30,23 +31,42 @@ import {
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
 
+/* 🔐 ADMIN CONSTANTS */
+const ADMIN_MOBILE = "7386361725";
+
 export default function AdminDashboard() {
   const navigate = useNavigate();
 
-  /* ===== ROLE GUARD ===== */
-  if (localStorage.getItem("oshiro_role") !== "admin") {
-    navigate("/login", { replace: true });
-    return null;
-  }
+  /* ======================
+     🔐 ADMIN AUTH GUARD
+  ====================== */
+  useEffect(() => {
+    const role = localStorage.getItem("oshiro_role");
+    const adminMobile = localStorage.getItem("oshiro_admin_mobile");
+    const isAuthed = localStorage.getItem("oshiro_admin_auth");
 
+    if (
+      role !== "admin" ||
+      adminMobile !== ADMIN_MOBILE ||
+      isAuthed !== "true"
+    ) {
+      localStorage.clear();
+      navigate("/login", { replace: true });
+    }
+  }, [navigate]);
+
+  /* ======================
+     LOGOUT
+  ====================== */
   const logout = () => {
     localStorage.clear();
-    window.location.href = "/login";
+    navigate("/login", { replace: true });
   };
 
-  /* ================= STATE ================= */
+  /* ======================
+     STATE
+  ====================== */
   const [view, setView] = useState("merchants");
-
   const [merchants, setMerchants] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [offers, setOffers] = useState([]);
@@ -57,49 +77,63 @@ export default function AdminDashboard() {
   const [activeMerchant, setActiveMerchant] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
 
-  /* ================= LOAD DATA ================= */
+  /* ======================
+     LOAD DATA
+  ====================== */
   useEffect(() => {
-    return onSnapshot(collection(db, "merchants"), s =>
-      setMerchants(s.docs.map(d => ({ id: d.id, ...d.data() })))
+    return onSnapshot(collection(db, "merchants"), (s) =>
+      setMerchants(s.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
   }, []);
 
   useEffect(() => {
-    return onSnapshot(collection(db, "customers"), s =>
-      setCustomers(s.docs.map(d => ({ id: d.id, ...d.data() })))
+    return onSnapshot(collection(db, "customers"), (s) =>
+      setCustomers(s.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
   }, []);
 
   useEffect(() => {
-    return onSnapshot(collection(db, "offers"), s =>
-      setOffers(s.docs.map(d => ({ id: d.id, ...d.data() })))
+    return onSnapshot(collection(db, "offers"), (s) =>
+      setOffers(s.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
   }, []);
 
   useEffect(() => {
-    const q = query(collection(db, "geo_events"), orderBy("createdAt", "desc"));
-    return onSnapshot(q, s =>
-      setGeoEvents(s.docs.map(d => ({ id: d.id, ...d.data() })))
+    const q = query(
+      collection(db, "geo_events"),
+      orderBy("createdAt", "desc")
+    );
+    return onSnapshot(q, (s) =>
+      setGeoEvents(s.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
   }, []);
 
   useEffect(() => {
-    const q = query(collection(db, "admin_alerts"), orderBy("createdAt", "desc"));
-    return onSnapshot(q, s =>
-      setAlerts(s.docs.map(d => ({ id: d.id, ...d.data() })))
+    const q = query(
+      collection(db, "admin_alerts"),
+      orderBy("createdAt", "desc")
+    );
+    return onSnapshot(q, (s) =>
+      setAlerts(s.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
   }, []);
 
-  /* ================= SELECTION ================= */
-  const toggleSelect = id => {
-    setSelected(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+  /* ======================
+     SELECTION
+  ====================== */
+  const toggleSelect = (id) => {
+    setSelected((prev) =>
+      prev.includes(id)
+        ? prev.filter((x) => x !== id)
+        : [...prev, id]
     );
   };
 
   const clearSelection = () => setSelected([]);
 
-  /* ================= BULK DELETE ================= */
+  /* ======================
+     BULK DELETE
+  ====================== */
   const bulkDelete = async () => {
     if (!selected.length) return;
 
@@ -112,17 +146,19 @@ export default function AdminDashboard() {
       alerts: "admin_alerts",
     };
 
-    const collectionName = map[view];
-    if (!collectionName) return;
+    const col = map[view];
+    if (!col) return;
 
     for (const id of selected) {
-      await deleteDoc(doc(db, collectionName, id));
+      await deleteDoc(doc(db, col, id));
     }
 
     clearSelection();
   };
 
-  /* ================= APPROVAL ================= */
+  /* ======================
+     MERCHANT APPROVAL
+  ====================== */
   const approveMerchant = async () => {
     await updateDoc(doc(db, "merchants", activeMerchant.id), {
       status: "approved",
@@ -132,7 +168,10 @@ export default function AdminDashboard() {
   };
 
   const rejectMerchant = async () => {
-    if (!rejectReason.trim()) return alert("Enter rejection reason");
+    if (!rejectReason.trim()) {
+      alert("Enter rejection reason");
+      return;
+    }
     await updateDoc(doc(db, "merchants", activeMerchant.id), {
       status: "rejected",
       rejectionReason: rejectReason.trim(),
@@ -141,7 +180,9 @@ export default function AdminDashboard() {
     setActiveMerchant(null);
   };
 
-  /* ================= TABLE ================= */
+  /* ======================
+     TABLE RENDER
+  ====================== */
   const renderTable = (rows, columns) => (
     <>
       {selected.length > 0 && (
@@ -159,18 +200,23 @@ export default function AdminDashboard() {
         <TableHead>
           <TableRow>
             <TableCell />
-            {columns.map(c => (
+            {columns.map((c) => (
               <TableCell key={c}>{c}</TableCell>
             ))}
           </TableRow>
         </TableHead>
         <TableBody>
-          {rows.map(r => (
+          {rows.map((r) => (
             <TableRow
               key={r.id}
               hover
-              sx={{ cursor: view === "merchants" ? "pointer" : "default" }}
-              onClick={() => view === "merchants" && setActiveMerchant(r)}
+              sx={{
+                cursor:
+                  view === "merchants" ? "pointer" : "default",
+              }}
+              onClick={() =>
+                view === "merchants" && setActiveMerchant(r)
+              }
             >
               <TableCell>
                 <Checkbox
@@ -178,8 +224,10 @@ export default function AdminDashboard() {
                   onChange={() => toggleSelect(r.id)}
                 />
               </TableCell>
-              {columns.map(c => (
-                <TableCell key={c}>{r[c] ?? "-"}</TableCell>
+              {columns.map((c) => (
+                <TableCell key={c}>
+                  {r[c] ?? "-"}
+                </TableCell>
               ))}
             </TableRow>
           ))}
@@ -188,6 +236,9 @@ export default function AdminDashboard() {
     </>
   );
 
+  /* ======================
+     UI
+  ====================== */
   return (
     <Box sx={{ p: 2 }}>
       <Button variant="outlined" color="error" onClick={logout}>
@@ -198,21 +249,27 @@ export default function AdminDashboard() {
         Admin Dashboard
       </Typography>
 
-      {/* ===== STATS ===== */}
       <Grid container spacing={2} sx={{ mt: 2 }}>
         {[
           ["Merchants", merchants.length, "merchants"],
-          ["Approved", merchants.filter(m => m.status === "approved").length, "approved"],
+          [
+            "Approved",
+            merchants.filter((m) => m.status === "approved").length,
+            "approved",
+          ],
           ["Customers", customers.length, "customers"],
           ["Offers", offers.length, "offers"],
           ["Geo Events", geoEvents.length, "geo"],
           ["Alerts", alerts.length, "alerts"],
         ].map(([label, count, key]) => (
           <Grid item xs={6} md={2} key={key}>
-            <Card sx={{ cursor: "pointer" }} onClick={() => {
-              setView(key);
-              clearSelection();
-            }}>
+            <Card
+              sx={{ cursor: "pointer" }}
+              onClick={() => {
+                setView(key);
+                clearSelection();
+              }}
+            >
               <CardContent>
                 <Typography>{label}</Typography>
                 <Typography variant="h6">{count}</Typography>
@@ -225,11 +282,16 @@ export default function AdminDashboard() {
       <Divider sx={{ my: 3 }} />
 
       {view === "merchants" &&
-        renderTable(merchants, ["shopName", "mobile", "category", "status"])}
+        renderTable(merchants, [
+          "shopName",
+          "mobile",
+          "category",
+          "status",
+        ])}
 
       {view === "approved" &&
         renderTable(
-          merchants.filter(m => m.status === "approved"),
+          merchants.filter((m) => m.status === "approved"),
           ["shopName", "mobile", "category"]
         )}
 
@@ -240,20 +302,32 @@ export default function AdminDashboard() {
         renderTable(offers, ["title", "merchantId", "active"])}
 
       {view === "geo" &&
-        renderTable(geoEvents, ["merchantId", "customerId", "distanceMeters"])}
+        renderTable(geoEvents, [
+          "merchantId",
+          "customerId",
+          "distanceMeters",
+        ])}
 
       {view === "alerts" &&
         renderTable(alerts, ["merchantId", "message"])}
 
-      {/* ===== APPROVAL DIALOG ===== */}
+      {/* APPROVAL DIALOG */}
       {activeMerchant && (
         <Dialog open fullWidth maxWidth="sm">
           <DialogTitle>Merchant Review</DialogTitle>
           <DialogContent dividers>
-            <Typography><b>Shop:</b> {activeMerchant.shopName}</Typography>
-            <Typography><b>Mobile:</b> {activeMerchant.mobile}</Typography>
-            <Typography><b>Category:</b> {activeMerchant.category}</Typography>
-            <Typography><b>Status:</b> {activeMerchant.status}</Typography>
+            <Typography>
+              <b>Shop:</b> {activeMerchant.shopName}
+            </Typography>
+            <Typography>
+              <b>Mobile:</b> {activeMerchant.mobile}
+            </Typography>
+            <Typography>
+              <b>Category:</b> {activeMerchant.category}
+            </Typography>
+            <Typography>
+              <b>Status:</b> {activeMerchant.status}
+            </Typography>
 
             {activeMerchant.status === "pending" && (
               <TextField
@@ -261,16 +335,27 @@ export default function AdminDashboard() {
                 label="Rejection Reason"
                 sx={{ mt: 2 }}
                 value={rejectReason}
-                onChange={e => setRejectReason(e.target.value)}
+                onChange={(e) =>
+                  setRejectReason(e.target.value)
+                }
               />
             )}
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setActiveMerchant(null)}>Close</Button>
+            <Button onClick={() => setActiveMerchant(null)}>
+              Close
+            </Button>
             {activeMerchant.status === "pending" && (
               <>
-                <Button color="error" onClick={rejectMerchant}>Reject</Button>
-                <Button variant="contained" onClick={approveMerchant}>Approve</Button>
+                <Button color="error" onClick={rejectMerchant}>
+                  Reject
+                </Button>
+                <Button
+                  variant="contained"
+                  onClick={approveMerchant}
+                >
+                  Approve
+                </Button>
               </>
             )}
           </DialogActions>
