@@ -21,40 +21,40 @@ import {
   addDoc,
   Timestamp,
 } from "firebase/firestore";
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import { db, auth } from "../firebase";
+import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
 
 export default function MerchantDashboard() {
   const navigate = useNavigate();
 
-  const merchantId = localStorage.getItem("oshiro_merchant_id");
+  /* ==================================================
+     ✅ SIMPLE ROLE GUARD (LOCALSTORAGE ONLY)
+  ================================================== */
   const role = localStorage.getItem("oshiro_role");
+  const merchantId =
+    localStorage.getItem("oshiro_merchant_id") ||
+    localStorage.getItem("oshiro_user")
+      ? JSON.parse(localStorage.getItem("oshiro_user"))?.mobile
+      : null;
 
+  useEffect(() => {
+    if (role !== "merchant" || !merchantId) {
+      navigate("/login", { replace: true });
+    }
+  }, [role, merchantId, navigate]);
+
+  /* ==================================================
+     STATE
+  ================================================== */
   const [nearbyCustomers, setNearbyCustomers] = useState([]);
   const [open, setOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [offerText, setOfferText] = useState("");
 
   /* ==================================================
-     🔐 HARD AUTH + ROLE GUARD (VERY IMPORTANT)
+     🚪 LOGOUT (LOCAL ONLY)
   ================================================== */
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
-      if (!user || role !== "merchant" || !merchantId) {
-        localStorage.clear();
-        navigate("/login", { replace: true });
-      }
-    });
-
-    return () => unsub();
-  }, [navigate, role, merchantId]);
-
-  /* ==================================================
-     🔴 LOGOUT
-  ================================================== */
-  const handleLogout = async () => {
-    await signOut(auth);
+  const handleLogout = () => {
     localStorage.clear();
     navigate("/login", { replace: true });
   };
@@ -120,7 +120,11 @@ export default function MerchantDashboard() {
           📍 Live Nearby Customers
         </Typography>
 
-        <Button color="error" variant="outlined" onClick={handleLogout}>
+        <Button
+          color="error"
+          variant="outlined"
+          onClick={handleLogout}
+        >
           Logout
         </Button>
       </Box>
@@ -154,7 +158,11 @@ export default function MerchantDashboard() {
       ))}
 
       {/* SEND OFFER MODAL */}
-      <Dialog open={open} onClose={() => setOpen(false)} fullWidth>
+      <Dialog
+        open={open}
+        onClose={() => setOpen(false)}
+        fullWidth
+      >
         <DialogTitle>Send Instant Offer</DialogTitle>
         <DialogContent>
           <TextField
@@ -167,7 +175,9 @@ export default function MerchantDashboard() {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpen(false)}>Cancel</Button>
+          <Button onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
           <Button variant="contained" onClick={sendOffer}>
             Send
           </Button>
