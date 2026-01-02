@@ -1,6 +1,8 @@
 import { initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getFunctions } from "firebase/functions";
+import { getMessaging } from "firebase/messaging";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBekN6ULTaosrBQzv-JvBlnMcCOMXZ-_JU",
@@ -13,10 +15,14 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
+/* ✅ SINGLE, CORRECT EXPORTS */
+export const auth = getAuth(app);
 export const db = getFirestore(app);
+export const messaging = getMessaging(app);
 
 /**
- * 🔴 THIS LINE FIXES YOUR ISSUE
- * see Firebase console → Functions → region
+ * 🔴 Cloud Functions region
  */
 export const functions = getFunctions(app, "us-central1");
+
+export default app;
