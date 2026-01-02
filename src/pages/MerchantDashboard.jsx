@@ -21,19 +21,47 @@ import {
   addDoc,
   Timestamp,
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { db, auth } from "../firebase";
+import { useNavigate } from "react-router-dom";
 
 export default function MerchantDashboard() {
+  const navigate = useNavigate();
+
   const merchantId = localStorage.getItem("oshiro_merchant_id");
+  const role = localStorage.getItem("oshiro_role");
 
   const [nearbyCustomers, setNearbyCustomers] = useState([]);
   const [open, setOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [offerText, setOfferText] = useState("");
 
-  /* ============================
-     LIVE GEO EVENTS LISTENER
-  ============================ */
+  /* ==================================================
+     🔐 HARD AUTH + ROLE GUARD (VERY IMPORTANT)
+  ================================================== */
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (!user || role !== "merchant" || !merchantId) {
+        localStorage.clear();
+        navigate("/login", { replace: true });
+      }
+    });
+
+    return () => unsub();
+  }, [navigate, role, merchantId]);
+
+  /* ==================================================
+     🔴 LOGOUT
+  ================================================== */
+  const handleLogout = async () => {
+    await signOut(auth);
+    localStorage.clear();
+    navigate("/login", { replace: true });
+  };
+
+  /* ==================================================
+     📍 LIVE GEO EVENTS
+  ================================================== */
   useEffect(() => {
     if (!merchantId) return;
 
@@ -54,9 +82,9 @@ export default function MerchantDashboard() {
     });
   }, [merchantId]);
 
-  /* ============================
-     SEND OFFER
-  ============================ */
+  /* ==================================================
+     ✉️ SEND OFFER
+  ================================================== */
   const sendOffer = async () => {
     if (!offerText || !selectedCustomer) return;
 
@@ -66,7 +94,7 @@ export default function MerchantDashboard() {
       message: offerText,
       createdAt: Timestamp.now(),
       expiresAt: Timestamp.fromDate(
-        new Date(Date.now() + 30 * 60 * 1000) // 30 mins
+        new Date(Date.now() + 30 * 60 * 1000)
       ),
       read: false,
     });
@@ -76,11 +104,26 @@ export default function MerchantDashboard() {
     setOpen(false);
   };
 
+  /* ==================================================
+     UI
+  ================================================== */
   return (
     <Box p={3}>
-      <Typography variant="h5" gutterBottom>
-        📍 Live Nearby Customers
-      </Typography>
+      {/* HEADER */}
+      <Box
+        display="flex"
+        justifyContent="space-between"
+        alignItems="center"
+        mb={2}
+      >
+        <Typography variant="h5">
+          📍 Live Nearby Customers
+        </Typography>
+
+        <Button color="error" variant="outlined" onClick={handleLogout}>
+          Logout
+        </Button>
+      </Box>
 
       {nearbyCustomers.length === 0 && (
         <Typography color="text.secondary">
@@ -91,19 +134,14 @@ export default function MerchantDashboard() {
       {nearbyCustomers.map((c) => (
         <Card key={c.id} sx={{ mb: 2 }}>
           <CardContent>
-            <Typography>
-              👤 Anonymous Customer
-            </Typography>
+            <Typography>👤 Anonymous Customer</Typography>
             <Typography variant="body2">
-              Distance: {Math.round(c.distanceMeters)} meters
-            </Typography>
-            <Typography variant="body2">
-              Time: just now
+              Distance: {Math.round(c.distanceMeters)} m
             </Typography>
 
             <Button
-              variant="contained"
               sx={{ mt: 1 }}
+              variant="contained"
               onClick={() => {
                 setSelectedCustomer(c);
                 setOpen(true);
@@ -115,7 +153,7 @@ export default function MerchantDashboard() {
         </Card>
       ))}
 
-      {/* ================= SEND OFFER DIALOG ================= */}
+      {/* SEND OFFER MODAL */}
       <Dialog open={open} onClose={() => setOpen(false)} fullWidth>
         <DialogTitle>Send Instant Offer</DialogTitle>
         <DialogContent>
