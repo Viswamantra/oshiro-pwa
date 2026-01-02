@@ -7,9 +7,11 @@ export default function Login() {
   const [mobile, setMobile] = useState("");
 
   const handleLogin = () => {
-    if (!mobile) return;
+    if (mobile.length !== 10) {
+      alert("Enter exactly 10 digit mobile number");
+      return;
+    }
 
-    // TEMP: role simulation (adjust to your real logic)
     const role = mobile === "9999999999" ? "merchant" : "customer";
 
     localStorage.setItem("oshiro_role", role);
@@ -18,13 +20,13 @@ export default function Login() {
       JSON.stringify({ mobile })
     );
 
-    navigate(role === "merchant" ? "/merchant" : "/customer", {
-      replace: true,
-    });
+    console.log("LOGIN OK →", role);
+
+    navigate(role === "merchant" ? "/merchant" : "/customer");
   };
 
   return (
-    <Box p={3}>
+    <Box p={3} maxWidth={400}>
       <Typography variant="h6">Login</Typography>
 
       <TextField
@@ -32,7 +34,10 @@ export default function Login() {
         fullWidth
         sx={{ my: 2 }}
         value={mobile}
-        onChange={(e) => setMobile(e.target.value)}
+        inputProps={{ maxLength: 10 }}
+        onChange={(e) =>
+          setMobile(e.target.value.replace(/\D/g, ""))
+        }
       />
 
       <Button variant="contained" onClick={handleLogin}>
