@@ -68,8 +68,7 @@ export default function MerchantDashboard() {
     const q = query(
       collection(db, "geo_events"),
       where("merchantId", "==", merchantId),
-      where("notified", "==", true),
-      orderBy("createdAt", "desc"),
+        orderBy("createdAt", "desc"),
       limit(5)
     );
 
