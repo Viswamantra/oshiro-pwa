@@ -6,6 +6,7 @@ import Login from "./auth/Login";
 /* DASHBOARDS */
 import MerchantDashboard from "./pages/MerchantDashboard";
 import CustomerDashboard from "./pages/CustomerDashboard";
+import AdminDashboard from "./pages/AdminDashboard";
 
 /* REGISTRATION */
 import MerchantRegister from "./pages/MerchantRegister";
@@ -40,6 +41,11 @@ export default function App() {
         path="/merchant-register"
         element={<MerchantRegister />}
       />
+
+      {/* ======================
+          ADMIN FLOW
+      ====================== */}
+      <Route path="/admin" element={<AdminDashboard />} />
 
       {/* ======================
           FALLBACK
