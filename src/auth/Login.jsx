@@ -26,21 +26,27 @@ export default function Login() {
   const navigate = useNavigate();
 
   const [mobile, setMobile] = useState("");
-  const [password, setPassword] = useState("");
   const [role, setRole] = useState(null);
+  const [adminPassword, setAdminPassword] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
 
   /* ======================
-     CHECK MERCHANT
+     CHECK MERCHANT STATUS
   ====================== */
-  const getMerchantByMobile = async (mobile) => {
+  const getMerchantStatus = async (mobile) => {
     const q = query(
       collection(db, "merchants"),
       where("mobile", "==", mobile)
     );
     const snap = await getDocs(q);
-    return snap;
+
+    if (snap.empty) return { exists: false };
+
+    const merchant = snap.docs[0].data();
+    return {
+      exists: true,
+      status: merchant.status,
+    };
   };
 
   /* ======================
@@ -49,20 +55,18 @@ export default function Login() {
   const handleLogin = async () => {
     setError("");
 
+    /* BASIC MOBILE CHECK */
     if (!/^\d{10}$/.test(mobile)) {
-      setError("Enter valid 10-digit mobile number");
+      setError("Enter valid 10 digit mobile number");
       return;
     }
-
-    setLoading(true);
 
     /* ======================
        🔐 SUPER ADMIN LOGIN
     ====================== */
     if (mobile === ADMIN_MOBILE) {
-      if (password !== ADMIN_PASSWORD) {
+      if (adminPassword !== ADMIN_PASSWORD) {
         setError("Invalid admin password");
-        setLoading(false);
         return;
       }
 
@@ -78,11 +82,10 @@ export default function Login() {
     }
 
     /* ======================
-       ROLE REQUIRED
+       ROLE REQUIRED BELOW
     ====================== */
     if (!role) {
-      setError("Please select Customer or Merchant");
-      setLoading(false);
+      setError("Please select Merchant or Customer");
       return;
     }
 
@@ -94,7 +97,7 @@ export default function Login() {
     );
 
     /* ======================
-       👤 CUSTOMER LOGIN
+       CUSTOMER LOGIN
     ====================== */
     if (role === "customer") {
       navigate("/customer", { replace: true });
@@ -102,46 +105,45 @@ export default function Login() {
     }
 
     /* ======================
-       🏪 MERCHANT LOGIN
+       MERCHANT LOGIN (STRICT)
     ====================== */
     if (role === "merchant") {
-      const snap = await getMerchantByMobile(mobile);
+      const { exists, status } =
+        await getMerchantStatus(mobile);
 
-      // 🆕 New Merchant
-      if (snap.empty) {
+      if (!exists) {
         navigate("/merchant-register", { replace: true });
         return;
       }
 
-      const merchantDoc = snap.docs[0];
-      const merchant = merchantDoc.data();
-
-      // ⏳ Pending / Rejected
-      if (merchant.status !== "approved") {
+      if (status !== "approved") {
         setError(
-          merchant.status === "pending"
-            ? "Merchant approval pending"
-            : "Merchant registration rejected"
+          "Merchant registration pending admin approval"
         );
-        setLoading(false);
+        localStorage.clear();
         return;
       }
-
-      // ✅ Approved Merchant
-      localStorage.setItem(
-        "oshiro_merchant_id",
-        merchantDoc.id
-      );
 
       navigate("/merchant", { replace: true });
     }
   };
 
+  /* ======================
+     UI
+  ====================== */
   return (
-    <Box sx={{ p: 3, maxWidth: 420, mx: "auto", mt: 6 }}>
-      <Typography variant="h5">Login</Typography>
+    <Box
+      sx={{
+        p: 3,
+        maxWidth: 420,
+        mx: "auto",
+        mt: 6,
+      }}
+    >
+      <Typography variant="h5" gutterBottom>
+        Login
+      </Typography>
 
-      {/* MOBILE */}
       <TextField
         label="Mobile Number"
         fullWidth
@@ -160,12 +162,14 @@ export default function Login() {
           type="password"
           fullWidth
           margin="normal"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          value={adminPassword}
+          onChange={(e) =>
+            setAdminPassword(e.target.value)
+          }
         />
       )}
 
-      {/* ROLE SELECTION (NOT FOR ADMIN) */}
+      {/* ROLE SELECT (NOT FOR ADMIN) */}
       {mobile !== ADMIN_MOBILE && (
         <ToggleButtonGroup
           exclusive
@@ -192,10 +196,9 @@ export default function Login() {
       <Button
         variant="contained"
         fullWidth
-        disabled={loading}
         onClick={handleLogin}
       >
-        {loading ? "Please wait..." : "Continue"}
+        Continue
       </Button>
     </Box>
   );
