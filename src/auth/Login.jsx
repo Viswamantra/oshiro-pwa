@@ -8,6 +8,8 @@ import {
   ToggleButtonGroup,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { db } from "../firebase";
 
 /* ======================
    ADMIN CONFIG
@@ -22,8 +24,24 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState(null);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
+  /* ======================
+     CHECK MERCHANT EXISTS
+  ====================== */
+  const checkMerchantExists = async (mobile) => {
+    const q = query(
+      collection(db, "merchants"),
+      where("mobile", "==", mobile)
+    );
+    const snap = await getDocs(q);
+    return snap;
+  };
+
+  /* ======================
+     LOGIN HANDLER
+  ====================== */
+  const handleLogin = async () => {
     setError("");
 
     if (!/^\d{10}$/.test(mobile)) {
@@ -31,12 +49,15 @@ export default function Login() {
       return;
     }
 
+    setLoading(true);
+
     /* ======================
        🔐 ADMIN LOGIN
     ====================== */
     if (mobile === ADMIN_MOBILE) {
       if (password !== ADMIN_PASSWORD) {
         setError("Invalid admin password");
+        setLoading(false);
         return;
       }
 
@@ -52,21 +73,49 @@ export default function Login() {
     }
 
     /* ======================
+       ROLE REQUIRED
+    ====================== */
+    if (!role) {
+      setError("Please select Customer or Merchant");
+      setLoading(false);
+      return;
+    }
+
+    localStorage.clear();
+    localStorage.setItem("oshiro_role", role);
+    localStorage.setItem(
+      "oshiro_user",
+      JSON.stringify({ mobile })
+    );
+
+    /* ======================
        CUSTOMER LOGIN
     ====================== */
     if (role === "customer") {
-      localStorage.clear();
-      localStorage.setItem("oshiro_role", "customer");
-      localStorage.setItem(
-        "oshiro_user",
-        JSON.stringify({ mobile })
-      );
-
       navigate("/customer", { replace: true });
       return;
     }
 
-    setError("Please select Customer");
+    /* ======================
+       MERCHANT LOGIN
+    ====================== */
+    if (role === "merchant") {
+      const snap = await checkMerchantExists(mobile);
+
+      if (snap.empty) {
+        // 🆕 NEW MERCHANT
+        navigate("/merchant-register", { replace: true });
+      } else {
+        // ✅ EXISTING MERCHANT
+        localStorage.setItem(
+          "oshiro_merchant_id",
+          snap.docs[0].id
+        );
+        navigate("/merchant", { replace: true });
+      }
+    }
+
+    setLoading(false);
   };
 
   return (
@@ -97,7 +146,7 @@ export default function Login() {
         />
       )}
 
-      {/* ROLE (CUSTOMER ONLY FOR NOW) */}
+      {/* ROLE SELECTION (NOT FOR ADMIN) */}
       {mobile !== ADMIN_MOBILE && (
         <ToggleButtonGroup
           exclusive
@@ -109,6 +158,9 @@ export default function Login() {
           <ToggleButton value="customer">
             Customer
           </ToggleButton>
+          <ToggleButton value="merchant">
+            Merchant
+          </ToggleButton>
         </ToggleButtonGroup>
       )}
 
@@ -118,8 +170,13 @@ export default function Login() {
         </Typography>
       )}
 
-      <Button variant="contained" fullWidth onClick={handleLogin}>
-        Continue
+      <Button
+        variant="contained"
+        fullWidth
+        disabled={loading}
+        onClick={handleLogin}
+      >
+        {loading ? "Please wait..." : "Continue"}
       </Button>
     </Box>
   );
