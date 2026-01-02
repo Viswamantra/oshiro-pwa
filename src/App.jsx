@@ -1,14 +1,20 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 
-/* AUTH */
+/* ======================
+   AUTH
+====================== */
 import Login from "./auth/Login";
 
-/* DASHBOARDS */
+/* ======================
+   DASHBOARDS
+====================== */
 import MerchantDashboard from "./pages/MerchantDashboard";
 import CustomerDashboard from "./pages/CustomerDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 
-/* REGISTRATION */
+/* ======================
+   REGISTRATION
+====================== */
 import MerchantRegister from "./pages/MerchantRegister";
 
 export default function App() {
