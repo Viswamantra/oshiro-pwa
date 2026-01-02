@@ -1,12 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthContext";
 
-/* PAGES */
+/* ✅ PAGES */
 import Login from "./auth/Login";
 import MerchantDashboard from "./pages/MerchantDashboard";
 import CustomerDashboard from "./pages/CustomerDashboard";
 
-/* ROUTE GUARDS */
+/* ✅ ROUTE GUARDS */
 import MerchantRoute from "./routes/MerchantRoute";
 import CustomerRoute from "./routes/CustomerRoute";
 
@@ -21,7 +21,7 @@ export default function App() {
           {/* LOGIN */}
           <Route path="/login" element={<Login />} />
 
-          {/* MERCHANT (PROTECTED) */}
+          {/* MERCHANT */}
           <Route
             path="/merchant"
             element={
@@ -31,7 +31,7 @@ export default function App() {
             }
           />
 
-          {/* CUSTOMER (PROTECTED) */}
+          {/* CUSTOMER */}
           <Route
             path="/customer"
             element={
