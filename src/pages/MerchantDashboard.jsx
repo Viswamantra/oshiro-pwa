@@ -7,6 +7,7 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  TextField,
 } from "@mui/material";
 import {
   collection,
@@ -15,6 +16,9 @@ import {
   onSnapshot,
   updateDoc,
   doc,
+  addDoc,
+  serverTimestamp,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
@@ -31,6 +35,7 @@ export default function MerchantDashboard() {
      STATE
   ====================== */
   const [alertEvent, setAlertEvent] = useState(null);
+  const [offerText, setOfferText] = useState("");
 
   /* ======================
      AUTH GUARD
@@ -46,7 +51,27 @@ export default function MerchantDashboard() {
   }, [navigate, merchantId]);
 
   /* ======================
-     REAL-TIME GEOFENCE ALERT LISTENER
+     SOUND + VIBRATION
+  ====================== */
+  const playAlert = () => {
+    try {
+      // 🔊 Beep sound
+      const audio = new Audio(
+        "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
+      );
+      audio.play();
+
+      // 📳 Vibration (mobile only)
+      if (navigator.vibrate) {
+        navigator.vibrate([200, 100, 200]);
+      }
+    } catch (e) {
+      console.warn("Alert sound blocked by browser");
+    }
+  };
+
+  /* ======================
+     REAL-TIME GEOFENCE ALERT
   ====================== */
   useEffect(() => {
     if (!merchantId) return;
@@ -61,7 +86,9 @@ export default function MerchantDashboard() {
       snap.docs.forEach(async (d) => {
         const data = d.data();
 
-        // 🔔 Show alert ONLY ONCE
+        // 🔔 Play sound + vibration
+        playAlert();
+
         setAlertEvent({
           id: d.id,
           customerId: data.customerId,
@@ -69,7 +96,7 @@ export default function MerchantDashboard() {
           createdAt: data.createdAt,
         });
 
-        // ✅ Mark as notified to prevent repeat alerts
+        // ✅ Mark notified
         await updateDoc(doc(db, "geo_events", d.id), {
           notified: true,
         });
@@ -78,6 +105,37 @@ export default function MerchantDashboard() {
 
     return () => unsubscribe();
   }, [merchantId]);
+
+  /* ======================
+     SEND OFFER
+  ====================== */
+  const sendOffer = async () => {
+    if (!offerText.trim()) return;
+
+    const merchantSnap = await getDoc(
+      doc(db, "merchants", merchantId)
+    );
+    const merchant = merchantSnap.data();
+
+    await addDoc(collection(db, "offers"), {
+      merchantId,
+      merchantName: merchant.shopName,
+      merchantMobile: merchant.mobile,
+      category: merchant.category,
+      title: "Special Offer",
+      description: offerText.trim(),
+      lat: merchant.lat,
+      lng: merchant.lng,
+      active: true,
+      createdAt: serverTimestamp(),
+      expiresAt: new Date(
+        Date.now() + 30 * 60 * 1000
+      ), // 30 mins
+    });
+
+    setOfferText("");
+    setAlertEvent(null);
+  };
 
   /* ======================
      LOGOUT
@@ -117,6 +175,7 @@ export default function MerchantDashboard() {
         <Dialog
           open
           onClose={() => setAlertEvent(null)}
+          fullWidth
         >
           <DialogTitle>
             🚶 Customer Nearby!
@@ -136,20 +195,31 @@ export default function MerchantDashboard() {
                 .toLocaleTimeString()}
             </Typography>
 
-            <Typography sx={{ mt: 2 }}>
-              👉 You can now approach or
-              prepare an offer.
-            </Typography>
+            <TextField
+              sx={{ mt: 2 }}
+              fullWidth
+              multiline
+              minRows={2}
+              placeholder="Type a quick offer (Eg: 20% OFF for next 30 mins)"
+              value={offerText}
+              onChange={(e) =>
+                setOfferText(e.target.value)
+              }
+            />
           </DialogContent>
 
           <DialogActions>
             <Button
-              variant="contained"
-              onClick={() =>
-                setAlertEvent(null)
-              }
+              onClick={() => setAlertEvent(null)}
             >
-              OK
+              Ignore
+            </Button>
+
+            <Button
+              variant="contained"
+              onClick={sendOffer}
+            >
+              Send Offer
             </Button>
           </DialogActions>
         </Dialog>
