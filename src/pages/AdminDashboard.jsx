@@ -12,15 +12,14 @@ import {
   Checkbox,
   Tabs,
   Tab,
-  MenuItem,
   TextField,
+  MenuItem,
 } from "@mui/material";
 import {
   collection,
-  onSnapshot,
   getDocs,
-  doc,
   deleteDoc,
+  doc,
   query,
   orderBy,
 } from "firebase/firestore";
@@ -41,6 +40,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     const role = localStorage.getItem("oshiro_role");
     const user = JSON.parse(localStorage.getItem("oshiro_user") || "{}");
+
     if (role !== "admin" || user.mobile !== ADMIN_MOBILE) {
       localStorage.clear();
       navigate("/login", { replace: true });
@@ -55,7 +55,7 @@ export default function AdminDashboard() {
   /* ======================
      STATE
   ====================== */
-  const [tab, setTab] = useState(1); // default LEADS
+  const [tab, setTab] = useState(0); // 0=Leads, 1=Analytics
   const [leads, setLeads] = useState([]);
   const [selected, setSelected] = useState([]);
 
@@ -66,10 +66,10 @@ export default function AdminDashboard() {
   });
 
   /* ======================
-     LOAD + JOIN GEO EVENTS
+     LOAD + JOIN DATA
   ====================== */
   useEffect(() => {
-    const loadLeads = async () => {
+    const loadData = async () => {
       const geoSnap = await getDocs(
         query(collection(db, "geo_events"), orderBy("createdAt", "desc"))
       );
@@ -90,9 +90,9 @@ export default function AdminDashboard() {
         return {
           id: d.id,
           customerMobile: customer.mobile || g.customerId,
-          merchantName: merchant.shopName || "-",
-          category: merchant.category || "-",
-          distanceMeters: g.distanceMeters,
+          merchantName: merchant.shopName || "Unknown",
+          category: merchant.category || "Unknown",
+          distanceMeters: g.distanceMeters || 0,
           createdAt: g.createdAt,
         };
       });
@@ -100,7 +100,7 @@ export default function AdminDashboard() {
       setLeads(joined);
     };
 
-    loadLeads();
+    loadData();
   }, []);
 
   /* ======================
@@ -145,16 +145,58 @@ export default function AdminDashboard() {
     for (const id of selected) {
       await deleteDoc(doc(db, "geo_events", id));
     }
-    setSelected([]);
+
     setLeads((p) => p.filter((l) => !selected.includes(l.id)));
+    setSelected([]);
   };
+
+  /* ======================
+     AGGREGATE ANALYTICS
+  ====================== */
+  const merchantAnalytics = Object.values(
+    leads.reduce((acc, l) => {
+      if (!acc[l.merchantName]) {
+        acc[l.merchantName] = {
+          merchantName: l.merchantName,
+          category: l.category,
+          visits: 0,
+          customers: new Set(),
+          totalDistance: 0,
+          lastSeen: l.createdAt,
+        };
+      }
+
+      acc[l.merchantName].visits += 1;
+      acc[l.merchantName].customers.add(l.customerMobile);
+      acc[l.merchantName].totalDistance += l.distanceMeters;
+
+      if (
+        l.createdAt &&
+        acc[l.merchantName].lastSeen < l.createdAt
+      ) {
+        acc[l.merchantName].lastSeen = l.createdAt;
+      }
+
+      return acc;
+    }, {})
+  ).map((m) => ({
+    merchantName: m.merchantName,
+    category: m.category,
+    visits: m.visits,
+    uniqueCustomers: m.customers.size,
+    avgDistance:
+      m.visits > 0
+        ? Math.round(m.totalDistance / m.visits)
+        : 0,
+    lastSeen: m.lastSeen,
+  }));
 
   /* ======================
      UI
   ====================== */
   return (
     <Box sx={{ p: 2 }}>
-      <Button color="error" variant="outlined" onClick={logout}>
+      <Button variant="outlined" color="error" onClick={logout}>
         Logout
       </Button>
 
@@ -162,128 +204,178 @@ export default function AdminDashboard() {
         Admin Dashboard
       </Typography>
 
-      <Tabs value={tab} onChange={(e, v) => setTab(v)} sx={{ mt: 2 }}>
+      <Tabs
+        sx={{ mt: 2 }}
+        value={tab}
+        onChange={(e, v) => setTab(v)}
+      >
         <Tab label="Leads" />
+        <Tab label="Merchant Analytics" />
       </Tabs>
 
       <Divider sx={{ my: 2 }} />
 
-      {/* FILTERS */}
-      <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
-        <TextField
-          select
-          label="Customer Mobile"
-          size="small"
-          value={filters.mobile}
-          onChange={(e) =>
-            setFilters({ ...filters, mobile: e.target.value })
-          }
-        >
-          <MenuItem value="">All</MenuItem>
-          {mobileOptions.map((m) => (
-            <MenuItem key={m} value={m}>
-              {m}
-            </MenuItem>
-          ))}
-        </TextField>
+      {/* ======================
+         LEADS TAB
+      ====================== */}
+      {tab === 0 && (
+        <>
+          {/* FILTERS */}
+          <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+            <TextField
+              select
+              size="small"
+              label="Customer Mobile"
+              value={filters.mobile}
+              onChange={(e) =>
+                setFilters({ ...filters, mobile: e.target.value })
+              }
+            >
+              <MenuItem value="">All</MenuItem>
+              {mobileOptions.map((m) => (
+                <MenuItem key={m} value={m}>
+                  {m}
+                </MenuItem>
+              ))}
+            </TextField>
 
-        <TextField
-          select
-          label="Merchant"
-          size="small"
-          value={filters.merchant}
-          onChange={(e) =>
-            setFilters({ ...filters, merchant: e.target.value })
-          }
-        >
-          <MenuItem value="">All</MenuItem>
-          {merchantOptions.map((m) => (
-            <MenuItem key={m} value={m}>
-              {m}
-            </MenuItem>
-          ))}
-        </TextField>
+            <TextField
+              select
+              size="small"
+              label="Merchant"
+              value={filters.merchant}
+              onChange={(e) =>
+                setFilters({
+                  ...filters,
+                  merchant: e.target.value,
+                })
+              }
+            >
+              <MenuItem value="">All</MenuItem>
+              {merchantOptions.map((m) => (
+                <MenuItem key={m} value={m}>
+                  {m}
+                </MenuItem>
+              ))}
+            </TextField>
 
-        <TextField
-          select
-          label="Category"
-          size="small"
-          value={filters.category}
-          onChange={(e) =>
-            setFilters({ ...filters, category: e.target.value })
-          }
-        >
-          <MenuItem value="">All</MenuItem>
-          {categoryOptions.map((c) => (
-            <MenuItem key={c} value={c}>
-              {c}
-            </MenuItem>
-          ))}
-        </TextField>
-      </Box>
+            <TextField
+              select
+              size="small"
+              label="Category"
+              value={filters.category}
+              onChange={(e) =>
+                setFilters({
+                  ...filters,
+                  category: e.target.value,
+                })
+              }
+            >
+              <MenuItem value="">All</MenuItem>
+              {categoryOptions.map((c) => (
+                <MenuItem key={c} value={c}>
+                  {c}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Box>
 
-      {/* ACTIONS */}
-      <Box sx={{ mb: 2 }}>
-        <Button onClick={selectAll}>
-          {selected.length === filteredLeads.length
-            ? "Unselect All"
-            : "Select All"}
-        </Button>
-        <Button
-          sx={{ ml: 2 }}
-          color="error"
-          variant="contained"
-          disabled={!selected.length}
-          onClick={deleteSelected}
-        >
-          Delete Selected
-        </Button>
-      </Box>
+          {/* ACTIONS */}
+          <Box sx={{ mb: 2 }}>
+            <Button onClick={selectAll}>
+              {selected.length === filteredLeads.length
+                ? "Unselect All"
+                : "Select All"}
+            </Button>
+            <Button
+              sx={{ ml: 2 }}
+              color="error"
+              variant="contained"
+              disabled={!selected.length}
+              onClick={deleteSelected}
+            >
+              Delete Selected
+            </Button>
+          </Box>
 
-      {/* TABLE */}
-      <Table size="small">
-        <TableHead>
-          <TableRow>
-            <TableCell padding="checkbox">
-              <Checkbox
-                checked={
-                  filteredLeads.length > 0 &&
-                  selected.length === filteredLeads.length
-                }
-                indeterminate={
-                  selected.length > 0 &&
-                  selected.length < filteredLeads.length
-                }
-                onChange={selectAll}
-              />
-            </TableCell>
-            <TableCell>Customer</TableCell>
-            <TableCell>Merchant</TableCell>
-            <TableCell>Category</TableCell>
-            <TableCell>Distance</TableCell>
-            <TableCell>Time</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {filteredLeads.map((l) => (
-            <TableRow key={l.id}>
-              <TableCell padding="checkbox">
-                <Checkbox
-                  checked={selected.includes(l.id)}
-                  onChange={() => toggle(l.id)}
-                />
-              </TableCell>
-              <TableCell>{l.customerMobile}</TableCell>
-              <TableCell>{l.merchantName}</TableCell>
-              <TableCell>{l.category}</TableCell>
-              <TableCell>{l.distanceMeters} m</TableCell>
-              <TableCell>
-                {l.createdAt?.toDate().toLocaleString()}
-              </TableCell>
+          {/* TABLE */}
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell padding="checkbox">
+                  <Checkbox
+                    checked={
+                      filteredLeads.length > 0 &&
+                      selected.length === filteredLeads.length
+                    }
+                    indeterminate={
+                      selected.length > 0 &&
+                      selected.length < filteredLeads.length
+                    }
+                    onChange={selectAll}
+                  />
+                </TableCell>
+                <TableCell>Customer</TableCell>
+                <TableCell>Merchant</TableCell>
+                <TableCell>Category</TableCell>
+                <TableCell>Distance</TableCell>
+                <TableCell>Time</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filteredLeads.map((l) => (
+                <TableRow key={l.id}>
+                  <TableCell padding="checkbox">
+                    <Checkbox
+                      checked={selected.includes(l.id)}
+                      onChange={() => toggle(l.id)}
+                    />
+                  </TableCell>
+                  <TableCell>{l.customerMobile}</TableCell>
+                  <TableCell>{l.merchantName}</TableCell>
+                  <TableCell>{l.category}</TableCell>
+                  <TableCell>{l.distanceMeters} m</TableCell>
+                  <TableCell>
+                    {l.createdAt?.toDate().toLocaleString()}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </>
+      )}
+
+      {/* ======================
+         ANALYTICS TAB
+      ====================== */}
+      {tab === 1 && (
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Merchant</TableCell>
+              <TableCell>Category</TableCell>
+              <TableCell>Visits</TableCell>
+              <TableCell>Unique Customers</TableCell>
+              <TableCell>Avg Distance (m)</TableCell>
+              <TableCell>Last Seen</TableCell>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHead>
+          <TableBody>
+            {merchantAnalytics.map((m) => (
+              <TableRow key={m.merchantName}>
+                <TableCell>{m.merchantName}</TableCell>
+                <TableCell>{m.category}</TableCell>
+                <TableCell>{m.visits}</TableCell>
+                <TableCell>{m.uniqueCustomers}</TableCell>
+                <TableCell>{m.avgDistance}</TableCell>
+                <TableCell>
+                  {m.lastSeen?.toDate().toLocaleString()}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
     </Box>
   );
 }
