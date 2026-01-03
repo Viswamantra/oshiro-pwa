@@ -16,9 +16,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 
-/* ======================
-   SUPER ADMIN CONFIG
-====================== */
+/* 🔐 ADMIN CONFIG */
 const ADMIN_MOBILE = "7386361725";
 const ADMIN_PASSWORD = "45#67";
 
@@ -30,40 +28,30 @@ export default function Login() {
   const [adminPassword, setAdminPassword] = useState("");
   const [error, setError] = useState("");
 
-  /* ======================
+  /* =========================
      CHECK MERCHANT STATUS
-  ====================== */
-  const getMerchantStatus = async (mobile) => {
+  ========================= */
+  const getMerchantByMobile = async (mobile) => {
     const q = query(
       collection(db, "merchants"),
       where("mobile", "==", mobile)
     );
     const snap = await getDocs(q);
-
-    if (snap.empty) return { exists: false };
-
-    const merchant = snap.docs[0].data();
-    return {
-      exists: true,
-      status: merchant.status,
-    };
+    return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
   };
 
-  /* ======================
+  /* =========================
      LOGIN HANDLER
-  ====================== */
+  ========================= */
   const handleLogin = async () => {
     setError("");
 
-    /* BASIC MOBILE CHECK */
     if (!/^\d{10}$/.test(mobile)) {
       setError("Enter valid 10 digit mobile number");
       return;
     }
 
-    /* ======================
-       🔐 SUPER ADMIN LOGIN
-    ====================== */
+    /* ================= ADMIN ================= */
     if (mobile === ADMIN_MOBILE) {
       if (adminPassword !== ADMIN_PASSWORD) {
         setError("Invalid admin password");
@@ -81,9 +69,7 @@ export default function Login() {
       return;
     }
 
-    /* ======================
-       ROLE REQUIRED BELOW
-    ====================== */
+    /* ================= ROLE REQUIRED ================= */
     if (!role) {
       setError("Please select Merchant or Customer");
       return;
@@ -96,53 +82,44 @@ export default function Login() {
       JSON.stringify({ mobile })
     );
 
-    /* ======================
-       CUSTOMER LOGIN
-    ====================== */
+    /* ================= CUSTOMER ================= */
     if (role === "customer") {
       navigate("/customer", { replace: true });
       return;
     }
 
-    /* ======================
-       MERCHANT LOGIN (STRICT)
-    ====================== */
-    if (role === "merchant") {
-      const { exists, status } =
-        await getMerchantStatus(mobile);
+    /* ================= MERCHANT ================= */
+    const merchant = await getMerchantByMobile(mobile);
 
-      if (!exists) {
-        navigate("/merchant-register", { replace: true });
-        return;
-      }
-
-      if (status !== "approved") {
-        setError(
-          "Merchant registration pending admin approval"
-        );
-        localStorage.clear();
-        return;
-      }
-
-      navigate("/merchant", { replace: true });
+    if (!merchant) {
+      // ❌ NEW MERCHANT
+      navigate("/merchant-register", { replace: true });
+      return;
     }
+
+    if (merchant.status === "pending") {
+      setError("⏳ Awaiting admin approval");
+      return;
+    }
+
+    if (merchant.status === "rejected") {
+      setError(
+        `❌ Rejected: ${merchant.rejectionReason || "Contact admin"}`
+      );
+      return;
+    }
+
+    // ✅ APPROVED
+    localStorage.setItem("oshiro_merchant_id", merchant.id);
+    navigate("/merchant", { replace: true });
   };
 
-  /* ======================
+  /* =========================
      UI
-  ====================== */
+  ========================= */
   return (
-    <Box
-      sx={{
-        p: 3,
-        maxWidth: 420,
-        mx: "auto",
-        mt: 6,
-      }}
-    >
-      <Typography variant="h5" gutterBottom>
-        Login
-      </Typography>
+    <Box sx={{ p: 3, maxWidth: 420, mx: "auto", mt: 6 }}>
+      <Typography variant="h5">Login</Typography>
 
       <TextField
         label="Mobile Number"
@@ -169,7 +146,7 @@ export default function Login() {
         />
       )}
 
-      {/* ROLE SELECT (NOT FOR ADMIN) */}
+      {/* ROLE (HIDDEN FOR ADMIN) */}
       {mobile !== ADMIN_MOBILE && (
         <ToggleButtonGroup
           exclusive
