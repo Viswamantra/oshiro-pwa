@@ -13,6 +13,8 @@ import {
   query,
   where,
   getDocs,
+  addDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
 
@@ -29,7 +31,7 @@ export default function Login() {
   const [error, setError] = useState("");
 
   /* =========================
-     CHECK MERCHANT STATUS
+     GET MERCHANT BY MOBILE
   ========================= */
   const getMerchantByMobile = async (mobile) => {
     const q = query(
@@ -37,7 +39,33 @@ export default function Login() {
       where("mobile", "==", mobile)
     );
     const snap = await getDocs(q);
-    return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
+    return snap.empty
+      ? null
+      : { id: snap.docs[0].id, ...snap.docs[0].data() };
+  };
+
+  /* =========================
+     GET / CREATE CUSTOMER
+  ========================= */
+  const getOrCreateCustomer = async (mobile) => {
+    const q = query(
+      collection(db, "customers"),
+      where("mobile", "==", mobile)
+    );
+    const snap = await getDocs(q);
+
+    // ✅ EXISTING CUSTOMER
+    if (!snap.empty) {
+      return snap.docs[0].id;
+    }
+
+    // 🆕 NEW CUSTOMER
+    const ref = await addDoc(collection(db, "customers"), {
+      mobile,
+      createdAt: serverTimestamp(),
+    });
+
+    return ref.id;
   };
 
   /* =========================
@@ -84,6 +112,11 @@ export default function Login() {
 
     /* ================= CUSTOMER ================= */
     if (role === "customer") {
+      const customerId = await getOrCreateCustomer(mobile);
+
+      // 🔥 THIS FIXES THE BLINK ISSUE
+      localStorage.setItem("oshiro_uid", customerId);
+
       navigate("/customer", { replace: true });
       return;
     }
@@ -92,7 +125,6 @@ export default function Login() {
     const merchant = await getMerchantByMobile(mobile);
 
     if (!merchant) {
-      // ❌ NEW MERCHANT
       navigate("/merchant-register", { replace: true });
       return;
     }
@@ -109,7 +141,7 @@ export default function Login() {
       return;
     }
 
-    // ✅ APPROVED
+    // ✅ APPROVED MERCHANT
     localStorage.setItem("oshiro_merchant_id", merchant.id);
     navigate("/merchant", { replace: true });
   };
