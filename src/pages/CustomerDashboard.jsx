@@ -56,15 +56,16 @@ export default function CustomerDashboard() {
   const [nearbyOffers, setNearbyOffers] = useState([]);
   const [gpsError, setGpsError] = useState("");
 
-  // Preferences
   const [category, setCategory] = useState(
     localStorage.getItem("oshiro_category") || ""
   );
-  const [radius, setRadius] = useState(
-    Number(localStorage.getItem("oshiro_radius")) || 1000
+
+  const [baseRadius, setBaseRadius] = useState(
+    Number(localStorage.getItem("oshiro_radius")) || 300
   );
 
-  // Dialog
+  const [effectiveRadius, setEffectiveRadius] = useState(baseRadius);
+
   const [selectedOffer, setSelectedOffer] = useState(null);
 
   /* ======================
@@ -138,7 +139,7 @@ export default function CustomerDashboard() {
   }, [customerId]);
 
   /* ======================
-     LOAD ACTIVE OFFERS
+     LOAD OFFERS
   ====================== */
   useEffect(() => {
     const q = query(
@@ -152,35 +153,44 @@ export default function CustomerDashboard() {
   }, []);
 
   /* ======================
-     FILTER + SORT (DISTANCE)
+     AUTO-EXPAND FILTER
   ====================== */
   useEffect(() => {
     if (!location) return;
 
-    const nearby = offers
-      .map((o) => {
-        if (!o.lat || !o.lng) return null;
+    const tryRadii = [baseRadius, 1000, 3000];
 
-        const distance = distanceMeters(
-          location.lat,
-          location.lng,
-          o.lat,
-          o.lng
-        );
+    for (let r of tryRadii) {
+      const results = offers
+        .map((o) => {
+          if (!o.lat || !o.lng) return null;
 
-        if (distance > radius) return null;
-        if (category && o.category !== category) return null;
+          const distance = distanceMeters(
+            location.lat,
+            location.lng,
+            o.lat,
+            o.lng
+          );
 
-        return {
-          ...o,
-          distance,
-        };
-      })
-      .filter(Boolean)
-      .sort((a, b) => a.distance - b.distance);
+          if (distance > r) return null;
+          if (category && o.category !== category) return null;
 
-    setNearbyOffers(nearby);
-  }, [location, offers, category, radius]);
+          return { ...o, distance };
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.distance - b.distance);
+
+      if (results.length > 0) {
+        setNearbyOffers(results);
+        setEffectiveRadius(r);
+        return;
+      }
+    }
+
+    // nothing found at all
+    setNearbyOffers([]);
+    setEffectiveRadius(baseRadius);
+  }, [location, offers, category, baseRadius]);
 
   /* ======================
      ACTIONS
@@ -222,7 +232,7 @@ export default function CustomerDashboard() {
       </Button>
 
       {/* FILTERS */}
-      <Box sx={{ mt: 3, display: "flex", gap: 2, flexWrap: "wrap" }}>
+      <Box sx={{ mt: 3, display: "flex", gap: 2 }}>
         <TextField
           select
           label="Category"
@@ -231,7 +241,6 @@ export default function CustomerDashboard() {
             setCategory(e.target.value);
             localStorage.setItem("oshiro_category", e.target.value);
           }}
-          sx={{ minWidth: 180 }}
         >
           <MenuItem value="">All</MenuItem>
           <MenuItem value="Food">Food</MenuItem>
@@ -239,37 +248,36 @@ export default function CustomerDashboard() {
           <MenuItem value="Fashion & Clothing">
             Fashion & Clothing
           </MenuItem>
-          <MenuItem value="Hospitals">Hospitals</MenuItem>
-          <MenuItem value="Medicals">Medicals</MenuItem>
-          <MenuItem value="Education">Education</MenuItem>
-          <MenuItem value="Services">Services</MenuItem>
         </TextField>
 
         <TextField
           select
           label="Distance"
-          value={radius}
+          value={baseRadius}
           onChange={(e) => {
-            setRadius(Number(e.target.value));
-            localStorage.setItem("oshiro_radius", e.target.value);
+            const r = Number(e.target.value);
+            setBaseRadius(r);
+            localStorage.setItem("oshiro_radius", r);
           }}
-          sx={{ minWidth: 160 }}
         >
           <MenuItem value={300}>300 m</MenuItem>
-          <MenuItem value={500}>500 m</MenuItem>
           <MenuItem value={1000}>1 km</MenuItem>
           <MenuItem value={3000}>3 km</MenuItem>
         </TextField>
       </Box>
 
+      {/* AUTO-EXPAND INFO */}
+      {effectiveRadius !== baseRadius && (
+        <Typography sx={{ mt: 2 }} color="text.secondary">
+          Showing offers within{" "}
+          {effectiveRadius >= 1000
+            ? `${effectiveRadius / 1000} km`
+            : `${effectiveRadius} m`}
+        </Typography>
+      )}
+
       {/* OFFERS */}
       <Box sx={{ mt: 3 }}>
-        {nearbyOffers.length === 0 && location && (
-          <Typography>
-            No offers found for selected category & distance
-          </Typography>
-        )}
-
         {nearbyOffers.map((o) => (
           <Card
             key={o.id}
@@ -282,11 +290,7 @@ export default function CustomerDashboard() {
               <Typography color="text.secondary">
                 {o.shopName} • {o.category}
               </Typography>
-              <Typography
-                variant="caption"
-                color="primary"
-                sx={{ mt: 0.5 }}
-              >
+              <Typography variant="caption" color="primary">
                 📍 {Math.round(o.distance)} meters away
               </Typography>
             </CardContent>
@@ -294,7 +298,7 @@ export default function CustomerDashboard() {
         ))}
       </Box>
 
-      {/* ACTION POPUP */}
+      {/* POPUP */}
       <Dialog
         open={!!selectedOffer}
         onClose={() => setSelectedOffer(null)}
@@ -306,9 +310,7 @@ export default function CustomerDashboard() {
               <Typography variant="h6">
                 {selectedOffer.title}
               </Typography>
-              <Typography sx={{ mb: 2 }}>
-                {selectedOffer.description}
-              </Typography>
+              <Typography>{selectedOffer.description}</Typography>
               <Typography variant="caption">
                 📍 {Math.round(selectedOffer.distance)} meters away
               </Typography>
