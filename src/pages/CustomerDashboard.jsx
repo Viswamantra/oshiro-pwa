@@ -1,26 +1,14 @@
 import React, { useEffect, useState } from "react";
-import {
-  Box,
-  Typography,
-  Card,
-  CardContent,
-  Button,
-  Divider,
-} from "@mui/material";
-import {
-  collection,
-  onSnapshot,
-  query,
-  where,
-} from "firebase/firestore";
+import { Box, Typography, Button, Card, CardContent } from "@mui/material";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
 
-/* =========================
-   DISTANCE CALC (HAVERSINE)
-========================= */
-function distanceKm(lat1, lon1, lat2, lon2) {
-  const R = 6371;
+/* ======================
+   DISTANCE (HAVERSINE)
+====================== */
+function distanceMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
   const a =
@@ -31,49 +19,48 @@ function distanceKm(lat1, lon1, lat2, lon2) {
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-const MAX_DISTANCE_KM = 2; // show offers within 2km
-
 export default function CustomerDashboard() {
   const navigate = useNavigate();
 
-  const role = localStorage.getItem("oshiro_role");
-  const user = JSON.parse(localStorage.getItem("oshiro_user") || "{}");
-
-  const [customerLoc, setCustomerLoc] = useState(null);
-  const [offers, setOffers] = useState([]);
-  const [nearbyOffers, setNearbyOffers] = useState([]);
-
   /* ======================
-     🔐 ROLE GUARD
+     AUTH GUARD
   ====================== */
   useEffect(() => {
-    if (role !== "customer" || !user.mobile) {
+    if (localStorage.getItem("oshiro_role") !== "customer") {
       localStorage.clear();
       navigate("/login", { replace: true });
     }
-  }, [role, user, navigate]);
+  }, [navigate]);
 
   /* ======================
-     GPS TRACKING
+     STATE
+  ====================== */
+  const [location, setLocation] = useState(null);
+  const [offers, setOffers] = useState([]);
+  const [nearbyOffers, setNearbyOffers] = useState([]);
+  const [gpsError, setGpsError] = useState("");
+
+  /* ======================
+     GET GPS LOCATION
   ====================== */
   useEffect(() => {
     if (!navigator.geolocation) {
-      alert("Geolocation not supported");
+      setGpsError("Geolocation not supported");
       return;
     }
 
-    const id = navigator.geolocation.watchPosition(
+    navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setCustomerLoc({
+        setLocation({
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
         });
       },
-      () => alert("GPS permission denied"),
+      () => {
+        setGpsError("GPS permission denied");
+      },
       { enableHighAccuracy: true }
     );
-
-    return () => navigator.geolocation.clearWatch(id);
   }, []);
 
   /* ======================
@@ -86,50 +73,31 @@ export default function CustomerDashboard() {
     );
 
     return onSnapshot(q, (snap) => {
-      setOffers(
-        snap.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-        }))
-      );
+      setOffers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
   }, []);
 
   /* ======================
-     FILTER BY DISTANCE
+     FILTER NEARBY OFFERS
   ====================== */
   useEffect(() => {
-    if (!customerLoc) return;
+    if (!location) return;
 
-    const filtered = offers
-      .map((o) => {
-        if (
-          o.lat == null ||
-          o.lng == null
-        )
-          return null;
+    const nearby = offers.filter((o) => {
+      if (!o.lat || !o.lng) return false;
 
-        const d = distanceKm(
-          customerLoc.lat,
-          customerLoc.lng,
-          o.lat,
-          o.lng
-        );
+      const d = distanceMeters(
+        location.lat,
+        location.lng,
+        o.lat,
+        o.lng
+      );
 
-        if (d > MAX_DISTANCE_KM) return null;
+      return d <= 300; // 🔥 300 meters
+    });
 
-        return {
-          ...o,
-          distanceLabel:
-            d < 1
-              ? `${Math.round(d * 1000)} m`
-              : `${d.toFixed(2)} km`,
-        };
-      })
-      .filter(Boolean);
-
-    setNearbyOffers(filtered);
-  }, [offers, customerLoc]);
+    setNearbyOffers(nearby);
+  }, [location, offers]);
 
   /* ======================
      LOGOUT
@@ -144,61 +112,48 @@ export default function CustomerDashboard() {
   ====================== */
   return (
     <Box sx={{ p: 3 }}>
-      <Box
-        display="flex"
-        justifyContent="space-between"
-        alignItems="center"
+      <Typography variant="h4">Nearby Offers</Typography>
+
+      <Button
+        sx={{ mt: 2 }}
+        variant="outlined"
+        color="error"
+        onClick={logout}
       >
-        <Typography variant="h4">
-          Nearby Offers
-        </Typography>
+        Logout
+      </Button>
 
-        <Button
-          variant="outlined"
-          color="error"
-          onClick={logout}
-        >
-          Logout
-        </Button>
-      </Box>
-
-      <Divider sx={{ my: 2 }} />
-
-      {!customerLoc && (
-        <Typography>
-          📍 Waiting for GPS location…
+      {!location && !gpsError && (
+        <Typography sx={{ mt: 2 }}>
+          📍 Waiting for GPS location...
         </Typography>
       )}
 
-      {nearbyOffers.length === 0 && (
-        <Typography color="text.secondary">
+      {gpsError && (
+        <Typography sx={{ mt: 2 }} color="error">
+          {gpsError}
+        </Typography>
+      )}
+
+      {location && nearbyOffers.length === 0 && (
+        <Typography sx={{ mt: 2 }}>
           No nearby offers found
         </Typography>
       )}
 
-      {nearbyOffers.map((o) => (
-        <Card key={o.id} sx={{ my: 1 }}>
-          <CardContent>
-            <Typography variant="h6">
-              🏪 {o.shopName}
-            </Typography>
-
-            <Typography>
-              🎁 {o.title}
-            </Typography>
-
-            {o.description && (
-              <Typography variant="body2">
-                {o.description}
+      <Box sx={{ mt: 3 }}>
+        {nearbyOffers.map((o) => (
+          <Card key={o.id} sx={{ mb: 2 }}>
+            <CardContent>
+              <Typography variant="h6">{o.title}</Typography>
+              <Typography>{o.description}</Typography>
+              <Typography sx={{ mt: 1 }} color="text.secondary">
+                {o.shopName} • {o.category}
               </Typography>
-            )}
-
-            <Typography variant="caption">
-              📍 {o.distanceLabel} away
-            </Typography>
-          </CardContent>
-        </Card>
-      ))}
+            </CardContent>
+          </Card>
+        ))}
+      </Box>
     </Box>
   );
 }
