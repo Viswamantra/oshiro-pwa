@@ -14,6 +14,7 @@ import {
   Tab,
   TextField,
   MenuItem,
+  Tooltip,
 } from "@mui/material";
 import {
   collection,
@@ -60,12 +61,13 @@ export default function AdminDashboard() {
   const [selected, setSelected] = useState([]);
 
   const [filters, setFilters] = useState({
-    mobile: "",
+    customer: "",
     merchant: "",
+    merchantMobile: "",
     category: "",
   });
 
-  const [dateRange, setDateRange] = useState("7d"); // today | 7d | 30d
+  const [dateRange, setDateRange] = useState("7d");
 
   /* ======================
      LOAD + JOIN DATA
@@ -93,6 +95,7 @@ export default function AdminDashboard() {
           id: d.id,
           customerMobile: customer.mobile || g.customerId,
           merchantName: merchant.shopName || "Unknown",
+          merchantMobile: merchant.mobile || "—",
           category: merchant.category || "Unknown",
           distanceMeters: g.distanceMeters || 0,
           createdAt: g.createdAt,
@@ -110,19 +113,12 @@ export default function AdminDashboard() {
   ====================== */
   const getStartDate = () => {
     const now = new Date();
-
-    if (dateRange === "today") {
+    if (dateRange === "today")
       return new Date(now.setHours(0, 0, 0, 0));
-    }
-
-    if (dateRange === "7d") {
-      return new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    }
-
-    if (dateRange === "30d") {
-      return new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    }
-
+    if (dateRange === "7d")
+      return new Date(Date.now() - 7 * 86400000);
+    if (dateRange === "30d")
+      return new Date(Date.now() - 30 * 86400000);
     return null;
   };
 
@@ -131,8 +127,11 @@ export default function AdminDashboard() {
   /* ======================
      FILTER OPTIONS
   ====================== */
-  const mobileOptions = [...new Set(leads.map((l) => l.customerMobile))];
+  const customerOptions = [...new Set(leads.map((l) => l.customerMobile))];
   const merchantOptions = [...new Set(leads.map((l) => l.merchantName))];
+  const merchantMobileOptions = [
+    ...new Set(leads.map((l) => l.merchantMobile)),
+  ];
   const categoryOptions = [...new Set(leads.map((l) => l.category))];
 
   /* ======================
@@ -146,8 +145,12 @@ export default function AdminDashboard() {
 
     return (
       timeOk &&
-      (!filters.mobile || l.customerMobile === filters.mobile) &&
-      (!filters.merchant || l.merchantName === filters.merchant) &&
+      (!filters.customer ||
+        l.customerMobile === filters.customer) &&
+      (!filters.merchant ||
+        l.merchantName === filters.merchant) &&
+      (!filters.merchantMobile ||
+        l.merchantMobile === filters.merchantMobile) &&
       (!filters.category || l.category === filters.category)
     );
   });
@@ -171,7 +174,12 @@ export default function AdminDashboard() {
 
   const deleteSelected = async () => {
     if (!selected.length) return;
-    if (!window.confirm("Delete selected leads?")) return;
+    if (
+      !window.confirm(
+        "Delete selected LEAD records only?\n(Customers & Merchants are NOT deleted)"
+      )
+    )
+      return;
 
     for (const id of selected) {
       await deleteDoc(doc(db, "geo_events", id));
@@ -197,7 +205,7 @@ export default function AdminDashboard() {
         };
       }
 
-      acc[l.merchantName].visits += 1;
+      acc[l.merchantName].visits++;
       acc[l.merchantName].customers.add(l.customerMobile);
       acc[l.merchantName].totalDistance += l.distanceMeters;
 
@@ -227,7 +235,7 @@ export default function AdminDashboard() {
   ====================== */
   return (
     <Box sx={{ p: 2 }}>
-      <Button variant="outlined" color="error" onClick={logout}>
+      <Button color="error" variant="outlined" onClick={logout}>
         Logout
       </Button>
 
@@ -236,9 +244,9 @@ export default function AdminDashboard() {
       </Typography>
 
       <Tabs
-        sx={{ mt: 2 }}
         value={tab}
         onChange={(e, v) => setTab(v)}
+        sx={{ mt: 2 }}
       >
         <Tab label="Leads" />
         <Tab label="Merchant Analytics" />
@@ -247,39 +255,39 @@ export default function AdminDashboard() {
       <Divider sx={{ my: 2 }} />
 
       {/* DATE RANGE */}
-      <Box sx={{ mb: 2 }}>
-        <TextField
-          select
-          size="small"
-          label="Date Range"
-          value={dateRange}
-          onChange={(e) => setDateRange(e.target.value)}
-        >
-          <MenuItem value="today">Today</MenuItem>
-          <MenuItem value="7d">Last 7 Days</MenuItem>
-          <MenuItem value="30d">Last 30 Days</MenuItem>
-        </TextField>
-      </Box>
+      <TextField
+        select
+        size="small"
+        label="Date Range"
+        value={dateRange}
+        onChange={(e) => setDateRange(e.target.value)}
+        sx={{ mb: 2 }}
+      >
+        <MenuItem value="today">Today</MenuItem>
+        <MenuItem value="7d">Last 7 Days</MenuItem>
+        <MenuItem value="30d">Last 30 Days</MenuItem>
+      </TextField>
 
       {/* ======================
          LEADS TAB
       ====================== */}
       {tab === 0 && (
         <>
-          <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+          {/* FILTERS */}
+          <Box sx={{ display: "flex", gap: 2, mb: 2, flexWrap: "wrap" }}>
             <TextField
               select
               size="small"
               label="Customer Mobile"
-              value={filters.mobile}
+              value={filters.customer}
               onChange={(e) =>
-                setFilters({ ...filters, mobile: e.target.value })
+                setFilters({ ...filters, customer: e.target.value })
               }
             >
               <MenuItem value="">All</MenuItem>
-              {mobileOptions.map((m) => (
-                <MenuItem key={m} value={m}>
-                  {m}
+              {customerOptions.map((v) => (
+                <MenuItem key={v} value={v}>
+                  {v}
                 </MenuItem>
               ))}
             </TextField>
@@ -287,19 +295,36 @@ export default function AdminDashboard() {
             <TextField
               select
               size="small"
-              label="Merchant"
+              label="Merchant Name"
               value={filters.merchant}
+              onChange={(e) =>
+                setFilters({ ...filters, merchant: e.target.value })
+              }
+            >
+              <MenuItem value="">All</MenuItem>
+              {merchantOptions.map((v) => (
+                <MenuItem key={v} value={v}>
+                  {v}
+                </MenuItem>
+              ))}
+            </TextField>
+
+            <TextField
+              select
+              size="small"
+              label="Merchant Mobile"
+              value={filters.merchantMobile}
               onChange={(e) =>
                 setFilters({
                   ...filters,
-                  merchant: e.target.value,
+                  merchantMobile: e.target.value,
                 })
               }
             >
               <MenuItem value="">All</MenuItem>
-              {merchantOptions.map((m) => (
-                <MenuItem key={m} value={m}>
-                  {m}
+              {merchantMobileOptions.map((v) => (
+                <MenuItem key={v} value={v}>
+                  {v}
                 </MenuItem>
               ))}
             </TextField>
@@ -310,38 +335,42 @@ export default function AdminDashboard() {
               label="Category"
               value={filters.category}
               onChange={(e) =>
-                setFilters({
-                  ...filters,
-                  category: e.target.value,
-                })
+                setFilters({ ...filters, category: e.target.value })
               }
             >
               <MenuItem value="">All</MenuItem>
-              {categoryOptions.map((c) => (
-                <MenuItem key={c} value={c}>
-                  {c}
+              {categoryOptions.map((v) => (
+                <MenuItem key={v} value={v}>
+                  {v}
                 </MenuItem>
               ))}
             </TextField>
           </Box>
 
+          {/* ACTIONS */}
           <Box sx={{ mb: 2 }}>
             <Button onClick={selectAll}>
               {selected.length === filteredLeads.length
                 ? "Unselect All"
                 : "Select All"}
             </Button>
-            <Button
-              sx={{ ml: 2 }}
-              color="error"
-              variant="contained"
-              disabled={!selected.length}
-              onClick={deleteSelected}
-            >
-              Delete Selected
-            </Button>
+
+            <Tooltip title="Deletes only visit/lead records. Customers & merchants remain.">
+              <span>
+                <Button
+                  sx={{ ml: 2 }}
+                  color="error"
+                  variant="contained"
+                  disabled={!selected.length}
+                  onClick={deleteSelected}
+                >
+                  Delete Selected Leads
+                </Button>
+              </span>
+            </Tooltip>
           </Box>
 
+          {/* TABLE */}
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -358,8 +387,9 @@ export default function AdminDashboard() {
                     onChange={selectAll}
                   />
                 </TableCell>
-                <TableCell>Customer</TableCell>
-                <TableCell>Merchant</TableCell>
+                <TableCell>Customer Mobile</TableCell>
+                <TableCell>Merchant Name</TableCell>
+                <TableCell>Merchant Mobile</TableCell>
                 <TableCell>Category</TableCell>
                 <TableCell>Distance</TableCell>
                 <TableCell>Time</TableCell>
@@ -376,6 +406,7 @@ export default function AdminDashboard() {
                   </TableCell>
                   <TableCell>{l.customerMobile}</TableCell>
                   <TableCell>{l.merchantName}</TableCell>
+                  <TableCell>{l.merchantMobile}</TableCell>
                   <TableCell>{l.category}</TableCell>
                   <TableCell>{l.distanceMeters} m</TableCell>
                   <TableCell>
@@ -399,7 +430,7 @@ export default function AdminDashboard() {
               <TableCell>Category</TableCell>
               <TableCell>Visits</TableCell>
               <TableCell>Unique Customers</TableCell>
-              <TableCell>Avg Distance (m)</TableCell>
+              <TableCell>Avg Distance</TableCell>
               <TableCell>Last Seen</TableCell>
             </TableRow>
           </TableHead>
@@ -410,7 +441,7 @@ export default function AdminDashboard() {
                 <TableCell>{m.category}</TableCell>
                 <TableCell>{m.visits}</TableCell>
                 <TableCell>{m.uniqueCustomers}</TableCell>
-                <TableCell>{m.avgDistance}</TableCell>
+                <TableCell>{m.avgDistance} m</TableCell>
                 <TableCell>
                   {m.lastSeen?.toDate().toLocaleString()}
                 </TableCell>
