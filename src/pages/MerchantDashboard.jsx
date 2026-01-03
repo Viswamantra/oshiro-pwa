@@ -6,8 +6,15 @@ import {
   CardContent,
   Button,
   Divider,
+  TextField,
 } from "@mui/material";
-import { doc, getDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  addDoc,
+  collection,
+  serverTimestamp,
+} from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
 
@@ -20,8 +27,13 @@ export default function MerchantDashboard() {
   const [merchant, setMerchant] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  /* OFFER STATE */
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [msg, setMsg] = useState("");
+
   /* ======================
-     🔐 ROLE + ID GUARD
+     🔐 ROLE GUARD
   ====================== */
   useEffect(() => {
     if (role !== "merchant" || !merchantId) {
@@ -31,7 +43,7 @@ export default function MerchantDashboard() {
   }, [role, merchantId, navigate]);
 
   /* ======================
-     LOAD MERCHANT PROFILE
+     LOAD MERCHANT
   ====================== */
   useEffect(() => {
     const loadMerchant = async () => {
@@ -40,7 +52,7 @@ export default function MerchantDashboard() {
         const snap = await getDoc(ref);
 
         if (!snap.exists()) {
-          alert("Merchant record not found");
+          alert("Merchant not found");
           localStorage.clear();
           navigate("/login");
           return;
@@ -58,7 +70,7 @@ export default function MerchantDashboard() {
         setMerchant({ id: snap.id, ...data });
       } catch (err) {
         console.error(err);
-        alert("Failed to load merchant data");
+        alert("Error loading merchant");
       } finally {
         setLoading(false);
       }
@@ -76,6 +88,38 @@ export default function MerchantDashboard() {
   };
 
   /* ======================
+     CREATE OFFER
+  ====================== */
+  const createOffer = async () => {
+    setMsg("");
+
+    if (!title.trim()) {
+      setMsg("Offer title is required");
+      return;
+    }
+
+    try {
+      await addDoc(collection(db, "offers"), {
+        merchantId: merchant.id,
+        merchantMobile: merchant.mobile,
+        shopName: merchant.shopName,
+        category: merchant.category,
+        title: title.trim(),
+        description: description.trim(),
+        active: true,
+        createdAt: serverTimestamp(),
+      });
+
+      setTitle("");
+      setDescription("");
+      setMsg("✅ Offer created successfully");
+    } catch (err) {
+      console.error(err);
+      setMsg("❌ Failed to create offer");
+    }
+  };
+
+  /* ======================
      UI STATES
   ====================== */
   if (loading) {
@@ -89,6 +133,7 @@ export default function MerchantDashboard() {
   ====================== */
   return (
     <Box sx={{ p: 3 }}>
+      {/* HEADER */}
       <Box
         display="flex"
         justifyContent="space-between"
@@ -109,7 +154,7 @@ export default function MerchantDashboard() {
 
       <Divider sx={{ my: 2 }} />
 
-      {/* MERCHANT PROFILE */}
+      {/* MERCHANT INFO */}
       <Card sx={{ maxWidth: 600 }}>
         <CardContent>
           <Typography variant="h6">
@@ -130,27 +175,53 @@ export default function MerchantDashboard() {
 
           <Divider sx={{ my: 1 }} />
 
-          <Typography>
-            📍 Latitude: {merchant.lat}
-          </Typography>
-
-          <Typography>
-            📍 Longitude: {merchant.lng}
-          </Typography>
+          <Typography>📍 Lat: {merchant.lat}</Typography>
+          <Typography>📍 Lng: {merchant.lng}</Typography>
         </CardContent>
       </Card>
 
-      {/* NEXT STEP BUTTON */}
-      <Box sx={{ mt: 3 }}>
-        <Button
-          variant="contained"
-          onClick={() =>
-            alert("Create Offer — Step-3")
-          }
-        >
-          Create Offer
-        </Button>
-      </Box>
+      {/* CREATE OFFER */}
+      <Card sx={{ mt: 3, maxWidth: 600 }}>
+        <CardContent>
+          <Typography variant="h6">
+            🎁 Create New Offer
+          </Typography>
+
+          <TextField
+            label="Offer Title"
+            fullWidth
+            margin="normal"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+
+          <TextField
+            label="Description (optional)"
+            fullWidth
+            multiline
+            rows={3}
+            margin="normal"
+            value={description}
+            onChange={(e) =>
+              setDescription(e.target.value)
+            }
+          />
+
+          {msg && (
+            <Typography sx={{ mt: 1 }} color="primary">
+              {msg}
+            </Typography>
+          )}
+
+          <Button
+            sx={{ mt: 2 }}
+            variant="contained"
+            onClick={createOffer}
+          >
+            Create Offer
+          </Button>
+        </CardContent>
+      </Card>
     </Box>
   );
 }
