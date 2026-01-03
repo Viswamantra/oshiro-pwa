@@ -1,6 +1,20 @@
 import React, { useEffect, useState } from "react";
-import { Box, Typography, Button, Card, CardContent } from "@mui/material";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import {
+  Box,
+  Typography,
+  Button,
+  Card,
+  CardContent,
+} from "@mui/material";
+import {
+  collection,
+  onSnapshot,
+  query,
+  where,
+  doc,
+  updateDoc,
+} from "firebase/firestore";
+import { getMessaging, getToken } from "firebase/messaging";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
 
@@ -23,14 +37,9 @@ export default function CustomerDashboard() {
   const navigate = useNavigate();
 
   /* ======================
-     AUTH GUARD
+     AUTH INFO
   ====================== */
-  useEffect(() => {
-    if (localStorage.getItem("oshiro_role") !== "customer") {
-      localStorage.clear();
-      navigate("/login", { replace: true });
-    }
-  }, [navigate]);
+  const customerId = localStorage.getItem("oshiro_uid");
 
   /* ======================
      STATE
@@ -39,6 +48,48 @@ export default function CustomerDashboard() {
   const [offers, setOffers] = useState([]);
   const [nearbyOffers, setNearbyOffers] = useState([]);
   const [gpsError, setGpsError] = useState("");
+
+  /* ======================
+     AUTH GUARD
+  ====================== */
+  useEffect(() => {
+    if (
+      localStorage.getItem("oshiro_role") !== "customer" ||
+      !customerId
+    ) {
+      localStorage.clear();
+      navigate("/login", { replace: true });
+    }
+  }, [navigate, customerId]);
+
+  /* ======================
+     SAVE FCM TOKEN
+  ====================== */
+  useEffect(() => {
+    const saveFcmToken = async () => {
+      try {
+        const permission = await Notification.requestPermission();
+        if (permission !== "granted") return;
+
+        const messaging = getMessaging();
+        const token = await getToken(messaging, {
+          vapidKey: "YOUR_PUBLIC_VAPID_KEY",
+        });
+
+        if (token) {
+          await updateDoc(doc(db, "customers", customerId), {
+            fcmToken: token,
+            updatedAt: new Date(),
+          });
+          console.log("✅ FCM token saved");
+        }
+      } catch (err) {
+        console.error("FCM error:", err);
+      }
+    };
+
+    saveFcmToken();
+  }, [customerId]);
 
   /* ======================
      GET GPS LOCATION
@@ -50,10 +101,19 @@ export default function CustomerDashboard() {
     }
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLocation({
+      async (pos) => {
+        const coords = {
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
+        };
+
+        setLocation(coords);
+
+        // 🔥 Save last known location (VERY IMPORTANT)
+        await updateDoc(doc(db, "customers", customerId), {
+          lastLat: coords.lat,
+          lastLng: coords.lng,
+          lastSeenAt: new Date(),
         });
       },
       () => {
@@ -61,7 +121,7 @@ export default function CustomerDashboard() {
       },
       { enableHighAccuracy: true }
     );
-  }, []);
+  }, [customerId]);
 
   /* ======================
      LOAD ACTIVE OFFERS
@@ -125,7 +185,7 @@ export default function CustomerDashboard() {
 
       {!location && !gpsError && (
         <Typography sx={{ mt: 2 }}>
-          📍 Waiting for GPS location...
+          📍 Detecting your location...
         </Typography>
       )}
 
