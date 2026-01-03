@@ -73,7 +73,7 @@ export default function CustomerDashboard() {
 
         const messaging = getMessaging();
         const token = await getToken(messaging, {
-          vapidKey: "YOUR_PUBLIC_VAPID_KEY",
+          vapidKey: "6J9HA-kiDFVNQD4raJhMSuAI9afWE34DUDRhodaOvE8",
         });
 
         if (token) {
