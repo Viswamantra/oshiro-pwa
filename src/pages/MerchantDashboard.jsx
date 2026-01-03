@@ -5,14 +5,18 @@ import {
   Card,
   CardContent,
   Button,
-  Divider,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   TextField,
 } from "@mui/material";
 import {
-  doc,
-  getDoc,
-  addDoc,
   collection,
+  query,
+  where,
+  onSnapshot,
+  addDoc,
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
@@ -21,63 +25,98 @@ import { useNavigate } from "react-router-dom";
 export default function MerchantDashboard() {
   const navigate = useNavigate();
 
-  const merchantId = localStorage.getItem("oshiro_merchant_id");
-  const role = localStorage.getItem("oshiro_role");
-
-  const [merchant, setMerchant] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  /* OFFER STATE */
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [msg, setMsg] = useState("");
-
   /* ======================
-     🔐 ROLE GUARD
+     AUTH + ROLE GUARD
   ====================== */
+  const role = localStorage.getItem("oshiro_role");
+  const user = JSON.parse(localStorage.getItem("oshiro_user") || "{}");
+  const merchantMobile = user.mobile;
+
   useEffect(() => {
-    if (role !== "merchant" || !merchantId) {
+    if (role !== "merchant" || !merchantMobile) {
       localStorage.clear();
       navigate("/login", { replace: true });
     }
-  }, [role, merchantId, navigate]);
+  }, [role, merchantMobile, navigate]);
 
   /* ======================
-     LOAD MERCHANT
+     STATE
+  ====================== */
+  const [merchant, setMerchant] = useState(null);
+  const [offers, setOffers] = useState([]);
+
+  const [open, setOpen] = useState(false);
+  const [offerTitle, setOfferTitle] = useState("");
+  const [offerDesc, setOfferDesc] = useState("");
+
+  /* ======================
+     LOAD MERCHANT DETAILS
   ====================== */
   useEffect(() => {
-    const loadMerchant = async () => {
-      try {
-        const ref = doc(db, "merchants", merchantId);
-        const snap = await getDoc(ref);
+    const q = query(
+      collection(db, "merchants"),
+      where("mobile", "==", merchantMobile),
+      where("status", "==", "approved")
+    );
 
-        if (!snap.exists()) {
-          alert("Merchant not found");
-          localStorage.clear();
-          navigate("/login");
-          return;
-        }
-
-        const data = snap.data();
-
-        if (data.status !== "approved") {
-          alert("Merchant not approved yet");
-          localStorage.clear();
-          navigate("/login");
-          return;
-        }
-
-        setMerchant({ id: snap.id, ...data });
-      } catch (err) {
-        console.error(err);
-        alert("Error loading merchant");
-      } finally {
-        setLoading(false);
+    return onSnapshot(q, (snap) => {
+      if (!snap.empty) {
+        setMerchant({ id: snap.docs[0].id, ...snap.docs[0].data() });
       }
-    };
+    });
+  }, [merchantMobile]);
 
-    loadMerchant();
-  }, [merchantId, navigate]);
+  /* ======================
+     LOAD OFFERS
+  ====================== */
+  useEffect(() => {
+    if (!merchant) return;
+
+    const q = query(
+      collection(db, "offers"),
+      where("merchantId", "==", merchant.id)
+    );
+
+    return onSnapshot(q, (snap) => {
+      setOffers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
+  }, [merchant]);
+
+  /* ======================
+     CREATE OFFER (🔥 FIX HERE 🔥)
+  ====================== */
+  const createOffer = async () => {
+    if (!offerTitle || !offerDesc) {
+      alert("Fill all fields");
+      return;
+    }
+
+    if (!merchant?.lat || !merchant?.lng) {
+      alert("Merchant GPS missing");
+      return;
+    }
+
+    await addDoc(collection(db, "offers"), {
+      merchantId: merchant.id,
+      merchantMobile: merchant.mobile,
+      shopName: merchant.shopName,
+      category: merchant.category,
+
+      title: offerTitle,
+      description: offerDesc,
+
+      /* 🔥 THIS IS THE FIX 🔥 */
+      lat: merchant.lat,
+      lng: merchant.lng,
+
+      active: true,
+      createdAt: serverTimestamp(),
+    });
+
+    setOfferTitle("");
+    setOfferDesc("");
+    setOpen(false);
+  };
 
   /* ======================
      LOGOUT
@@ -88,140 +127,75 @@ export default function MerchantDashboard() {
   };
 
   /* ======================
-     CREATE OFFER
-  ====================== */
-  const createOffer = async () => {
-    setMsg("");
-
-    if (!title.trim()) {
-      setMsg("Offer title is required");
-      return;
-    }
-
-    try {
-      await addDoc(collection(db, "offers"), {
-        merchantId: merchant.id,
-        merchantMobile: merchant.mobile,
-        shopName: merchant.shopName,
-        category: merchant.category,
-        title: title.trim(),
-        description: description.trim(),
-        active: true,
-        createdAt: serverTimestamp(),
-      });
-
-      setTitle("");
-      setDescription("");
-      setMsg("✅ Offer created successfully");
-    } catch (err) {
-      console.error(err);
-      setMsg("❌ Failed to create offer");
-    }
-  };
-
-  /* ======================
-     UI STATES
-  ====================== */
-  if (loading) {
-    return <Typography sx={{ p: 3 }}>Loading...</Typography>;
-  }
-
-  if (!merchant) return null;
-
-  /* ======================
      UI
   ====================== */
   return (
     <Box sx={{ p: 3 }}>
-      {/* HEADER */}
-      <Box
-        display="flex"
-        justifyContent="space-between"
-        alignItems="center"
-      >
-        <Typography variant="h4">
-          Merchant Dashboard
-        </Typography>
+      <Typography variant="h4">Merchant Dashboard</Typography>
 
-        <Button
-          variant="outlined"
-          color="error"
-          onClick={logout}
-        >
-          Logout
-        </Button>
+      {merchant && (
+        <Typography sx={{ mt: 1 }}>
+          {merchant.shopName} | {merchant.category}
+        </Typography>
+      )}
+
+      <Button
+        sx={{ mt: 2 }}
+        variant="contained"
+        onClick={() => setOpen(true)}
+      >
+        Create Offer
+      </Button>
+
+      <Button
+        sx={{ mt: 2, ml: 2 }}
+        variant="outlined"
+        color="error"
+        onClick={logout}
+      >
+        Logout
+      </Button>
+
+      {/* OFFERS LIST */}
+      <Box sx={{ mt: 3 }}>
+        {offers.map((o) => (
+          <Card key={o.id} sx={{ mb: 2 }}>
+            <CardContent>
+              <Typography variant="h6">{o.title}</Typography>
+              <Typography>{o.description}</Typography>
+            </CardContent>
+          </Card>
+        ))}
       </Box>
 
-      <Divider sx={{ my: 2 }} />
-
-      {/* MERCHANT INFO */}
-      <Card sx={{ maxWidth: 600 }}>
-        <CardContent>
-          <Typography variant="h6">
-            🏪 {merchant.shopName}
-          </Typography>
-
-          <Typography>
-            📱 Mobile: {merchant.mobile}
-          </Typography>
-
-          <Typography>
-            🗂 Category: {merchant.category}
-          </Typography>
-
-          <Typography color="success.main">
-            ✅ Status: Approved
-          </Typography>
-
-          <Divider sx={{ my: 1 }} />
-
-          <Typography>📍 Lat: {merchant.lat}</Typography>
-          <Typography>📍 Lng: {merchant.lng}</Typography>
-        </CardContent>
-      </Card>
-
-      {/* CREATE OFFER */}
-      <Card sx={{ mt: 3, maxWidth: 600 }}>
-        <CardContent>
-          <Typography variant="h6">
-            🎁 Create New Offer
-          </Typography>
-
+      {/* CREATE OFFER DIALOG */}
+      <Dialog open={open} onClose={() => setOpen(false)} fullWidth>
+        <DialogTitle>Create Offer</DialogTitle>
+        <DialogContent>
           <TextField
             label="Offer Title"
             fullWidth
             margin="normal"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            value={offerTitle}
+            onChange={(e) => setOfferTitle(e.target.value)}
           />
-
           <TextField
-            label="Description (optional)"
+            label="Offer Description"
             fullWidth
+            margin="normal"
             multiline
             rows={3}
-            margin="normal"
-            value={description}
-            onChange={(e) =>
-              setDescription(e.target.value)
-            }
+            value={offerDesc}
+            onChange={(e) => setOfferDesc(e.target.value)}
           />
-
-          {msg && (
-            <Typography sx={{ mt: 1 }} color="primary">
-              {msg}
-            </Typography>
-          )}
-
-          <Button
-            sx={{ mt: 2 }}
-            variant="contained"
-            onClick={createOffer}
-          >
-            Create Offer
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={createOffer}>
+            Save Offer
           </Button>
-        </CardContent>
-      </Card>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
