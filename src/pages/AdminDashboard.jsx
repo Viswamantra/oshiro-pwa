@@ -17,6 +17,7 @@ import {
   TextField,
   Tabs,
   Tab,
+  MenuItem,
 } from "@mui/material";
 import {
   collection,
@@ -59,9 +60,9 @@ export default function AdminDashboard() {
   };
 
   /* ======================
-     VIEW STATE
+     TABS
   ====================== */
-  const [tab, setTab] = useState(0); // 0=Merchants, 1=Leads, 2=Offer Analytics
+  const [tab, setTab] = useState(0); // 0=Merchants, 1=Leads, 2=Analytics
 
   /* ======================
      MERCHANT STATE
@@ -71,7 +72,7 @@ export default function AdminDashboard() {
   const [rejectReason, setRejectReason] = useState("");
 
   /* ======================
-     OFFER STATE
+     OFFER CREATION
   ====================== */
   const [offerOpen, setOfferOpen] = useState(false);
   const [offerMerchant, setOfferMerchant] = useState(null);
@@ -82,7 +83,6 @@ export default function AdminDashboard() {
   ====================== */
   const [leads, setLeads] = useState([]);
   const [selectedLeads, setSelectedLeads] = useState([]);
-
   const [filters, setFilters] = useState({
     mobile: "",
     merchant: "",
@@ -90,7 +90,7 @@ export default function AdminDashboard() {
   });
 
   /* ======================
-     OFFER ANALYTICS
+     OFFER CLICK ANALYTICS
   ====================== */
   const [offerClicks, setOfferClicks] = useState([]);
 
@@ -118,7 +118,7 @@ export default function AdminDashboard() {
   }, []);
 
   /* ======================
-     LOAD OFFER CLICK ANALYTICS
+     LOAD OFFER CLICKS
   ====================== */
   useEffect(() => {
     const q = query(
@@ -132,17 +132,26 @@ export default function AdminDashboard() {
   }, []);
 
   /* ======================
+     DERIVED FILTER OPTIONS
+  ====================== */
+  const mobileOptions = [
+    ...new Set(leads.map((l) => l.customerMobile).filter(Boolean)),
+  ];
+  const merchantOptions = [
+    ...new Set(leads.map((l) => l.merchantName).filter(Boolean)),
+  ];
+  const categoryOptions = [
+    ...new Set(leads.map((l) => l.category).filter(Boolean)),
+  ];
+
+  /* ======================
      FILTERED LEADS
   ====================== */
   const filteredLeads = leads.filter((l) => {
     return (
-      l.customerMobile?.includes(filters.mobile) &&
-      l.merchantName
-        ?.toLowerCase()
-        .includes(filters.merchant.toLowerCase()) &&
-      l.category
-        ?.toLowerCase()
-        .includes(filters.category.toLowerCase())
+      (!filters.mobile || l.customerMobile === filters.mobile) &&
+      (!filters.merchant || l.merchantName === filters.merchant) &&
+      (!filters.category || l.category === filters.category)
     );
   });
 
@@ -267,7 +276,7 @@ export default function AdminDashboard() {
           </TableHead>
           <TableBody>
             {merchants.map((m) => {
-              const isApproved = m.status === "approved";
+              const approved = m.status === "approved";
               return (
                 <TableRow key={m.id}>
                   <TableCell>{m.shopName}</TableCell>
@@ -278,7 +287,7 @@ export default function AdminDashboard() {
                     <Button onClick={() => setActiveMerchant(m)}>
                       Review
                     </Button>
-                    {isApproved && (
+                    {approved && (
                       <Button
                         sx={{ ml: 1 }}
                         variant="contained"
@@ -303,39 +312,70 @@ export default function AdminDashboard() {
       ====================== */}
       {tab === 1 && (
         <>
+          {/* FILTERS */}
           <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
             <TextField
-              label="Mobile"
+              select
               size="small"
+              label="Customer Mobile"
               value={filters.mobile}
+              sx={{ minWidth: 200 }}
               onChange={(e) =>
                 setFilters({ ...filters, mobile: e.target.value })
               }
-            />
+            >
+              <MenuItem value="">All</MenuItem>
+              {mobileOptions.map((m) => (
+                <MenuItem key={m} value={m}>
+                  {m}
+                </MenuItem>
+              ))}
+            </TextField>
+
             <TextField
-              label="Merchant"
+              select
               size="small"
+              label="Merchant"
               value={filters.merchant}
+              sx={{ minWidth: 200 }}
               onChange={(e) =>
                 setFilters({
                   ...filters,
                   merchant: e.target.value,
                 })
               }
-            />
+            >
+              <MenuItem value="">All</MenuItem>
+              {merchantOptions.map((m) => (
+                <MenuItem key={m} value={m}>
+                  {m}
+                </MenuItem>
+              ))}
+            </TextField>
+
             <TextField
-              label="Category"
+              select
               size="small"
+              label="Category"
               value={filters.category}
+              sx={{ minWidth: 200 }}
               onChange={(e) =>
                 setFilters({
                   ...filters,
                   category: e.target.value,
                 })
               }
-            />
+            >
+              <MenuItem value="">All</MenuItem>
+              {categoryOptions.map((c) => (
+                <MenuItem key={c} value={c}>
+                  {c}
+                </MenuItem>
+              ))}
+            </TextField>
           </Box>
 
+          {/* ACTION BAR */}
           <Box sx={{ mb: 2 }}>
             <Button onClick={selectAllLeads}>
               {selectedLeads.length === filteredLeads.length
@@ -353,10 +393,25 @@ export default function AdminDashboard() {
             </Button>
           </Box>
 
+          {/* LEADS TABLE */}
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell />
+                <TableCell padding="checkbox">
+                  <Checkbox
+                    checked={
+                      filteredLeads.length > 0 &&
+                      selectedLeads.length ===
+                        filteredLeads.length
+                    }
+                    indeterminate={
+                      selectedLeads.length > 0 &&
+                      selectedLeads.length <
+                        filteredLeads.length
+                    }
+                    onChange={selectAllLeads}
+                  />
+                </TableCell>
                 <TableCell>Customer</TableCell>
                 <TableCell>Merchant</TableCell>
                 <TableCell>Category</TableCell>
@@ -365,8 +420,8 @@ export default function AdminDashboard() {
             </TableHead>
             <TableBody>
               {filteredLeads.map((l) => (
-                <TableRow key={l.id}>
-                  <TableCell>
+                <TableRow key={l.id} hover>
+                  <TableCell padding="checkbox">
                     <Checkbox
                       checked={selectedLeads.includes(l.id)}
                       onChange={() => toggleLeadSelect(l.id)}
@@ -414,7 +469,7 @@ export default function AdminDashboard() {
       )}
 
       {/* ======================
-         REVIEW DIALOG
+         MERCHANT REVIEW DIALOG
       ====================== */}
       {activeMerchant && (
         <Dialog open fullWidth maxWidth="sm">
@@ -430,7 +485,9 @@ export default function AdminDashboard() {
                 sx={{ mt: 2 }}
                 label="Rejection Reason"
                 value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
+                onChange={(e) =>
+                  setRejectReason(e.target.value)
+                }
               />
             )}
           </DialogContent>
@@ -443,7 +500,10 @@ export default function AdminDashboard() {
                 <Button color="error" onClick={rejectMerchant}>
                   Reject
                 </Button>
-                <Button variant="contained" onClick={approveMerchant}>
+                <Button
+                  variant="contained"
+                  onClick={approveMerchant}
+                >
                   Approve
                 </Button>
               </>
@@ -453,7 +513,7 @@ export default function AdminDashboard() {
       )}
 
       {/* ======================
-         OFFER DIALOG
+         OFFER CREATE DIALOG
       ====================== */}
       <Dialog open={offerOpen} onClose={() => setOfferOpen(false)}>
         <DialogTitle>Create Offer</DialogTitle>
@@ -471,7 +531,9 @@ export default function AdminDashboard() {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOfferOpen(false)}>Cancel</Button>
+          <Button onClick={() => setOfferOpen(false)}>
+            Cancel
+          </Button>
           <Button variant="contained" onClick={createOffer}>
             Publish Offer
           </Button>
