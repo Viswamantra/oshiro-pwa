@@ -5,6 +5,8 @@ import {
   Button,
   Card,
   CardContent,
+  TextField,
+  MenuItem,
 } from "@mui/material";
 import {
   collection,
@@ -35,10 +37,6 @@ function distanceMeters(lat1, lon1, lat2, lon2) {
 
 export default function CustomerDashboard() {
   const navigate = useNavigate();
-
-  /* ======================
-     AUTH INFO
-  ====================== */
   const customerId = localStorage.getItem("oshiro_uid");
 
   /* ======================
@@ -49,15 +47,22 @@ export default function CustomerDashboard() {
   const [nearbyOffers, setNearbyOffers] = useState([]);
   const [gpsError, setGpsError] = useState("");
 
+  // 🔥 NEW: User preferences
+  const [category, setCategory] = useState(
+    localStorage.getItem("oshiro_category") || ""
+  );
+  const [radius, setRadius] = useState(
+    Number(localStorage.getItem("oshiro_radius")) || 1000
+  );
+
   /* ======================
-     AUTH GUARD
+     AUTH GUARD (SAFE)
   ====================== */
   useEffect(() => {
     if (
       localStorage.getItem("oshiro_role") !== "customer" ||
       !customerId
     ) {
-      localStorage.clear();
       navigate("/login", { replace: true });
     }
   }, [navigate, customerId]);
@@ -73,7 +78,8 @@ export default function CustomerDashboard() {
 
         const messaging = getMessaging();
         const token = await getToken(messaging, {
-          vapidKey: "BEzJ7FJ2GYuDTL7DS2B4EACTBp_vX9M3rS-cV-0Va1df8ouzOD-8qwUuwn3eHtI609065jtuon9pWVUyBoY-0CU",
+          vapidKey:
+            "BEzJ7FJ2GYuDTL7DS2B4EACTBp_vX9M3rS-cV-0Va1df8ouzOD-8qwUuwn3eHtI609065jtuon9pWVUyBoY-0CU",
         });
 
         if (token) {
@@ -81,7 +87,6 @@ export default function CustomerDashboard() {
             fcmToken: token,
             updatedAt: new Date(),
           });
-          console.log("✅ FCM token saved");
         }
       } catch (err) {
         console.error("FCM error:", err);
@@ -109,16 +114,13 @@ export default function CustomerDashboard() {
 
         setLocation(coords);
 
-        // 🔥 Save last known location (VERY IMPORTANT)
         await updateDoc(doc(db, "customers", customerId), {
           lastLat: coords.lat,
           lastLng: coords.lng,
           lastSeenAt: new Date(),
         });
       },
-      () => {
-        setGpsError("GPS permission denied");
-      },
+      () => setGpsError("GPS permission denied"),
       { enableHighAccuracy: true }
     );
   }, [customerId]);
@@ -138,7 +140,7 @@ export default function CustomerDashboard() {
   }, []);
 
   /* ======================
-     FILTER NEARBY OFFERS
+     FILTER OFFERS (CATEGORY + DISTANCE)
   ====================== */
   useEffect(() => {
     if (!location) return;
@@ -153,11 +155,14 @@ export default function CustomerDashboard() {
         o.lng
       );
 
-      return d <= 300; // 🔥 300 meters
+      if (d > radius) return false;
+      if (category && o.category !== category) return false;
+
+      return true;
     });
 
     setNearbyOffers(nearby);
-  }, [location, offers]);
+  }, [location, offers, category, radius]);
 
   /* ======================
      LOGOUT
@@ -183,21 +188,70 @@ export default function CustomerDashboard() {
         Logout
       </Button>
 
+      {/* 🔍 CATEGORY + DISTANCE */}
+      <Box sx={{ mt: 3, display: "flex", gap: 2, flexWrap: "wrap" }}>
+        <TextField
+          select
+          label="Category"
+          value={category}
+          onChange={(e) => {
+            setCategory(e.target.value);
+            localStorage.setItem(
+              "oshiro_category",
+              e.target.value
+            );
+          }}
+          sx={{ minWidth: 180 }}
+        >
+          <MenuItem value="">All</MenuItem>
+          <MenuItem value="Food">Food</MenuItem>
+          <MenuItem value="Fashion & Clothing">
+            Fashion & Clothing
+          </MenuItem>
+          <MenuItem value="Beauty & Spa">
+            Beauty & Spa
+          </MenuItem>
+          <MenuItem value="Hospitals">Hospitals</MenuItem>
+          <MenuItem value="Medicals">Medicals</MenuItem>
+          <MenuItem value="Education">Education</MenuItem>
+          <MenuItem value="Services">Services</MenuItem>
+        </TextField>
+
+        <TextField
+          select
+          label="Distance"
+          value={radius}
+          onChange={(e) => {
+            setRadius(Number(e.target.value));
+            localStorage.setItem(
+              "oshiro_radius",
+              e.target.value
+            );
+          }}
+          sx={{ minWidth: 160 }}
+        >
+          <MenuItem value={300}>300 meters</MenuItem>
+          <MenuItem value={500}>500 meters</MenuItem>
+          <MenuItem value={1000}>1 km</MenuItem>
+          <MenuItem value={3000}>3 km</MenuItem>
+        </TextField>
+      </Box>
+
       {!location && !gpsError && (
-        <Typography sx={{ mt: 2 }}>
+        <Typography sx={{ mt: 3 }}>
           📍 Detecting your location...
         </Typography>
       )}
 
       {gpsError && (
-        <Typography sx={{ mt: 2 }} color="error">
+        <Typography sx={{ mt: 3 }} color="error">
           {gpsError}
         </Typography>
       )}
 
       {location && nearbyOffers.length === 0 && (
-        <Typography sx={{ mt: 2 }}>
-          No nearby offers found
+        <Typography sx={{ mt: 3 }}>
+          No offers found for selected category & distance
         </Typography>
       )}
 
