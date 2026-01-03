@@ -65,6 +65,8 @@ export default function AdminDashboard() {
     category: "",
   });
 
+  const [dateRange, setDateRange] = useState("7d"); // today | 7d | 30d
+
   /* ======================
      LOAD + JOIN DATA
   ====================== */
@@ -104,6 +106,29 @@ export default function AdminDashboard() {
   }, []);
 
   /* ======================
+     DATE RANGE FILTER
+  ====================== */
+  const getStartDate = () => {
+    const now = new Date();
+
+    if (dateRange === "today") {
+      return new Date(now.setHours(0, 0, 0, 0));
+    }
+
+    if (dateRange === "7d") {
+      return new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    }
+
+    if (dateRange === "30d") {
+      return new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    }
+
+    return null;
+  };
+
+  const startDate = getStartDate();
+
+  /* ======================
      FILTER OPTIONS
   ====================== */
   const mobileOptions = [...new Set(leads.map((l) => l.customerMobile))];
@@ -114,7 +139,13 @@ export default function AdminDashboard() {
      FILTERED LEADS
   ====================== */
   const filteredLeads = leads.filter((l) => {
+    const timeOk =
+      !startDate ||
+      (l.createdAt?.toDate &&
+        l.createdAt.toDate() >= startDate);
+
     return (
+      timeOk &&
       (!filters.mobile || l.customerMobile === filters.mobile) &&
       (!filters.merchant || l.merchantName === filters.merchant) &&
       (!filters.category || l.category === filters.category)
@@ -154,7 +185,7 @@ export default function AdminDashboard() {
      AGGREGATE ANALYTICS
   ====================== */
   const merchantAnalytics = Object.values(
-    leads.reduce((acc, l) => {
+    filteredLeads.reduce((acc, l) => {
       if (!acc[l.merchantName]) {
         acc[l.merchantName] = {
           merchantName: l.merchantName,
@@ -215,12 +246,26 @@ export default function AdminDashboard() {
 
       <Divider sx={{ my: 2 }} />
 
+      {/* DATE RANGE */}
+      <Box sx={{ mb: 2 }}>
+        <TextField
+          select
+          size="small"
+          label="Date Range"
+          value={dateRange}
+          onChange={(e) => setDateRange(e.target.value)}
+        >
+          <MenuItem value="today">Today</MenuItem>
+          <MenuItem value="7d">Last 7 Days</MenuItem>
+          <MenuItem value="30d">Last 30 Days</MenuItem>
+        </TextField>
+      </Box>
+
       {/* ======================
          LEADS TAB
       ====================== */}
       {tab === 0 && (
         <>
-          {/* FILTERS */}
           <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
             <TextField
               select
@@ -280,7 +325,6 @@ export default function AdminDashboard() {
             </TextField>
           </Box>
 
-          {/* ACTIONS */}
           <Box sx={{ mb: 2 }}>
             <Button onClick={selectAll}>
               {selected.length === filteredLeads.length
@@ -298,7 +342,6 @@ export default function AdminDashboard() {
             </Button>
           </Box>
 
-          {/* TABLE */}
           <Table size="small">
             <TableHead>
               <TableRow>
