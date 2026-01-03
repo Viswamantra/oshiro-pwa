@@ -56,7 +56,7 @@ export default function CustomerDashboard() {
   const [nearbyOffers, setNearbyOffers] = useState([]);
   const [gpsError, setGpsError] = useState("");
 
-  // 🔥 Preferences
+  // Preferences
   const [category, setCategory] = useState(
     localStorage.getItem("oshiro_category") || ""
   );
@@ -64,7 +64,7 @@ export default function CustomerDashboard() {
     Number(localStorage.getItem("oshiro_radius")) || 1000
   );
 
-  // 🔔 Dialog
+  // Dialog
   const [selectedOffer, setSelectedOffer] = useState(null);
 
   /* ======================
@@ -109,7 +109,7 @@ export default function CustomerDashboard() {
   }, [customerId]);
 
   /* ======================
-     GPS
+     GPS LOCATION
   ====================== */
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -138,7 +138,7 @@ export default function CustomerDashboard() {
   }, [customerId]);
 
   /* ======================
-     LOAD OFFERS
+     LOAD ACTIVE OFFERS
   ====================== */
   useEffect(() => {
     const q = query(
@@ -152,41 +152,44 @@ export default function CustomerDashboard() {
   }, []);
 
   /* ======================
-     FILTER
+     FILTER + SORT (DISTANCE)
   ====================== */
   useEffect(() => {
     if (!location) return;
 
-    const nearby = offers.filter((o) => {
-      if (!o.lat || !o.lng) return false;
+    const nearby = offers
+      .map((o) => {
+        if (!o.lat || !o.lng) return null;
 
-      const d = distanceMeters(
-        location.lat,
-        location.lng,
-        o.lat,
-        o.lng
-      );
+        const distance = distanceMeters(
+          location.lat,
+          location.lng,
+          o.lat,
+          o.lng
+        );
 
-      if (d > radius) return false;
-      if (category && o.category !== category) return false;
+        if (distance > radius) return null;
+        if (category && o.category !== category) return null;
 
-      return true;
-    });
+        return {
+          ...o,
+          distance,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.distance - b.distance);
 
     setNearbyOffers(nearby);
   }, [location, offers, category, radius]);
 
   /* ======================
-     LOGOUT
+     ACTIONS
   ====================== */
   const logout = () => {
     localStorage.clear();
     navigate("/login", { replace: true });
   };
 
-  /* ======================
-     ACTION HANDLERS
-  ====================== */
   const openMaps = (lat, lng) => {
     window.open(
       `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
@@ -219,7 +222,7 @@ export default function CustomerDashboard() {
       </Button>
 
       {/* FILTERS */}
-      <Box sx={{ mt: 3, display: "flex", gap: 2 }}>
+      <Box sx={{ mt: 3, display: "flex", gap: 2, flexWrap: "wrap" }}>
         <TextField
           select
           label="Category"
@@ -236,6 +239,10 @@ export default function CustomerDashboard() {
           <MenuItem value="Fashion & Clothing">
             Fashion & Clothing
           </MenuItem>
+          <MenuItem value="Hospitals">Hospitals</MenuItem>
+          <MenuItem value="Medicals">Medicals</MenuItem>
+          <MenuItem value="Education">Education</MenuItem>
+          <MenuItem value="Services">Services</MenuItem>
         </TextField>
 
         <TextField
@@ -249,6 +256,7 @@ export default function CustomerDashboard() {
           sx={{ minWidth: 160 }}
         >
           <MenuItem value={300}>300 m</MenuItem>
+          <MenuItem value={500}>500 m</MenuItem>
           <MenuItem value={1000}>1 km</MenuItem>
           <MenuItem value={3000}>3 km</MenuItem>
         </TextField>
@@ -256,6 +264,12 @@ export default function CustomerDashboard() {
 
       {/* OFFERS */}
       <Box sx={{ mt: 3 }}>
+        {nearbyOffers.length === 0 && location && (
+          <Typography>
+            No offers found for selected category & distance
+          </Typography>
+        )}
+
         {nearbyOffers.map((o) => (
           <Card
             key={o.id}
@@ -268,12 +282,19 @@ export default function CustomerDashboard() {
               <Typography color="text.secondary">
                 {o.shopName} • {o.category}
               </Typography>
+              <Typography
+                variant="caption"
+                color="primary"
+                sx={{ mt: 0.5 }}
+              >
+                📍 {Math.round(o.distance)} meters away
+              </Typography>
             </CardContent>
           </Card>
         ))}
       </Box>
 
-      {/* 🔔 ACTION POPUP */}
+      {/* ACTION POPUP */}
       <Dialog
         open={!!selectedOffer}
         onClose={() => setSelectedOffer(null)}
@@ -287,6 +308,9 @@ export default function CustomerDashboard() {
               </Typography>
               <Typography sx={{ mb: 2 }}>
                 {selectedOffer.description}
+              </Typography>
+              <Typography variant="caption">
+                📍 {Math.round(selectedOffer.distance)} meters away
               </Typography>
             </DialogContent>
 
