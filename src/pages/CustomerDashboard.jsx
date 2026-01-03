@@ -7,7 +7,16 @@ import {
   CardContent,
   TextField,
   MenuItem,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  IconButton,
 } from "@mui/material";
+import CallIcon from "@mui/icons-material/Call";
+import WhatsAppIcon from "@mui/icons-material/WhatsApp";
+import NavigationIcon from "@mui/icons-material/Navigation";
+
 import {
   collection,
   onSnapshot,
@@ -47,7 +56,7 @@ export default function CustomerDashboard() {
   const [nearbyOffers, setNearbyOffers] = useState([]);
   const [gpsError, setGpsError] = useState("");
 
-  // 🔥 NEW: User preferences
+  // 🔥 Preferences
   const [category, setCategory] = useState(
     localStorage.getItem("oshiro_category") || ""
   );
@@ -55,8 +64,11 @@ export default function CustomerDashboard() {
     Number(localStorage.getItem("oshiro_radius")) || 1000
   );
 
+  // 🔔 Dialog
+  const [selectedOffer, setSelectedOffer] = useState(null);
+
   /* ======================
-     AUTH GUARD (SAFE)
+     AUTH GUARD
   ====================== */
   useEffect(() => {
     if (
@@ -97,7 +109,7 @@ export default function CustomerDashboard() {
   }, [customerId]);
 
   /* ======================
-     GET GPS LOCATION
+     GPS
   ====================== */
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -126,7 +138,7 @@ export default function CustomerDashboard() {
   }, [customerId]);
 
   /* ======================
-     LOAD ACTIVE OFFERS
+     LOAD OFFERS
   ====================== */
   useEffect(() => {
     const q = query(
@@ -140,7 +152,7 @@ export default function CustomerDashboard() {
   }, []);
 
   /* ======================
-     FILTER OFFERS (CATEGORY + DISTANCE)
+     FILTER
   ====================== */
   useEffect(() => {
     if (!location) return;
@@ -173,6 +185,24 @@ export default function CustomerDashboard() {
   };
 
   /* ======================
+     ACTION HANDLERS
+  ====================== */
+  const openMaps = (lat, lng) => {
+    window.open(
+      `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
+      "_blank"
+    );
+  };
+
+  const callMerchant = (mobile) => {
+    window.location.href = `tel:${mobile}`;
+  };
+
+  const whatsappMerchant = (mobile) => {
+    window.open(`https://wa.me/91${mobile}`, "_blank");
+  };
+
+  /* ======================
      UI
   ====================== */
   return (
@@ -188,33 +218,24 @@ export default function CustomerDashboard() {
         Logout
       </Button>
 
-      {/* 🔍 CATEGORY + DISTANCE */}
-      <Box sx={{ mt: 3, display: "flex", gap: 2, flexWrap: "wrap" }}>
+      {/* FILTERS */}
+      <Box sx={{ mt: 3, display: "flex", gap: 2 }}>
         <TextField
           select
           label="Category"
           value={category}
           onChange={(e) => {
             setCategory(e.target.value);
-            localStorage.setItem(
-              "oshiro_category",
-              e.target.value
-            );
+            localStorage.setItem("oshiro_category", e.target.value);
           }}
           sx={{ minWidth: 180 }}
         >
           <MenuItem value="">All</MenuItem>
           <MenuItem value="Food">Food</MenuItem>
+          <MenuItem value="Beauty & Spa">Beauty & Spa</MenuItem>
           <MenuItem value="Fashion & Clothing">
             Fashion & Clothing
           </MenuItem>
-          <MenuItem value="Beauty & Spa">
-            Beauty & Spa
-          </MenuItem>
-          <MenuItem value="Hospitals">Hospitals</MenuItem>
-          <MenuItem value="Medicals">Medicals</MenuItem>
-          <MenuItem value="Education">Education</MenuItem>
-          <MenuItem value="Services">Services</MenuItem>
         </TextField>
 
         <TextField
@@ -223,51 +244,86 @@ export default function CustomerDashboard() {
           value={radius}
           onChange={(e) => {
             setRadius(Number(e.target.value));
-            localStorage.setItem(
-              "oshiro_radius",
-              e.target.value
-            );
+            localStorage.setItem("oshiro_radius", e.target.value);
           }}
           sx={{ minWidth: 160 }}
         >
-          <MenuItem value={300}>300 meters</MenuItem>
-          <MenuItem value={500}>500 meters</MenuItem>
+          <MenuItem value={300}>300 m</MenuItem>
           <MenuItem value={1000}>1 km</MenuItem>
           <MenuItem value={3000}>3 km</MenuItem>
         </TextField>
       </Box>
 
-      {!location && !gpsError && (
-        <Typography sx={{ mt: 3 }}>
-          📍 Detecting your location...
-        </Typography>
-      )}
-
-      {gpsError && (
-        <Typography sx={{ mt: 3 }} color="error">
-          {gpsError}
-        </Typography>
-      )}
-
-      {location && nearbyOffers.length === 0 && (
-        <Typography sx={{ mt: 3 }}>
-          No offers found for selected category & distance
-        </Typography>
-      )}
-
+      {/* OFFERS */}
       <Box sx={{ mt: 3 }}>
         {nearbyOffers.map((o) => (
-          <Card key={o.id} sx={{ mb: 2 }}>
+          <Card
+            key={o.id}
+            sx={{ mb: 2, cursor: "pointer" }}
+            onClick={() => setSelectedOffer(o)}
+          >
             <CardContent>
               <Typography variant="h6">{o.title}</Typography>
               <Typography>{o.description}</Typography>
-              <Typography sx={{ mt: 1 }} color="text.secondary">
+              <Typography color="text.secondary">
                 {o.shopName} • {o.category}
               </Typography>
             </CardContent>
           </Card>
         ))}
       </Box>
+
+      {/* 🔔 ACTION POPUP */}
+      <Dialog
+        open={!!selectedOffer}
+        onClose={() => setSelectedOffer(null)}
+      >
+        {selectedOffer && (
+          <>
+            <DialogTitle>{selectedOffer.shopName}</DialogTitle>
+            <DialogContent>
+              <Typography variant="h6">
+                {selectedOffer.title}
+              </Typography>
+              <Typography sx={{ mb: 2 }}>
+                {selectedOffer.description}
+              </Typography>
+            </DialogContent>
+
+            <DialogActions sx={{ justifyContent: "space-around" }}>
+              <IconButton
+                color="success"
+                onClick={() =>
+                  whatsappMerchant(selectedOffer.mobile)
+                }
+              >
+                <WhatsAppIcon />
+              </IconButton>
+
+              <IconButton
+                color="primary"
+                onClick={() =>
+                  callMerchant(selectedOffer.mobile)
+                }
+              >
+                <CallIcon />
+              </IconButton>
+
+              <IconButton
+                color="secondary"
+                onClick={() =>
+                  openMaps(
+                    selectedOffer.lat,
+                    selectedOffer.lng
+                  )
+                }
+              >
+                <NavigationIcon />
+              </IconButton>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
     </Box>
   );
 }
