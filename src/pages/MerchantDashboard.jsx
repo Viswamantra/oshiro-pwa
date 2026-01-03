@@ -2,22 +2,19 @@ import React, { useEffect, useState } from "react";
 import {
   Box,
   Typography,
-  Card,
-  CardContent,
   Button,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField,
 } from "@mui/material";
 import {
   collection,
   query,
   where,
   onSnapshot,
-  addDoc,
-  serverTimestamp,
+  updateDoc,
+  doc,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
@@ -26,97 +23,61 @@ export default function MerchantDashboard() {
   const navigate = useNavigate();
 
   /* ======================
-     AUTH + ROLE GUARD
+     AUTH INFO
   ====================== */
-  const role = localStorage.getItem("oshiro_role");
-  const user = JSON.parse(localStorage.getItem("oshiro_user") || "{}");
-  const merchantMobile = user.mobile;
-
-  useEffect(() => {
-    if (role !== "merchant" || !merchantMobile) {
-      localStorage.clear();
-      navigate("/login", { replace: true });
-    }
-  }, [role, merchantMobile, navigate]);
+  const merchantId = localStorage.getItem("oshiro_merchant_id");
 
   /* ======================
      STATE
   ====================== */
-  const [merchant, setMerchant] = useState(null);
-  const [offers, setOffers] = useState([]);
-
-  const [open, setOpen] = useState(false);
-  const [offerTitle, setOfferTitle] = useState("");
-  const [offerDesc, setOfferDesc] = useState("");
+  const [alertEvent, setAlertEvent] = useState(null);
 
   /* ======================
-     LOAD MERCHANT DETAILS
+     AUTH GUARD
   ====================== */
   useEffect(() => {
-    const q = query(
-      collection(db, "merchants"),
-      where("mobile", "==", merchantMobile),
-      where("status", "==", "approved")
-    );
-
-    return onSnapshot(q, (snap) => {
-      if (!snap.empty) {
-        setMerchant({ id: snap.docs[0].id, ...snap.docs[0].data() });
-      }
-    });
-  }, [merchantMobile]);
+    if (
+      localStorage.getItem("oshiro_role") !== "merchant" ||
+      !merchantId
+    ) {
+      localStorage.clear();
+      navigate("/login", { replace: true });
+    }
+  }, [navigate, merchantId]);
 
   /* ======================
-     LOAD OFFERS
+     REAL-TIME GEOFENCE ALERT LISTENER
   ====================== */
   useEffect(() => {
-    if (!merchant) return;
+    if (!merchantId) return;
 
     const q = query(
-      collection(db, "offers"),
-      where("merchantId", "==", merchant.id)
+      collection(db, "geo_events"),
+      where("merchantId", "==", merchantId),
+      where("notified", "==", false)
     );
 
-    return onSnapshot(q, (snap) => {
-      setOffers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
-  }, [merchant]);
+    const unsubscribe = onSnapshot(q, (snap) => {
+      snap.docs.forEach(async (d) => {
+        const data = d.data();
 
-  /* ======================
-     CREATE OFFER (🔥 FIX HERE 🔥)
-  ====================== */
-  const createOffer = async () => {
-    if (!offerTitle || !offerDesc) {
-      alert("Fill all fields");
-      return;
-    }
+        // 🔔 Show alert ONLY ONCE
+        setAlertEvent({
+          id: d.id,
+          customerId: data.customerId,
+          distance: data.distanceMeters,
+          createdAt: data.createdAt,
+        });
 
-    if (!merchant?.lat || !merchant?.lng) {
-      alert("Merchant GPS missing");
-      return;
-    }
-
-    await addDoc(collection(db, "offers"), {
-      merchantId: merchant.id,
-      merchantMobile: merchant.mobile,
-      shopName: merchant.shopName,
-      category: merchant.category,
-
-      title: offerTitle,
-      description: offerDesc,
-
-      /* 🔥 THIS IS THE FIX 🔥 */
-      lat: merchant.lat,
-      lng: merchant.lng,
-
-      active: true,
-      createdAt: serverTimestamp(),
+        // ✅ Mark as notified to prevent repeat alerts
+        await updateDoc(doc(db, "geo_events", d.id), {
+          notified: true,
+        });
+      });
     });
 
-    setOfferTitle("");
-    setOfferDesc("");
-    setOpen(false);
-  };
+    return () => unsubscribe();
+  }, [merchantId]);
 
   /* ======================
      LOGOUT
@@ -131,71 +92,68 @@ export default function MerchantDashboard() {
   ====================== */
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4">Merchant Dashboard</Typography>
-
-      {merchant && (
-        <Typography sx={{ mt: 1 }}>
-          {merchant.shopName} | {merchant.category}
-        </Typography>
-      )}
+      <Typography variant="h4">
+        Merchant Dashboard
+      </Typography>
 
       <Button
         sx={{ mt: 2 }}
-        variant="contained"
-        onClick={() => setOpen(true)}
-      >
-        Create Offer
-      </Button>
-
-      <Button
-        sx={{ mt: 2, ml: 2 }}
-        variant="outlined"
         color="error"
+        variant="outlined"
         onClick={logout}
       >
         Logout
       </Button>
 
-      {/* OFFERS LIST */}
-      <Box sx={{ mt: 3 }}>
-        {offers.map((o) => (
-          <Card key={o.id} sx={{ mb: 2 }}>
-            <CardContent>
-              <Typography variant="h6">{o.title}</Typography>
-              <Typography>{o.description}</Typography>
-            </CardContent>
-          </Card>
-        ))}
-      </Box>
+      <Typography sx={{ mt: 3 }}>
+        🔔 Keep this screen open to receive
+        customer proximity alerts.
+      </Typography>
 
-      {/* CREATE OFFER DIALOG */}
-      <Dialog open={open} onClose={() => setOpen(false)} fullWidth>
-        <DialogTitle>Create Offer</DialogTitle>
-        <DialogContent>
-          <TextField
-            label="Offer Title"
-            fullWidth
-            margin="normal"
-            value={offerTitle}
-            onChange={(e) => setOfferTitle(e.target.value)}
-          />
-          <TextField
-            label="Offer Description"
-            fullWidth
-            margin="normal"
-            multiline
-            rows={3}
-            value={offerDesc}
-            onChange={(e) => setOfferDesc(e.target.value)}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={createOffer}>
-            Save Offer
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {/* ======================
+         ALERT POPUP
+      ====================== */}
+      {alertEvent && (
+        <Dialog
+          open
+          onClose={() => setAlertEvent(null)}
+        >
+          <DialogTitle>
+            🚶 Customer Nearby!
+          </DialogTitle>
+
+          <DialogContent>
+            <Typography>
+              A customer is within{" "}
+              <b>{alertEvent.distance} meters</b>{" "}
+              of your shop.
+            </Typography>
+
+            <Typography sx={{ mt: 1 }}>
+              Time:{" "}
+              {alertEvent.createdAt
+                ?.toDate()
+                .toLocaleTimeString()}
+            </Typography>
+
+            <Typography sx={{ mt: 2 }}>
+              👉 You can now approach or
+              prepare an offer.
+            </Typography>
+          </DialogContent>
+
+          <DialogActions>
+            <Button
+              variant="contained"
+              onClick={() =>
+                setAlertEvent(null)
+              }
+            >
+              OK
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
     </Box>
   );
 }
