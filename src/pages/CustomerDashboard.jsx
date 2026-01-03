@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   Box,
   Typography,
@@ -24,6 +24,8 @@ import {
   where,
   doc,
   updateDoc,
+  addDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import { getMessaging, getToken } from "firebase/messaging";
 import { db } from "../firebase";
@@ -46,7 +48,14 @@ function distanceMeters(lat1, lon1, lat2, lon2) {
 
 export default function CustomerDashboard() {
   const navigate = useNavigate();
+
+  /* ======================
+     AUTH INFO
+  ====================== */
   const customerId = localStorage.getItem("oshiro_uid");
+  const customerMobile =
+    JSON.parse(localStorage.getItem("oshiro_user") || "{}")
+      ?.mobile || "";
 
   /* ======================
      STATE
@@ -64,9 +73,13 @@ export default function CustomerDashboard() {
     Number(localStorage.getItem("oshiro_radius")) || 300
   );
 
-  const [effectiveRadius, setEffectiveRadius] = useState(baseRadius);
+  const [effectiveRadius, setEffectiveRadius] =
+    useState(baseRadius);
 
   const [selectedOffer, setSelectedOffer] = useState(null);
+
+  // 🔒 Prevent duplicate click logs
+  const clickedOfferRef = useRef(null);
 
   /* ======================
      AUTH GUARD
@@ -153,14 +166,14 @@ export default function CustomerDashboard() {
   }, []);
 
   /* ======================
-     AUTO-EXPAND FILTER
+     AUTO-EXPAND + SORT
   ====================== */
   useEffect(() => {
     if (!location) return;
 
-    const tryRadii = [baseRadius, 1000, 3000];
+    const radii = [baseRadius, 1000, 3000];
 
-    for (let r of tryRadii) {
+    for (let r of radii) {
       const results = offers
         .map((o) => {
           if (!o.lat || !o.lng) return null;
@@ -173,7 +186,8 @@ export default function CustomerDashboard() {
           );
 
           if (distance > r) return null;
-          if (category && o.category !== category) return null;
+          if (category && o.category !== category)
+            return null;
 
           return { ...o, distance };
         })
@@ -187,13 +201,35 @@ export default function CustomerDashboard() {
       }
     }
 
-    // nothing found at all
     setNearbyOffers([]);
     setEffectiveRadius(baseRadius);
   }, [location, offers, category, baseRadius]);
 
   /* ======================
-     ACTIONS
+     OFFER CLICK TRACKING
+  ====================== */
+  const trackOfferClick = async (offer) => {
+    if (clickedOfferRef.current === offer.id) return;
+
+    clickedOfferRef.current = offer.id;
+
+    try {
+      await addDoc(collection(db, "offerClicks"), {
+        offerId: offer.id,
+        offerTitle: offer.title,
+        merchantId: offer.merchantId,
+        merchantName: offer.shopName,
+        customerId,
+        customerMobile,
+        clickedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      console.error("Offer click log failed", err);
+    }
+  };
+
+  /* ======================
+     ACTION HANDLERS
   ====================== */
   const logout = () => {
     localStorage.clear();
@@ -239,7 +275,10 @@ export default function CustomerDashboard() {
           value={category}
           onChange={(e) => {
             setCategory(e.target.value);
-            localStorage.setItem("oshiro_category", e.target.value);
+            localStorage.setItem(
+              "oshiro_category",
+              e.target.value
+            );
           }}
         >
           <MenuItem value="">All</MenuItem>
@@ -266,7 +305,6 @@ export default function CustomerDashboard() {
         </TextField>
       </Box>
 
-      {/* AUTO-EXPAND INFO */}
       {effectiveRadius !== baseRadius && (
         <Typography sx={{ mt: 2 }} color="text.secondary">
           Showing offers within{" "}
@@ -282,7 +320,10 @@ export default function CustomerDashboard() {
           <Card
             key={o.id}
             sx={{ mb: 2, cursor: "pointer" }}
-            onClick={() => setSelectedOffer(o)}
+            onClick={async () => {
+              setSelectedOffer(o);
+              await trackOfferClick(o);
+            }}
           >
             <CardContent>
               <Typography variant="h6">{o.title}</Typography>
@@ -298,7 +339,7 @@ export default function CustomerDashboard() {
         ))}
       </Box>
 
-      {/* POPUP */}
+      {/* ACTION POPUP */}
       <Dialog
         open={!!selectedOffer}
         onClose={() => setSelectedOffer(null)}
