@@ -7,6 +7,10 @@ import {
   CardContent,
   TextField,
   Divider,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from "@mui/material";
 import {
   collection,
@@ -49,6 +53,11 @@ export default function MerchantDashboard() {
   const [description, setDescription] = useState("");
   const [activeOffers, setActiveOffers] = useState([]);
 
+  const [liveCustomers, setLiveCustomers] = useState([]);
+  const [selectedGeo, setSelectedGeo] = useState(null);
+  const [extraDiscount, setExtraDiscount] = useState("");
+  const [message, setMessage] = useState("");
+
   /* ======================
      LOAD ACTIVE OFFERS
   ====================== */
@@ -67,7 +76,24 @@ export default function MerchantDashboard() {
   }, [merchantId]);
 
   /* ======================
-     CREATE OFFER
+     LIVE GEO EVENTS (CUSTOMERS NEARBY)
+  ====================== */
+  useEffect(() => {
+    const q = query(
+      collection(db, "geo_events"),
+      where("merchantId", "==", merchantId),
+      where("status", "==", "entered")
+    );
+
+    return onSnapshot(q, (snap) => {
+      setLiveCustomers(
+        snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      );
+    });
+  }, [merchantId]);
+
+  /* ======================
+     CREATE BASE OFFER
   ====================== */
   const createOffer = async () => {
     if (!title.trim() || !description.trim()) {
@@ -84,8 +110,8 @@ export default function MerchantDashboard() {
       category: merchant.category,
       lat: merchant.lat,
       lng: merchant.lng,
+      baseDiscount: 15, // base offer %
       active: true,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // ⏰ 24 hours
       createdAt: serverTimestamp(),
     });
 
@@ -103,6 +129,45 @@ export default function MerchantDashboard() {
   };
 
   /* ======================
+     SEND INSTANT OFFER (🔥 CORE)
+  ====================== */
+  const sendInstantOffer = async () => {
+    if (!extraDiscount) {
+      alert("Enter extra discount");
+      return;
+    }
+
+    const base = selectedGeo.baseDiscount || 15;
+    const finalDiscount =
+      Number(base) + Number(extraDiscount);
+
+    await addDoc(collection(db, "instant_offers"), {
+      customerId: selectedGeo.customerId,
+      customerMobile: selectedGeo.customerMobile,
+      merchantId,
+      baseDiscount: base,
+      extraDiscount: Number(extraDiscount),
+      finalDiscount,
+      message:
+        message ||
+        `Special ${finalDiscount}% OFF just for you!`,
+      sentAt: serverTimestamp(),
+    });
+
+    // 🔒 Anti-spam: mark geo event as completed
+    await updateDoc(
+      doc(db, "geo_events", selectedGeo.id),
+      {
+        status: "offer_sent",
+      }
+    );
+
+    setSelectedGeo(null);
+    setExtraDiscount("");
+    setMessage("");
+  };
+
+  /* ======================
      LOGOUT
   ====================== */
   const logout = () => {
@@ -115,7 +180,9 @@ export default function MerchantDashboard() {
   ====================== */
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4">Merchant Dashboard</Typography>
+      <Typography variant="h4">
+        Merchant Dashboard
+      </Typography>
 
       <Button
         sx={{ mt: 2 }}
@@ -126,26 +193,59 @@ export default function MerchantDashboard() {
         Logout
       </Button>
 
-      <Typography sx={{ mt: 2 }} color="primary">
-        🔔 Keep this screen open to receive customer proximity alerts.
+      <Typography sx={{ mt: 2 }} color="error">
+        🔔 Keep this screen open — customers nearby will appear
+        here.
       </Typography>
 
       <Divider sx={{ my: 3 }} />
 
       {/* ======================
-          CREATE OFFER FORM
+          LIVE CUSTOMER ALERTS
+      ====================== */}
+      <Typography variant="h6">
+        Customers Nearby
+      </Typography>
+
+      {liveCustomers.length === 0 && (
+        <Typography color="text.secondary">
+          No customers nearby
+        </Typography>
+      )}
+
+      {liveCustomers.map((g) => (
+        <Card key={g.id} sx={{ mt: 2 }}>
+          <CardContent>
+            <Typography>
+              📍 Customer entered your area
+            </Typography>
+
+            <Button
+              sx={{ mt: 1 }}
+              variant="contained"
+              onClick={() => setSelectedGeo(g)}
+            >
+              Send Instant Offer
+            </Button>
+          </CardContent>
+        </Card>
+      ))}
+
+      <Divider sx={{ my: 3 }} />
+
+      {/* ======================
+          CREATE BASE OFFER
       ====================== */}
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Typography variant="h6">
-            Create New Offer
+            Create Base Offer
           </Typography>
 
           <TextField
             fullWidth
             sx={{ mt: 2 }}
             label="Offer Title"
-            placeholder="Eg: 10% OFF on Biryani"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
@@ -155,18 +255,11 @@ export default function MerchantDashboard() {
             multiline
             minRows={2}
             sx={{ mt: 2 }}
-            label="Offer Description"
-            placeholder="Valid today only"
+            label="Description"
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-
-          <TextField
-            fullWidth
-            disabled
-            sx={{ mt: 2 }}
-            label="Category"
-            value={merchant.category || ""}
+            onChange={(e) =>
+              setDescription(e.target.value)
+            }
           />
 
           <Button
@@ -182,13 +275,9 @@ export default function MerchantDashboard() {
       {/* ======================
           ACTIVE OFFERS
       ====================== */}
-      <Typography variant="h6">My Active Offers</Typography>
-
-      {activeOffers.length === 0 && (
-        <Typography sx={{ mt: 1 }} color="text.secondary">
-          No active offers
-        </Typography>
-      )}
+      <Typography variant="h6">
+        My Active Offers
+      </Typography>
 
       {activeOffers.map((o) => (
         <Card key={o.id} sx={{ mt: 2 }}>
@@ -197,13 +286,6 @@ export default function MerchantDashboard() {
               {o.title}
             </Typography>
             <Typography>{o.description}</Typography>
-
-            <Typography
-              variant="caption"
-              color="text.secondary"
-            >
-              Expires in 24 hours
-            </Typography>
 
             <Button
               size="small"
@@ -216,6 +298,57 @@ export default function MerchantDashboard() {
           </CardContent>
         </Card>
       ))}
+
+      {/* ======================
+          INSTANT OFFER DIALOG
+      ====================== */}
+      <Dialog
+        open={Boolean(selectedGeo)}
+        onClose={() => setSelectedGeo(null)}
+      >
+        <DialogTitle>
+          Send Instant Offer
+        </DialogTitle>
+
+        <DialogContent>
+          <TextField
+            fullWidth
+            label="Extra Discount (%)"
+            type="number"
+            sx={{ mt: 2 }}
+            value={extraDiscount}
+            onChange={(e) =>
+              setExtraDiscount(e.target.value)
+            }
+          />
+
+          <TextField
+            fullWidth
+            multiline
+            minRows={2}
+            sx={{ mt: 2 }}
+            label="Optional Message"
+            value={message}
+            onChange={(e) =>
+              setMessage(e.target.value)
+            }
+          />
+        </DialogContent>
+
+        <DialogActions>
+          <Button
+            onClick={() => setSelectedGeo(null)}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={sendInstantOffer}
+          >
+            Send
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
