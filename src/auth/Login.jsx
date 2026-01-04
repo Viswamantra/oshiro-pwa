@@ -54,12 +54,10 @@ export default function Login() {
     );
     const snap = await getDocs(q);
 
-    // ✅ EXISTING CUSTOMER
     if (!snap.empty) {
       return snap.docs[0].id;
     }
 
-    // 🆕 NEW CUSTOMER
     const ref = await addDoc(collection(db, "customers"), {
       mobile,
       createdAt: serverTimestamp(),
@@ -105,17 +103,16 @@ export default function Login() {
 
     localStorage.clear();
     localStorage.setItem("oshiro_role", role);
-    localStorage.setItem(
-      "oshiro_user",
-      JSON.stringify({ mobile })
-    );
 
     /* ================= CUSTOMER ================= */
     if (role === "customer") {
       const customerId = await getOrCreateCustomer(mobile);
 
-      // 🔥 THIS FIXES THE BLINK ISSUE
       localStorage.setItem("oshiro_uid", customerId);
+      localStorage.setItem(
+        "oshiro_user",
+        JSON.stringify({ mobile })
+      );
 
       navigate("/customer", { replace: true });
       return;
@@ -141,8 +138,21 @@ export default function Login() {
       return;
     }
 
-    // ✅ APPROVED MERCHANT
+    /* ================= APPROVED MERCHANT (🔥 FIX) ================= */
+    localStorage.setItem("oshiro_role", "merchant");
     localStorage.setItem("oshiro_merchant_id", merchant.id);
+
+    localStorage.setItem(
+      "oshiro_user",
+      JSON.stringify({
+        mobile: merchant.mobile,
+        shopName: merchant.shopName,
+        category: merchant.category,
+        lat: merchant.lat,
+        lng: merchant.lng,
+      })
+    );
+
     navigate("/merchant", { replace: true });
   };
 
