@@ -17,6 +17,8 @@ import {
   onSnapshot,
   deleteDoc,
   doc,
+  updateDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
@@ -56,19 +58,25 @@ export default function AdminDashboard() {
     const unsubMerchants = onSnapshot(
       collection(db, "merchants"),
       (s) =>
-        setMerchants(s.docs.map((d) => ({ id: d.id, ...d.data() })))
+        setMerchants(
+          s.docs.map((d) => ({ id: d.id, ...d.data() }))
+        )
     );
 
     const unsubCustomers = onSnapshot(
       collection(db, "customers"),
       (s) =>
-        setCustomers(s.docs.map((d) => ({ id: d.id, ...d.data() })))
+        setCustomers(
+          s.docs.map((d) => ({ id: d.id, ...d.data() }))
+        )
     );
 
     const unsubLeads = onSnapshot(
       collection(db, "geo_events"),
       (s) =>
-        setLeads(s.docs.map((d) => ({ id: d.id, ...d.data() })))
+        setLeads(
+          s.docs.map((d) => ({ id: d.id, ...d.data() }))
+        )
     );
 
     return () => {
@@ -77,6 +85,23 @@ export default function AdminDashboard() {
       unsubLeads();
     };
   }, []);
+
+  /* ======================
+     MERCHANT ACTIONS (🔥 RESTORED)
+  ====================== */
+  const approveMerchant = async (id) => {
+    await updateDoc(doc(db, "merchants", id), {
+      status: "approved",
+      approvedAt: serverTimestamp(),
+    });
+  };
+
+  const rejectMerchant = async (id) => {
+    await updateDoc(doc(db, "merchants", id), {
+      status: "rejected",
+      rejectionReason: "Rejected by admin",
+    });
+  };
 
   /* ======================
      SELECTION HELPERS
@@ -137,7 +162,11 @@ export default function AdminDashboard() {
   ====================== */
   return (
     <Box sx={{ p: 3 }}>
-      <Button variant="outlined" color="error" onClick={logout}>
+      <Button
+        variant="outlined"
+        color="error"
+        onClick={logout}
+      >
         Logout
       </Button>
 
@@ -184,7 +213,7 @@ export default function AdminDashboard() {
                 <TableCell>Shop</TableCell>
                 <TableCell>Mobile</TableCell>
                 <TableCell>Category</TableCell>
-                <TableCell>Status</TableCell>
+                <TableCell>Status / Action</TableCell>
               </>
             )}
             {tab === 1 && (
@@ -219,7 +248,35 @@ export default function AdminDashboard() {
                   <TableCell>{r.shopName}</TableCell>
                   <TableCell>{r.mobile}</TableCell>
                   <TableCell>{r.category}</TableCell>
-                  <TableCell>{r.status}</TableCell>
+                  <TableCell>
+                    {r.status === "pending" && (
+                      <>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          onClick={() =>
+                            approveMerchant(r.id)
+                          }
+                        >
+                          Approve
+                        </Button>
+                        <Button
+                          size="small"
+                          color="error"
+                          sx={{ ml: 1 }}
+                          onClick={() =>
+                            rejectMerchant(r.id)
+                          }
+                        >
+                          Reject
+                        </Button>
+                      </>
+                    )}
+                    {r.status === "approved" &&
+                      "Approved"}
+                    {r.status === "rejected" &&
+                      "Rejected"}
+                  </TableCell>
                 </>
               )}
 
@@ -227,7 +284,9 @@ export default function AdminDashboard() {
                 <>
                   <TableCell>{r.mobile}</TableCell>
                   <TableCell>
-                    {r.createdAt?.toDate?.().toLocaleString?.()}
+                    {r.createdAt
+                      ?.toDate?.()
+                      .toLocaleString?.()}
                   </TableCell>
                 </>
               )}
@@ -236,9 +295,13 @@ export default function AdminDashboard() {
                 <>
                   <TableCell>{r.customerId}</TableCell>
                   <TableCell>{r.merchantId}</TableCell>
-                  <TableCell>{r.distanceMeters} m</TableCell>
                   <TableCell>
-                    {r.createdAt?.toDate?.().toLocaleString?.()}
+                    {r.distanceMeters} m
+                  </TableCell>
+                  <TableCell>
+                    {r.createdAt
+                      ?.toDate?.()
+                      .toLocaleString?.()}
                   </TableCell>
                 </>
               )}
