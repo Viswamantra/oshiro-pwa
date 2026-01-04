@@ -6,7 +6,6 @@ import {
   Card,
   CardContent,
   TextField,
-  MenuItem,
   Divider,
 } from "@mui/material";
 import {
@@ -86,6 +85,7 @@ export default function MerchantDashboard() {
       lat: merchant.lat,
       lng: merchant.lng,
       active: true,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // ⏰ 24 hours
       createdAt: serverTimestamp(),
     });
 
@@ -184,6 +184,12 @@ export default function MerchantDashboard() {
       ====================== */}
       <Typography variant="h6">My Active Offers</Typography>
 
+      {activeOffers.length === 0 && (
+        <Typography sx={{ mt: 1 }} color="text.secondary">
+          No active offers
+        </Typography>
+      )}
+
       {activeOffers.map((o) => (
         <Card key={o.id} sx={{ mt: 2 }}>
           <CardContent>
@@ -191,6 +197,13 @@ export default function MerchantDashboard() {
               {o.title}
             </Typography>
             <Typography>{o.description}</Typography>
+
+            <Typography
+              variant="caption"
+              color="text.secondary"
+            >
+              Expires in 24 hours
+            </Typography>
 
             <Button
               size="small"
