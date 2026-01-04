@@ -1,6 +1,7 @@
 /* =========================================================
    FIREBASE CLOUD FUNCTIONS – OSHIRO
-   GeoFence → Merchant Push Notification
+   GeoFence → Merchant Alert
+   Merchant Instant Offer → Customer Push
 ========================================================= */
 
 const functions = require("firebase-functions");
@@ -19,7 +20,7 @@ const MIN_GEOFENCE_RADIUS = 100;
 const DEFAULT_GEOFENCE_RADIUS = 300;
 
 /* =========================================================
-   HELPER: COOLDOWN CHECK
+   HELPER: COOLDOWN CHECK (MERCHANT ALERT)
 ========================================================= */
 async function isInCooldown(merchantId) {
   const ref = db.collection("merchant_alerts").doc(merchantId);
@@ -44,7 +45,7 @@ async function updateAlertTime(merchantId) {
 }
 
 /* =========================================================
-   🔔 GEO EVENT → MERCHANT PUSH
+   🔔 GEO EVENT → MERCHANT PUSH ALERT
 ========================================================= */
 exports.sendMerchantGeofenceAlert = functions.firestore
   .document("geo_events/{eventId}")
@@ -60,15 +61,14 @@ exports.sendMerchantGeofenceAlert = functions.firestore
         notified,
       } = event;
 
-      if (notified === true) return null;
+      if (!merchantId || notified === true) return null;
 
-      const merchantRef = db.collection("merchants").doc(merchantId);
-      const merchantSnap = await merchantRef.get();
+      const merchantSnap = await db
+        .collection("merchants")
+        .doc(merchantId)
+        .get();
 
-      if (!merchantSnap.exists) {
-        console.error("❌ Merchant not found");
-        return null;
-      }
+      if (!merchantSnap.exists) return null;
 
       const merchant = merchantSnap.data();
 
@@ -81,27 +81,26 @@ exports.sendMerchantGeofenceAlert = functions.firestore
       if (distanceMeters > geofenceRadius) return null;
 
       if (!merchant.fcmToken) {
-        console.error("❌ FCM token missing");
+        console.log("⚠️ Merchant FCM token missing");
         return null;
       }
 
       const cooldown = await isInCooldown(merchantId);
       if (cooldown) {
-        console.log("⏳ Cooldown active");
+        console.log("⏳ Merchant alert cooldown active");
         return null;
       }
 
-      /* ================== PUSH PAYLOAD (FIXED) ================== */
       const message = {
         token: merchant.fcmToken,
         notification: {
           title: "👣 Customer Nearby!",
-          body: `A customer is within ${distanceMeters} meters of your shop`,
+          body: `A customer is within ${distanceMeters} meters`,
         },
         webpush: {
           notification: {
             title: "👣 Customer Nearby!",
-            body: `A customer is within ${distanceMeters} meters of your shop`,
+            body: `A customer is within ${distanceMeters} meters`,
             icon: "/logo192.png",
             badge: "/logo192.png",
             requireInteraction: true,
@@ -123,7 +122,7 @@ exports.sendMerchantGeofenceAlert = functions.firestore
         notifiedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
-      console.log("✅ Geo push sent to merchant:", merchantId);
+      console.log("✅ Merchant geofence alert sent:", merchantId);
       return null;
     } catch (err) {
       console.error("🔥 Geo alert error:", err);
@@ -132,7 +131,77 @@ exports.sendMerchantGeofenceAlert = functions.firestore
   });
 
 /* =========================================================
-   🔔 ADMIN TEST PUSH (SINGLE SOURCE OF TRUTH)
+   🔥 MERCHANT INSTANT OFFER → CUSTOMER PUSH
+========================================================= */
+exports.sendInstantOfferPush = functions.firestore
+  .document("instant_offers/{offerId}")
+  .onCreate(async (snap) => {
+    try {
+      const offer = snap.data();
+      if (!offer) return null;
+
+      const {
+        customerId,
+        merchantId,
+        finalDiscount,
+        message,
+      } = offer;
+
+      if (!customerId || !merchantId) return null;
+
+      const customerSnap = await db
+        .collection("customers")
+        .doc(customerId)
+        .get();
+
+      if (!customerSnap.exists) return null;
+
+      const customer = customerSnap.data();
+      const tokens = customer.fcmTokens || [];
+
+      if (!tokens.length) {
+        console.log("⚠️ No FCM tokens for customer");
+        return null;
+      }
+
+      const payload = {
+        notification: {
+          title: "🔥 Instant Offer Just For You!",
+          body:
+            message ||
+            `${finalDiscount}% OFF – Walk in now`,
+        },
+        webpush: {
+          notification: {
+            title: "🔥 Instant Offer Just For You!",
+            body:
+              message ||
+              `${finalDiscount}% OFF – Walk in now`,
+            icon: "/logo192.png",
+            requireInteraction: true,
+          },
+        },
+        data: {
+          type: "INSTANT_OFFER",
+          merchantId,
+        },
+      };
+
+      await messaging.sendToDevice(tokens, payload);
+
+      console.log(
+        "✅ Instant offer push sent to customer:",
+        customerId
+      );
+      return null;
+    } catch (err) {
+      console.error("🔥 Instant offer push error:", err);
+      return null;
+    }
+  });
+
+/* =========================================================
+   🔔 ADMIN TEST PUSH
 ========================================================= */
 exports.sendAdminTestNotification = functions.firestore
   .document("notifications_test/{docId}")
@@ -210,7 +279,7 @@ exports.autoExpireOffers = functions.pubsub
     const snap = await db
       .collection("offers")
       .where("active", "==", true)
-      .where("expiryDate", "<=", now)
+      .where("expiresAt", "<=", now)
       .get();
 
     if (snap.empty) return null;
@@ -219,7 +288,8 @@ exports.autoExpireOffers = functions.pubsub
     snap.docs.forEach((d) =>
       batch.update(d.ref, {
         active: false,
-        expiredAt: admin.firestore.FieldValue.serverTimestamp(),
+        expiredAt:
+          admin.firestore.FieldValue.serverTimestamp(),
       })
     );
 
