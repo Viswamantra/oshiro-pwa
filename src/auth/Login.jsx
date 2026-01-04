@@ -51,6 +51,7 @@ export default function Login() {
 
   /* =========================
      GET / CREATE CUSTOMER
+     ✅ AUTO-APPROVED
   ========================= */
   const getOrCreateCustomer = async (mobile) => {
     const q = query(
@@ -65,7 +66,9 @@ export default function Login() {
 
     const ref = await addDoc(collection(db, "customers"), {
       mobile,
+      status: "approved",             // ✅ REQUIRED
       createdAt: serverTimestamp(),
+      approvedAt: serverTimestamp(),  // ✅ REQUIRED
     });
 
     return ref.id;
@@ -77,7 +80,6 @@ export default function Login() {
   const handleLogin = async () => {
     setError("");
 
-    /* 🔴 HARD STOP: MOBILE REQUIRED */
     if (!isValidMobile) {
       setError("Enter valid 10 digit mobile number");
       return;
@@ -132,7 +134,6 @@ export default function Login() {
     /* ================= MERCHANT ================= */
     const merchant = await getMerchantByMobile(mobile);
 
-    /* 🚨 MOBILE IS MANDATORY FOR MERCHANT CREATION */
     if (!merchant) {
       localStorage.setItem(
         "oshiro_user",
@@ -194,7 +195,6 @@ export default function Login() {
         helperText="10 digit mobile number required"
       />
 
-      {/* ADMIN PASSWORD */}
       {mobile === ADMIN_MOBILE && (
         <TextField
           label="Admin Password"
@@ -209,7 +209,6 @@ export default function Login() {
         />
       )}
 
-      {/* ROLE (HIDDEN FOR ADMIN) */}
       {mobile !== ADMIN_MOBILE && (
         <ToggleButtonGroup
           exclusive
