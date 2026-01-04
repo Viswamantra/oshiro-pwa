@@ -44,45 +44,31 @@ export default function AdminDashboard() {
      STATE
   ====================== */
   const [tab, setTab] = useState(0);
-
   const [merchants, setMerchants] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [leads, setLeads] = useState([]);
-
   const [selected, setSelected] = useState([]);
 
   /* ======================
      LOAD DATA
   ====================== */
   useEffect(() => {
-    const unsubMerchants = onSnapshot(
-      collection(db, "merchants"),
-      (snap) =>
-        setMerchants(
-          snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-        )
+    const unsub1 = onSnapshot(collection(db, "merchants"), (s) =>
+      setMerchants(s.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
 
-    const unsubCustomers = onSnapshot(
-      collection(db, "customers"),
-      (snap) =>
-        setCustomers(
-          snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-        )
+    const unsub2 = onSnapshot(collection(db, "customers"), (s) =>
+      setCustomers(s.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
 
-    const unsubLeads = onSnapshot(
-      collection(db, "geo_events"),
-      (snap) =>
-        setLeads(
-          snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-        )
+    const unsub3 = onSnapshot(collection(db, "geo_events"), (s) =>
+      setLeads(s.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
 
     return () => {
-      unsubMerchants();
-      unsubCustomers();
-      unsubLeads();
+      unsub1();
+      unsub2();
+      unsub3();
     };
   }, []);
 
@@ -110,7 +96,7 @@ export default function AdminDashboard() {
 
     if (
       !window.confirm(
-        `Delete ${selected.length} records? This cannot be undone.`
+        `Delete ${selected.length} records permanently?`
       )
     )
       return;
@@ -130,16 +116,22 @@ export default function AdminDashboard() {
     navigate("/login", { replace: true });
   };
 
+  const rows =
+    tab === 0 ? merchants : tab === 1 ? customers : leads;
+
+  const collectionName =
+    tab === 0
+      ? "merchants"
+      : tab === 1
+      ? "customers"
+      : "geo_events";
+
   /* ======================
      UI
   ====================== */
   return (
     <Box sx={{ p: 3 }}>
-      <Button
-        variant="outlined"
-        color="error"
-        onClick={logout}
-      >
+      <Button variant="outlined" color="error" onClick={logout}>
         Logout
       </Button>
 
@@ -160,53 +152,25 @@ export default function AdminDashboard() {
         <Tab label="LEADS" />
       </Tabs>
 
-      {/* ======================
-         ACTION BAR
-      ====================== */}
+      {/* ACTION BAR */}
       <Box sx={{ mt: 2, display: "flex", gap: 2 }}>
-        <Button
-          size="small"
-          onClick={() =>
-            selectAll(
-              tab === 0
-                ? merchants
-                : tab === 1
-                ? customers
-                : leads
-            )
-          }
-        >
+        <Button size="small" onClick={() => selectAll(rows)}>
           Select All
         </Button>
-
-        <Button
-          size="small"
-          onClick={clearSelection}
-        >
+        <Button size="small" onClick={clearSelection}>
           Unselect All
         </Button>
-
         <Button
           size="small"
           color="error"
           disabled={selected.length === 0}
-          onClick={() =>
-            deleteSelected(
-              tab === 0
-                ? "merchants"
-                : tab === 1
-                ? "customers"
-                : "geo_events"
-            )
-          }
+          onClick={() => deleteSelected(collectionName)}
         >
           Delete Selected
         </Button>
       </Box>
 
-      {/* ======================
-         TABLE
-      ====================== */}
+      {/* TABLE */}
       <Table size="small" sx={{ mt: 2 }}>
         <TableHead>
           <TableRow>
@@ -237,49 +201,40 @@ export default function AdminDashboard() {
         </TableHead>
 
         <TableBody>
-          {(tab === 0
-            ? merchants
-            : tab === 1
-            ? customers
-            : leads
-          ).map((row) => (
-            <TableRow key={row.id}>
+          {rows.map((r) => (
+            <TableRow key={r.id}>
               <TableCell>
                 <Checkbox
-                  checked={selected.includes(row.id)}
-                  onChange={() => toggle(row.id)}
+                  checked={selected.includes(r.id)}
+                  onChange={() => toggle(r.id)}
                 />
               </TableCell>
 
               {tab === 0 && (
                 <>
-                  <TableCell>{row.shopName}</TableCell>
-                  <TableCell>{row.mobile}</TableCell>
-                  <TableCell>{row.category}</TableCell>
-                  <TableCell>
-                    {row.status || "pending"}
-                  </TableCell>
+                  <TableCell>{r.shopName}</TableCell>
+                  <TableCell>{r.mobile}</TableCell>
+                  <TableCell>{r.category}</TableCell>
+                  <TableCell>{r.status}</TableCell>
                 </>
               )}
 
               {tab === 1 && (
                 <>
-                  <TableCell>{row.mobile}</TableCell>
+                  <TableCell>{r.mobile}</TableCell>
                   <TableCell>
-                    {row.createdAt?.toDate?.().toLocaleString?.()}
+                    {r.createdAt?.toDate?.().toLocaleString?.()}
                   </TableCell>
                 </>
               )}
 
               {tab === 2 && (
                 <>
-                  <TableCell>{row.customerId}</TableCell>
-                  <TableCell>{row.merchantId}</TableCell>
+                  <TableCell>{r.customerId}</TableCell>
+                  <TableCell>{r.merchantId}</TableCell>
+                  <TableCell>{r.distanceMeters} m</TableCell>
                   <TableCell>
-                    {row.distanceMeters} m
-                  </TableCell>
-                  <TableCell>
-                    {row.createdAt?.toDate?.().toLocaleString?.()}
+                    {r.createdAt?.toDate?.().toLocaleString?.()}
                   </TableCell>
                 </>
               )}
