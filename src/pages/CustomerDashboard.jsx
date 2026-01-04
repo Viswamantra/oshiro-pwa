@@ -44,6 +44,7 @@ const COOLDOWN_MINUTES = 30;
 
 export default function CustomerDashboard() {
   const navigate = useNavigate();
+
   const customerMobile = JSON.parse(
     localStorage.getItem("oshiro_user") || "{}"
   ).mobile;
@@ -123,11 +124,12 @@ export default function CustomerDashboard() {
   }, []);
 
   /* ======================
-     FILTER + AUTO EXPAND
+     FILTER + AUTO EXPAND + EXPIRY
   ====================== */
   useEffect(() => {
     if (!location) return;
 
+    const now = Date.now();
     let results = [];
     let usedRadius = radius;
 
@@ -137,6 +139,10 @@ export default function CustomerDashboard() {
       results = offers.filter((o) => {
         if (!o.lat || !o.lng) return false;
 
+        // ⏰ EXPIRY CHECK
+        if (o.expiresAt && o.expiresAt.toDate().getTime() < now)
+          return false;
+
         const d = distanceMeters(
           location.lat,
           location.lng,
@@ -145,7 +151,7 @@ export default function CustomerDashboard() {
         );
 
         const offerCategory = (
-          o.category || o.merchantCategory || ""
+          o.category || ""
         ).toLowerCase();
 
         if (category && offerCategory !== category.toLowerCase())
@@ -179,7 +185,7 @@ export default function CustomerDashboard() {
   }, [location, offers, category]);
 
   /* ======================
-     🔥 PROXIMITY TRIGGER (FINAL PIECE)
+     🔥 PROXIMITY TRIGGER
   ====================== */
   useEffect(() => {
     if (!location || !customerMobile) return;
@@ -195,10 +201,9 @@ export default function CustomerDashboard() {
         lastTime &&
         now - lastTime < COOLDOWN_MINUTES * 60 * 1000
       ) {
-        return; // cooldown active
+        return;
       }
 
-      // 🔍 Check Firestore for recent event
       const since = new Date(
         now - COOLDOWN_MINUTES * 60 * 1000
       );
@@ -213,7 +218,6 @@ export default function CustomerDashboard() {
       const snap = await getDocs(q);
       if (!snap.empty) return;
 
-      // ✅ CREATE GEO EVENT
       await addDoc(collection(db, "geo_events"), {
         customerId: customerMobile,
         merchantId: o.merchantId,
@@ -250,6 +254,7 @@ export default function CustomerDashboard() {
         Logout
       </Button>
 
+      {/* FILTERS */}
       <Box sx={{ mt: 3, display: "flex", gap: 2 }}>
         <TextField
           select
@@ -294,30 +299,47 @@ export default function CustomerDashboard() {
         </Typography>
       )}
 
-      {!location && !gpsError && (
-        <Typography sx={{ mt: 3 }}>
-          📍 Detecting your location...
-        </Typography>
-      )}
-
-      {gpsError && (
-        <Typography sx={{ mt: 3 }} color="error">
-          {gpsError}
-        </Typography>
-      )}
-
+      {/* OFFERS */}
       <Box sx={{ mt: 3 }}>
         {nearbyOffers.map((o) => (
           <Card key={o.id} sx={{ mb: 2 }}>
             <CardContent>
               <Typography variant="h6">{o.title}</Typography>
               <Typography>{o.description}</Typography>
+
               <Typography sx={{ mt: 1 }} color="text.secondary">
-                {o.merchantName || o.shopName} • {o.category}
+                {o.merchantName} • {o.category}
               </Typography>
+
               <Typography variant="caption" color="primary">
                 📍 {Math.round(o.distance)} meters away
               </Typography>
+
+              {/* ACTION ICONS */}
+              <Box sx={{ mt: 2, display: "flex", gap: 2 }}>
+                <Button
+                  size="small"
+                  href={`https://www.google.com/maps/dir/?api=1&destination=${o.lat},${o.lng}`}
+                  target="_blank"
+                >
+                  🧭 Maps
+                </Button>
+
+                <Button
+                  size="small"
+                  href={`tel:${o.merchantMobile}`}
+                >
+                  📞 Call
+                </Button>
+
+                <Button
+                  size="small"
+                  href={`https://wa.me/91${o.merchantMobile}?text=I saw your offer on OshirO`}
+                  target="_blank"
+                >
+                  💬 WhatsApp
+                </Button>
+              </Box>
             </CardContent>
           </Card>
         ))}
