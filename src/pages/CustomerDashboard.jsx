@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   Box,
   Typography,
@@ -8,7 +8,15 @@ import {
   TextField,
   MenuItem,
 } from "@mui/material";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import {
+  collection,
+  onSnapshot,
+  query,
+  where,
+  addDoc,
+  serverTimestamp,
+  getDocs,
+} from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
 
@@ -28,22 +36,17 @@ function distanceMeters(lat1, lon1, lat2, lon2) {
 }
 
 /* ======================
-   AUTO EXPAND RADII
+   CONFIG
 ====================== */
 const AUTO_RADIUS_STEPS = [300, 1000, 4000, 5000, 10000];
+const PROXIMITY_TRIGGER_METERS = 300;
+const COOLDOWN_MINUTES = 30;
 
 export default function CustomerDashboard() {
   const navigate = useNavigate();
-
-  /* ======================
-     AUTH GUARD
-  ====================== */
-  useEffect(() => {
-    if (localStorage.getItem("oshiro_role") !== "customer") {
-      localStorage.clear();
-      navigate("/login", { replace: true });
-    }
-  }, [navigate]);
+  const customerMobile = JSON.parse(
+    localStorage.getItem("oshiro_user") || "{}"
+  ).mobile;
 
   /* ======================
      STATE
@@ -55,10 +58,21 @@ export default function CustomerDashboard() {
 
   const [radius, setRadius] = useState(300);
   const [autoExpanded, setAutoExpanded] = useState(false);
-
   const [category, setCategory] = useState(
     localStorage.getItem("oshiro_category") || ""
   );
+
+  const lastTriggeredRef = useRef({}); // merchantId → timestamp
+
+  /* ======================
+     AUTH GUARD
+  ====================== */
+  useEffect(() => {
+    if (localStorage.getItem("oshiro_role") !== "customer") {
+      localStorage.clear();
+      navigate("/login", { replace: true });
+    }
+  }, [navigate]);
 
   /* ======================
      PERSIST CATEGORY
@@ -80,7 +94,7 @@ export default function CustomerDashboard() {
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
+    const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         setLocation({
           lat: pos.coords.latitude,
@@ -90,6 +104,8 @@ export default function CustomerDashboard() {
       () => setGpsError("GPS permission denied"),
       { enableHighAccuracy: true }
     );
+
+    return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
   /* ======================
@@ -163,6 +179,54 @@ export default function CustomerDashboard() {
   }, [location, offers, category]);
 
   /* ======================
+     🔥 PROXIMITY TRIGGER (FINAL PIECE)
+  ====================== */
+  useEffect(() => {
+    if (!location || !customerMobile) return;
+
+    nearbyOffers.forEach(async (o) => {
+      if (!o.merchantId || o.distance > PROXIMITY_TRIGGER_METERS)
+        return;
+
+      const lastTime = lastTriggeredRef.current[o.merchantId];
+      const now = Date.now();
+
+      if (
+        lastTime &&
+        now - lastTime < COOLDOWN_MINUTES * 60 * 1000
+      ) {
+        return; // cooldown active
+      }
+
+      // 🔍 Check Firestore for recent event
+      const since = new Date(
+        now - COOLDOWN_MINUTES * 60 * 1000
+      );
+
+      const q = query(
+        collection(db, "geo_events"),
+        where("customerId", "==", customerMobile),
+        where("merchantId", "==", o.merchantId),
+        where("createdAt", ">", since)
+      );
+
+      const snap = await getDocs(q);
+      if (!snap.empty) return;
+
+      // ✅ CREATE GEO EVENT
+      await addDoc(collection(db, "geo_events"), {
+        customerId: customerMobile,
+        merchantId: o.merchantId,
+        distanceMeters: Math.round(o.distance),
+        notified: false,
+        createdAt: serverTimestamp(),
+      });
+
+      lastTriggeredRef.current[o.merchantId] = now;
+    });
+  }, [nearbyOffers, location, customerMobile]);
+
+  /* ======================
      LOGOUT
   ====================== */
   const logout = () => {
@@ -186,7 +250,6 @@ export default function CustomerDashboard() {
         Logout
       </Button>
 
-      {/* FILTERS */}
       <Box sx={{ mt: 3, display: "flex", gap: 2 }}>
         <TextField
           select
@@ -225,11 +288,9 @@ export default function CustomerDashboard() {
         </TextField>
       </Box>
 
-      {/* AUTO EXPAND INFO */}
       {autoExpanded && (
         <Typography sx={{ mt: 1 }} color="text.secondary">
           🔍 Expanded search to {radius / 1000} km
-          to show available offers
         </Typography>
       )}
 
@@ -245,22 +306,6 @@ export default function CustomerDashboard() {
         </Typography>
       )}
 
-      {/* SMART EMPTY MESSAGE */}
-      {location && nearbyOffers.length === 0 && (
-        <Typography sx={{ mt: 3 }} color="text.secondary">
-          {category ? (
-            <>
-              😕 No offers found in <b>{category}</b> nearby.
-              <br />
-              Try increasing distance or changing category.
-            </>
-          ) : (
-            <>😕 No nearby offers found.</>
-          )}
-        </Typography>
-      )}
-
-      {/* OFFERS */}
       <Box sx={{ mt: 3 }}>
         {nearbyOffers.map((o) => (
           <Card key={o.id} sx={{ mb: 2 }}>
@@ -268,14 +313,9 @@ export default function CustomerDashboard() {
               <Typography variant="h6">{o.title}</Typography>
               <Typography>{o.description}</Typography>
               <Typography sx={{ mt: 1 }} color="text.secondary">
-                {o.merchantName || o.shopName} •{" "}
-                {o.category}
+                {o.merchantName || o.shopName} • {o.category}
               </Typography>
-              <Typography
-                variant="caption"
-                color="primary"
-                sx={{ mt: 0.5 }}
-              >
+              <Typography variant="caption" color="primary">
                 📍 {Math.round(o.distance)} meters away
               </Typography>
             </CardContent>
