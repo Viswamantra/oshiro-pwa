@@ -3,22 +3,21 @@ import {
   Box,
   Typography,
   Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
+  Card,
+  CardContent,
   TextField,
+  MenuItem,
+  Divider,
 } from "@mui/material";
 import {
   collection,
+  addDoc,
+  onSnapshot,
   query,
   where,
-  onSnapshot,
   updateDoc,
   doc,
-  addDoc,
   serverTimestamp,
-  getDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
@@ -26,16 +25,10 @@ import { useNavigate } from "react-router-dom";
 export default function MerchantDashboard() {
   const navigate = useNavigate();
 
-  /* ======================
-     AUTH INFO
-  ====================== */
   const merchantId = localStorage.getItem("oshiro_merchant_id");
-
-  /* ======================
-     STATE
-  ====================== */
-  const [alertEvent, setAlertEvent] = useState(null);
-  const [offerText, setOfferText] = useState("");
+  const merchant = JSON.parse(
+    localStorage.getItem("oshiro_user") || "{}"
+  );
 
   /* ======================
      AUTH GUARD
@@ -51,90 +44,62 @@ export default function MerchantDashboard() {
   }, [navigate, merchantId]);
 
   /* ======================
-     SOUND + VIBRATION
+     STATE
   ====================== */
-  const playAlert = () => {
-    try {
-      // 🔊 Beep sound
-      const audio = new Audio(
-        "https://actions.google.com/sounds/v1/alarms/beep_short.ogg"
-      );
-      audio.play();
-
-      // 📳 Vibration (mobile only)
-      if (navigator.vibrate) {
-        navigator.vibrate([200, 100, 200]);
-      }
-    } catch (e) {
-      console.warn("Alert sound blocked by browser");
-    }
-  };
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [activeOffers, setActiveOffers] = useState([]);
 
   /* ======================
-     REAL-TIME GEOFENCE ALERT
+     LOAD ACTIVE OFFERS
   ====================== */
   useEffect(() => {
-    if (!merchantId) return;
-
     const q = query(
-      collection(db, "geo_events"),
+      collection(db, "offers"),
       where("merchantId", "==", merchantId),
-      where("notified", "==", false)
+      where("active", "==", true)
     );
 
-    const unsubscribe = onSnapshot(q, (snap) => {
-      snap.docs.forEach(async (d) => {
-        const data = d.data();
-
-        // 🔔 Play sound + vibration
-        playAlert();
-
-        setAlertEvent({
-          id: d.id,
-          customerId: data.customerId,
-          distance: data.distanceMeters,
-          createdAt: data.createdAt,
-        });
-
-        // ✅ Mark notified
-        await updateDoc(doc(db, "geo_events", d.id), {
-          notified: true,
-        });
-      });
+    return onSnapshot(q, (snap) => {
+      setActiveOffers(
+        snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      );
     });
-
-    return () => unsubscribe();
   }, [merchantId]);
 
   /* ======================
-     SEND OFFER
+     CREATE OFFER
   ====================== */
-  const sendOffer = async () => {
-    if (!offerText.trim()) return;
-
-    const merchantSnap = await getDoc(
-      doc(db, "merchants", merchantId)
-    );
-    const merchant = merchantSnap.data();
+  const createOffer = async () => {
+    if (!title.trim() || !description.trim()) {
+      alert("Enter offer title and description");
+      return;
+    }
 
     await addDoc(collection(db, "offers"), {
       merchantId,
-      merchantName: merchant.shopName,
+      merchantName: merchant.shopName || "",
       merchantMobile: merchant.mobile,
+      title: title.trim(),
+      description: description.trim(),
       category: merchant.category,
-      title: "Special Offer",
-      description: offerText.trim(),
       lat: merchant.lat,
       lng: merchant.lng,
       active: true,
       createdAt: serverTimestamp(),
-      expiresAt: new Date(
-        Date.now() + 30 * 60 * 1000
-      ), // 30 mins
     });
 
-    setOfferText("");
-    setAlertEvent(null);
+    setTitle("");
+    setDescription("");
+  };
+
+  /* ======================
+     DISABLE OFFER
+  ====================== */
+  const disableOffer = async (id) => {
+    await updateDoc(doc(db, "offers", id), {
+      active: false,
+    });
   };
 
   /* ======================
@@ -150,80 +115,94 @@ export default function MerchantDashboard() {
   ====================== */
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4">
-        Merchant Dashboard
-      </Typography>
+      <Typography variant="h4">Merchant Dashboard</Typography>
 
       <Button
         sx={{ mt: 2 }}
-        color="error"
         variant="outlined"
+        color="error"
         onClick={logout}
       >
         Logout
       </Button>
 
-      <Typography sx={{ mt: 3 }}>
-        🔔 Keep this screen open to receive
-        customer proximity alerts.
+      <Typography sx={{ mt: 2 }} color="primary">
+        🔔 Keep this screen open to receive customer proximity alerts.
       </Typography>
 
+      <Divider sx={{ my: 3 }} />
+
       {/* ======================
-         ALERT POPUP
+          CREATE OFFER FORM
       ====================== */}
-      {alertEvent && (
-        <Dialog
-          open
-          onClose={() => setAlertEvent(null)}
-          fullWidth
-        >
-          <DialogTitle>
-            🚶 Customer Nearby!
-          </DialogTitle>
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Typography variant="h6">
+            Create New Offer
+          </Typography>
 
-          <DialogContent>
-            <Typography>
-              A customer is within{" "}
-              <b>{alertEvent.distance} meters</b>{" "}
-              of your shop.
+          <TextField
+            fullWidth
+            sx={{ mt: 2 }}
+            label="Offer Title"
+            placeholder="Eg: 10% OFF on Biryani"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+
+          <TextField
+            fullWidth
+            multiline
+            minRows={2}
+            sx={{ mt: 2 }}
+            label="Offer Description"
+            placeholder="Valid today only"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+
+          <TextField
+            fullWidth
+            disabled
+            sx={{ mt: 2 }}
+            label="Category"
+            value={merchant.category || ""}
+          />
+
+          <Button
+            sx={{ mt: 2 }}
+            variant="contained"
+            onClick={createOffer}
+          >
+            Publish Offer
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* ======================
+          ACTIVE OFFERS
+      ====================== */}
+      <Typography variant="h6">My Active Offers</Typography>
+
+      {activeOffers.map((o) => (
+        <Card key={o.id} sx={{ mt: 2 }}>
+          <CardContent>
+            <Typography variant="subtitle1">
+              {o.title}
             </Typography>
-
-            <Typography sx={{ mt: 1 }}>
-              Time:{" "}
-              {alertEvent.createdAt
-                ?.toDate()
-                .toLocaleTimeString()}
-            </Typography>
-
-            <TextField
-              sx={{ mt: 2 }}
-              fullWidth
-              multiline
-              minRows={2}
-              placeholder="Type a quick offer (Eg: 20% OFF for next 30 mins)"
-              value={offerText}
-              onChange={(e) =>
-                setOfferText(e.target.value)
-              }
-            />
-          </DialogContent>
-
-          <DialogActions>
-            <Button
-              onClick={() => setAlertEvent(null)}
-            >
-              Ignore
-            </Button>
+            <Typography>{o.description}</Typography>
 
             <Button
-              variant="contained"
-              onClick={sendOffer}
+              size="small"
+              color="error"
+              sx={{ mt: 1 }}
+              onClick={() => disableOffer(o.id)}
             >
-              Send Offer
+              Disable
             </Button>
-          </DialogActions>
-        </Dialog>
-      )}
+          </CardContent>
+        </Card>
+      ))}
     </Box>
   );
 }
