@@ -22,11 +22,18 @@ export default function MerchantRegister() {
   const navigate = useNavigate();
 
   /* ======================
-     USER FROM LOGIN
+     USER FROM LOGIN (MANDATORY)
   ====================== */
   const storedUser = JSON.parse(
     localStorage.getItem("oshiro_user") || "{}"
   );
+
+  /* 🚨 HARD STOP IF MOBILE MISSING */
+  useEffect(() => {
+    if (!storedUser.mobile || !/^\d{10}$/.test(storedUser.mobile)) {
+      navigate("/login", { replace: true });
+    }
+  }, [navigate, storedUser.mobile]);
 
   /* ======================
      STATE
@@ -52,9 +59,27 @@ export default function MerchantRegister() {
       where("status", "==", "active")
     );
 
-    const unsub = onSnapshot(q, (snap) => {
-      if (snap.empty) {
-        // 🔴 fallback (never break UI)
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        if (snap.empty) {
+          setCategories([
+            "Food",
+            "Fashion",
+            "Electronics",
+            "Hospitals",
+            "Medicals",
+            "Education",
+          ]);
+          return;
+        }
+
+        setCategories(
+          snap.docs.map((d) => d.data().name)
+        );
+      },
+      () => {
+        // fallback on error
         setCategories([
           "Food",
           "Fashion",
@@ -63,13 +88,8 @@ export default function MerchantRegister() {
           "Medicals",
           "Education",
         ]);
-        return;
       }
-
-      setCategories(
-        snap.docs.map((d) => d.data().name)
-      );
-    });
+    );
 
     return () => unsub();
   }, []);
@@ -90,8 +110,10 @@ export default function MerchantRegister() {
      GPS LOCATION
   ====================== */
   const captureLocation = () => {
+    setMsg("");
+
     if (!navigator.geolocation) {
-      setMsg("Geolocation not supported");
+      setMsg("Geolocation not supported on this device");
       return;
     }
 
@@ -102,10 +124,12 @@ export default function MerchantRegister() {
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
         }));
-        setMsg("📍 Location captured");
+        setMsg("📍 Location captured successfully");
       },
-      () => setMsg("GPS permission denied"),
-      { enableHighAccuracy: true }
+      () => {
+        setMsg("❌ GPS permission denied");
+      },
+      { enableHighAccuracy: true, timeout: 15000 }
     );
   };
 
@@ -115,8 +139,8 @@ export default function MerchantRegister() {
   const submit = async () => {
     setMsg("");
 
-    if (!form.shopName || !form.category) {
-      setMsg("Fill all required fields");
+    if (!form.shopName.trim() || !form.category) {
+      setMsg("Please fill all required fields");
       return;
     }
 
@@ -129,16 +153,14 @@ export default function MerchantRegister() {
 
     try {
       if (await merchantExists()) {
-        setMsg(
-          "Merchant already exists. Please login."
-        );
+        setMsg("Merchant already exists. Please login.");
         setLoading(false);
         return;
       }
 
       await addDoc(collection(db, "merchants"), {
         mobile: form.mobile,
-        shopName: form.shopName,
+        shopName: form.shopName.trim(),
         category: form.category,
         lat: Number(form.lat),
         lng: Number(form.lng),
@@ -151,11 +173,11 @@ export default function MerchantRegister() {
       );
 
       setTimeout(() => {
-        navigate("/login");
+        navigate("/login", { replace: true });
       }, 2000);
     } catch (err) {
       console.error(err);
-      setMsg("Registration failed");
+      setMsg("❌ Registration failed. Try again.");
     } finally {
       setLoading(false);
     }
@@ -166,7 +188,7 @@ export default function MerchantRegister() {
   ====================== */
   return (
     <Box sx={{ p: 3, maxWidth: 500, mx: "auto" }}>
-      <Typography variant="h5">
+      <Typography variant="h5" gutterBottom>
         Merchant Registration
       </Typography>
 
@@ -226,10 +248,7 @@ export default function MerchantRegister() {
       </Typography>
 
       {msg && (
-        <Typography
-          sx={{ mt: 1 }}
-          color="primary"
-        >
+        <Typography sx={{ mt: 1 }} color="primary">
           {msg}
         </Typography>
       )}
@@ -241,7 +260,7 @@ export default function MerchantRegister() {
         disabled={loading}
         onClick={submit}
       >
-        Submit Registration
+        {loading ? "Submitting..." : "Submit Registration"}
       </Button>
 
       <Button
