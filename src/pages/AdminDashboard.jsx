@@ -53,27 +53,33 @@ export default function AdminDashboard() {
      LOAD DATA
   ====================== */
   useEffect(() => {
-    const unsub1 = onSnapshot(collection(db, "merchants"), (s) =>
-      setMerchants(s.docs.map((d) => ({ id: d.id, ...d.data() })))
+    const unsubMerchants = onSnapshot(
+      collection(db, "merchants"),
+      (s) =>
+        setMerchants(s.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
 
-    const unsub2 = onSnapshot(collection(db, "customers"), (s) =>
-      setCustomers(s.docs.map((d) => ({ id: d.id, ...d.data() })))
+    const unsubCustomers = onSnapshot(
+      collection(db, "customers"),
+      (s) =>
+        setCustomers(s.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
 
-    const unsub3 = onSnapshot(collection(db, "geo_events"), (s) =>
-      setLeads(s.docs.map((d) => ({ id: d.id, ...d.data() })))
+    const unsubLeads = onSnapshot(
+      collection(db, "geo_events"),
+      (s) =>
+        setLeads(s.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
 
     return () => {
-      unsub1();
-      unsub2();
-      unsub3();
+      unsubMerchants();
+      unsubCustomers();
+      unsubLeads();
     };
   }, []);
 
   /* ======================
-     SELECTION
+     SELECTION HELPERS
   ====================== */
   const toggle = (id) => {
     setSelected((prev) =>
@@ -89,7 +95,7 @@ export default function AdminDashboard() {
   const clearSelection = () => setSelected([]);
 
   /* ======================
-     DELETE
+     DELETE HANDLER
   ====================== */
   const deleteSelected = async (collectionName) => {
     if (selected.length === 0) return;
@@ -136,7 +142,7 @@ export default function AdminDashboard() {
       </Button>
 
       <Typography variant="h4" sx={{ mt: 2 }}>
-        Admin Dashboard
+        Admin Dashboard (Cleanup Mode)
       </Typography>
 
       <Tabs
@@ -152,7 +158,6 @@ export default function AdminDashboard() {
         <Tab label="LEADS" />
       </Tabs>
 
-      {/* ACTION BAR */}
       <Box sx={{ mt: 2, display: "flex", gap: 2 }}>
         <Button size="small" onClick={() => selectAll(rows)}>
           Select All
@@ -170,7 +175,6 @@ export default function AdminDashboard() {
         </Button>
       </Box>
 
-      {/* TABLE */}
       <Table size="small" sx={{ mt: 2 }}>
         <TableHead>
           <TableRow>
