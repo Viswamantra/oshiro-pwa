@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Box,
   Typography,
@@ -7,106 +7,48 @@ import {
   CardContent,
   TextField,
   MenuItem,
+  Divider,
 } from "@mui/material";
 import {
   collection,
+  addDoc,
   onSnapshot,
   query,
   where,
-  addDoc,
+  updateDoc,
+  doc,
   serverTimestamp,
-  getDocs,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
 
-/* ======================
-   DISTANCE (HAVERSINE)
-====================== */
-function distanceMeters(lat1, lon1, lat2, lon2) {
-  const R = 6371000;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) ** 2;
-  return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
-}
-
-/* ======================
-   CONFIG
-====================== */
-const AUTO_RADIUS_STEPS = [300, 1000, 4000, 5000, 10000];
-const PROXIMITY_TRIGGER_METERS = 300;
-const COOLDOWN_MINUTES = 30;
-
-export default function CustomerDashboard() {
+export default function MerchantDashboard() {
   const navigate = useNavigate();
-  const customerMobile = JSON.parse(
+
+  const merchantId = localStorage.getItem("oshiro_merchant_id");
+  const merchant = JSON.parse(
     localStorage.getItem("oshiro_user") || "{}"
-  ).mobile;
-
-  /* ======================
-     STATE
-  ====================== */
-  const [location, setLocation] = useState(null);
-  const [offers, setOffers] = useState([]);
-  const [nearbyOffers, setNearbyOffers] = useState([]);
-  const [gpsError, setGpsError] = useState("");
-
-  const [radius, setRadius] = useState(300);
-  const [autoExpanded, setAutoExpanded] = useState(false);
-  const [category, setCategory] = useState(
-    localStorage.getItem("oshiro_category") || ""
   );
-
-  const lastTriggeredRef = useRef({}); // merchantId → timestamp
 
   /* ======================
      AUTH GUARD
   ====================== */
   useEffect(() => {
-    if (localStorage.getItem("oshiro_role") !== "customer") {
+    if (
+      localStorage.getItem("oshiro_role") !== "merchant" ||
+      !merchantId
+    ) {
       localStorage.clear();
       navigate("/login", { replace: true });
     }
-  }, [navigate]);
+  }, [navigate, merchantId]);
 
   /* ======================
-     PERSIST CATEGORY
+     STATE
   ====================== */
-  useEffect(() => {
-    if (category) {
-      localStorage.setItem("oshiro_category", category);
-    } else {
-      localStorage.removeItem("oshiro_category");
-    }
-  }, [category]);
-
-  /* ======================
-     GET GPS LOCATION
-  ====================== */
-  useEffect(() => {
-    if (!navigator.geolocation) {
-      setGpsError("Geolocation not supported");
-      return;
-    }
-
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        setLocation({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-        });
-      },
-      () => setGpsError("GPS permission denied"),
-      { enableHighAccuracy: true }
-    );
-
-    return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [activeOffers, setActiveOffers] = useState([]);
 
   /* ======================
      LOAD ACTIVE OFFERS
@@ -114,117 +56,51 @@ export default function CustomerDashboard() {
   useEffect(() => {
     const q = query(
       collection(db, "offers"),
+      where("merchantId", "==", merchantId),
       where("active", "==", true)
     );
 
     return onSnapshot(q, (snap) => {
-      setOffers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      setActiveOffers(
+        snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      );
     });
-  }, []);
+  }, [merchantId]);
 
   /* ======================
-     FILTER + AUTO EXPAND
+     CREATE OFFER
   ====================== */
-  useEffect(() => {
-    if (!location) return;
-
-    let results = [];
-    let usedRadius = radius;
-
-    for (let r of AUTO_RADIUS_STEPS) {
-      if (r < radius) continue;
-
-      results = offers.filter((o) => {
-        if (!o.lat || !o.lng) return false;
-
-        const d = distanceMeters(
-          location.lat,
-          location.lng,
-          o.lat,
-          o.lng
-        );
-
-        const offerCategory = (
-          o.category || o.merchantCategory || ""
-        ).toLowerCase();
-
-        if (category && offerCategory !== category.toLowerCase())
-          return false;
-
-        return d <= r;
-      });
-
-      if (results.length > 0) {
-        usedRadius = r;
-        break;
-      }
+  const createOffer = async () => {
+    if (!title.trim() || !description.trim()) {
+      alert("Enter offer title and description");
+      return;
     }
 
-    setNearbyOffers(
-      results
-        .map((o) => ({
-          ...o,
-          distance: distanceMeters(
-            location.lat,
-            location.lng,
-            o.lat,
-            o.lng
-          ),
-        }))
-        .sort((a, b) => a.distance - b.distance)
-    );
+    await addDoc(collection(db, "offers"), {
+      merchantId,
+      merchantName: merchant.shopName || "",
+      merchantMobile: merchant.mobile,
+      title: title.trim(),
+      description: description.trim(),
+      category: merchant.category,
+      lat: merchant.lat,
+      lng: merchant.lng,
+      active: true,
+      createdAt: serverTimestamp(),
+    });
 
-    setAutoExpanded(usedRadius !== radius);
-    setRadius(usedRadius);
-  }, [location, offers, category]);
+    setTitle("");
+    setDescription("");
+  };
 
   /* ======================
-     🔥 PROXIMITY TRIGGER (FINAL PIECE)
+     DISABLE OFFER
   ====================== */
-  useEffect(() => {
-    if (!location || !customerMobile) return;
-
-    nearbyOffers.forEach(async (o) => {
-      if (!o.merchantId || o.distance > PROXIMITY_TRIGGER_METERS)
-        return;
-
-      const lastTime = lastTriggeredRef.current[o.merchantId];
-      const now = Date.now();
-
-      if (
-        lastTime &&
-        now - lastTime < COOLDOWN_MINUTES * 60 * 1000
-      ) {
-        return; // cooldown active
-      }
-
-      // 🔍 Check Firestore for recent event
-      const since = new Date(
-        now - COOLDOWN_MINUTES * 60 * 1000
-      );
-
-      const q = query(
-        collection(db, "geo_events"),
-        where("customerId", "==", customerMobile),
-        where("merchantId", "==", o.merchantId),
-        where("createdAt", ">", since)
-      );
-
-      const snap = await getDocs(q);
-      if (!snap.empty) return;
-
-      // ✅ CREATE GEO EVENT
-      await addDoc(collection(db, "geo_events"), {
-        customerId: customerMobile,
-        merchantId: o.merchantId,
-        distanceMeters: Math.round(o.distance),
-        notified: false,
-        createdAt: serverTimestamp(),
-      });
-
-      lastTriggeredRef.current[o.merchantId] = now;
+  const disableOffer = async (id) => {
+    await updateDoc(doc(db, "offers", id), {
+      active: false,
     });
-  }, [nearbyOffers, location, customerMobile]);
+  };
 
   /* ======================
      LOGOUT
@@ -239,7 +115,7 @@ export default function CustomerDashboard() {
   ====================== */
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4">Nearby Offers</Typography>
+      <Typography variant="h4">Merchant Dashboard</Typography>
 
       <Button
         sx={{ mt: 2 }}
@@ -250,78 +126,83 @@ export default function CustomerDashboard() {
         Logout
       </Button>
 
-      <Box sx={{ mt: 3, display: "flex", gap: 2 }}>
-        <TextField
-          select
-          size="small"
-          label="Category"
-          value={category}
-          sx={{ minWidth: 180 }}
-          onChange={(e) => setCategory(e.target.value)}
-        >
-          <MenuItem value="">All</MenuItem>
-          <MenuItem value="Food">Food</MenuItem>
-          <MenuItem value="Beauty & Spa">Beauty & Spa</MenuItem>
-          <MenuItem value="Fashion & Clothing">
-            Fashion & Clothing
-          </MenuItem>
-          <MenuItem value="Medicals">Medicals</MenuItem>
-          <MenuItem value="Hospitals">Hospitals</MenuItem>
-        </TextField>
+      <Typography sx={{ mt: 2 }} color="primary">
+        🔔 Keep this screen open to receive customer proximity alerts.
+      </Typography>
 
-        <TextField
-          select
-          size="small"
-          label="Distance"
-          value={radius}
-          sx={{ minWidth: 140 }}
-          onChange={(e) => {
-            setRadius(Number(e.target.value));
-            setAutoExpanded(false);
-          }}
-        >
-          <MenuItem value={300}>300 m</MenuItem>
-          <MenuItem value={1000}>1 km</MenuItem>
-          <MenuItem value={4000}>4 km</MenuItem>
-          <MenuItem value={5000}>5 km</MenuItem>
-          <MenuItem value={10000}>10 km</MenuItem>
-        </TextField>
-      </Box>
+      <Divider sx={{ my: 3 }} />
 
-      {autoExpanded && (
-        <Typography sx={{ mt: 1 }} color="text.secondary">
-          🔍 Expanded search to {radius / 1000} km
-        </Typography>
-      )}
+      {/* ======================
+          CREATE OFFER FORM
+      ====================== */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Typography variant="h6">
+            Create New Offer
+          </Typography>
 
-      {!location && !gpsError && (
-        <Typography sx={{ mt: 3 }}>
-          📍 Detecting your location...
-        </Typography>
-      )}
+          <TextField
+            fullWidth
+            sx={{ mt: 2 }}
+            label="Offer Title"
+            placeholder="Eg: 10% OFF on Biryani"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
 
-      {gpsError && (
-        <Typography sx={{ mt: 3 }} color="error">
-          {gpsError}
-        </Typography>
-      )}
+          <TextField
+            fullWidth
+            multiline
+            minRows={2}
+            sx={{ mt: 2 }}
+            label="Offer Description"
+            placeholder="Valid today only"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
 
-      <Box sx={{ mt: 3 }}>
-        {nearbyOffers.map((o) => (
-          <Card key={o.id} sx={{ mb: 2 }}>
-            <CardContent>
-              <Typography variant="h6">{o.title}</Typography>
-              <Typography>{o.description}</Typography>
-              <Typography sx={{ mt: 1 }} color="text.secondary">
-                {o.merchantName || o.shopName} • {o.category}
-              </Typography>
-              <Typography variant="caption" color="primary">
-                📍 {Math.round(o.distance)} meters away
-              </Typography>
-            </CardContent>
-          </Card>
-        ))}
-      </Box>
+          <TextField
+            fullWidth
+            disabled
+            sx={{ mt: 2 }}
+            label="Category"
+            value={merchant.category || ""}
+          />
+
+          <Button
+            sx={{ mt: 2 }}
+            variant="contained"
+            onClick={createOffer}
+          >
+            Publish Offer
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* ======================
+          ACTIVE OFFERS
+      ====================== */}
+      <Typography variant="h6">My Active Offers</Typography>
+
+      {activeOffers.map((o) => (
+        <Card key={o.id} sx={{ mt: 2 }}>
+          <CardContent>
+            <Typography variant="subtitle1">
+              {o.title}
+            </Typography>
+            <Typography>{o.description}</Typography>
+
+            <Button
+              size="small"
+              color="error"
+              sx={{ mt: 1 }}
+              onClick={() => disableOffer(o.id)}
+            >
+              Disable
+            </Button>
+          </CardContent>
+        </Card>
+      ))}
     </Box>
   );
 }
