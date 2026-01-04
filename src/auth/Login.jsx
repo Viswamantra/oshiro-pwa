@@ -31,6 +31,11 @@ export default function Login() {
   const [error, setError] = useState("");
 
   /* =========================
+     VALID MOBILE CHECK
+  ========================= */
+  const isValidMobile = /^\d{10}$/.test(mobile);
+
+  /* =========================
      GET MERCHANT BY MOBILE
   ========================= */
   const getMerchantByMobile = async (mobile) => {
@@ -72,13 +77,19 @@ export default function Login() {
   const handleLogin = async () => {
     setError("");
 
-    if (!/^\d{10}$/.test(mobile)) {
+    /* 🔴 HARD STOP: MOBILE REQUIRED */
+    if (!isValidMobile) {
       setError("Enter valid 10 digit mobile number");
       return;
     }
 
     /* ================= ADMIN ================= */
     if (mobile === ADMIN_MOBILE) {
+      if (!adminPassword) {
+        setError("Admin password required");
+        return;
+      }
+
       if (adminPassword !== ADMIN_PASSWORD) {
         setError("Invalid admin password");
         return;
@@ -121,7 +132,12 @@ export default function Login() {
     /* ================= MERCHANT ================= */
     const merchant = await getMerchantByMobile(mobile);
 
+    /* 🚨 MOBILE IS MANDATORY FOR MERCHANT CREATION */
     if (!merchant) {
+      localStorage.setItem(
+        "oshiro_user",
+        JSON.stringify({ mobile })
+      );
       navigate("/merchant-register", { replace: true });
       return;
     }
@@ -138,7 +154,7 @@ export default function Login() {
       return;
     }
 
-    /* ================= APPROVED MERCHANT (🔥 FIX) ================= */
+    /* ================= APPROVED MERCHANT ================= */
     localStorage.setItem("oshiro_role", "merchant");
     localStorage.setItem("oshiro_merchant_id", merchant.id);
 
@@ -161,17 +177,21 @@ export default function Login() {
   ========================= */
   return (
     <Box sx={{ p: 3, maxWidth: 420, mx: "auto", mt: 6 }}>
-      <Typography variant="h5">Login</Typography>
+      <Typography variant="h5" gutterBottom>
+        Login
+      </Typography>
 
       <TextField
         label="Mobile Number"
         fullWidth
+        required
         margin="normal"
         value={mobile}
         inputProps={{ maxLength: 10 }}
         onChange={(e) =>
           setMobile(e.target.value.replace(/\D/g, ""))
         }
+        helperText="10 digit mobile number required"
       />
 
       {/* ADMIN PASSWORD */}
@@ -179,6 +199,7 @@ export default function Login() {
         <TextField
           label="Admin Password"
           type="password"
+          required
           fullWidth
           margin="normal"
           value={adminPassword}
@@ -215,6 +236,7 @@ export default function Login() {
       <Button
         variant="contained"
         fullWidth
+        disabled={!isValidMobile}
         onClick={handleLogin}
       >
         Continue
