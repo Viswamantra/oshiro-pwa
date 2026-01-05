@@ -22,7 +22,8 @@ import {
   doc,
   serverTimestamp,
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { getToken } from "firebase/messaging";
+import { db, messaging } from "../firebase";
 import { useNavigate } from "react-router-dom";
 
 export default function MerchantDashboard() {
@@ -45,6 +46,43 @@ export default function MerchantDashboard() {
       navigate("/login", { replace: true });
     }
   }, [navigate, merchantId]);
+
+  /* ======================
+     🔔 REGISTER FCM TOKEN (CRITICAL FIX)
+  ====================== */
+  useEffect(() => {
+    const registerFCM = async () => {
+      if (!messaging || !merchantId) return;
+
+      try {
+        const permission = await Notification.requestPermission();
+        if (permission !== "granted") {
+          console.warn("Notification permission denied");
+          return;
+        }
+
+        const token = await getToken(messaging, {
+          vapidKey: "BEzJ7FJ2GYuDTL7DS2B4EACTBp_vX9M3rS-cV-0Va1df8ouzOD-8qwUuwn3eHtI609065jtuon9pWVUyBoY-0CU",
+        });
+
+        if (!token) {
+          console.warn("FCM token not generated");
+          return;
+        }
+
+        await updateDoc(doc(db, "merchants", merchantId), {
+          fcmToken: token,
+          fcmUpdatedAt: serverTimestamp(),
+        });
+
+        console.log("✅ Merchant FCM token saved");
+      } catch (err) {
+        console.error("FCM registration failed", err);
+      }
+    };
+
+    registerFCM();
+  }, [merchantId]);
 
   /* ======================
      STATE
@@ -76,13 +114,12 @@ export default function MerchantDashboard() {
   }, [merchantId]);
 
   /* ======================
-     LIVE GEO EVENTS (CUSTOMERS NEARBY)
+     LIVE GEO EVENTS
   ====================== */
   useEffect(() => {
     const q = query(
       collection(db, "geo_events"),
-      where("merchantId", "==", merchantId),
-      where("status", "==", "entered")
+      where("merchantMobile", "==", merchant.mobile)
     );
 
     return onSnapshot(q, (snap) => {
@@ -90,7 +127,7 @@ export default function MerchantDashboard() {
         snap.docs.map((d) => ({ id: d.id, ...d.data() }))
       );
     });
-  }, [merchantId]);
+  }, [merchantId, merchant.mobile]);
 
   /* ======================
      CREATE BASE OFFER
@@ -110,7 +147,7 @@ export default function MerchantDashboard() {
       category: merchant.category,
       lat: merchant.lat,
       lng: merchant.lng,
-      baseDiscount: 15, // base offer %
+      baseDiscount: 15,
       active: true,
       createdAt: serverTimestamp(),
     });
@@ -129,7 +166,7 @@ export default function MerchantDashboard() {
   };
 
   /* ======================
-     SEND INSTANT OFFER (🔥 CORE)
+     SEND INSTANT OFFER
   ====================== */
   const sendInstantOffer = async () => {
     if (!extraDiscount) {
@@ -142,7 +179,6 @@ export default function MerchantDashboard() {
       Number(base) + Number(extraDiscount);
 
     await addDoc(collection(db, "instant_offers"), {
-      customerId: selectedGeo.customerId,
       customerMobile: selectedGeo.customerMobile,
       merchantId,
       baseDiscount: base,
@@ -154,12 +190,9 @@ export default function MerchantDashboard() {
       sentAt: serverTimestamp(),
     });
 
-    // 🔒 Anti-spam: mark geo event as completed
     await updateDoc(
       doc(db, "geo_events", selectedGeo.id),
-      {
-        status: "offer_sent",
-      }
+      { status: "offer_sent" }
     );
 
     setSelectedGeo(null);
@@ -194,15 +227,12 @@ export default function MerchantDashboard() {
       </Button>
 
       <Typography sx={{ mt: 2 }} color="error">
-        🔔 Keep this screen open — customers nearby will appear
-        here.
+        🔔 Keep this screen open — customers nearby will
+        notify you instantly.
       </Typography>
 
       <Divider sx={{ my: 3 }} />
 
-      {/* ======================
-          LIVE CUSTOMER ALERTS
-      ====================== */}
       <Typography variant="h6">
         Customers Nearby
       </Typography>
@@ -233,9 +263,6 @@ export default function MerchantDashboard() {
 
       <Divider sx={{ my: 3 }} />
 
-      {/* ======================
-          CREATE BASE OFFER
-      ====================== */}
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Typography variant="h6">
@@ -272,9 +299,6 @@ export default function MerchantDashboard() {
         </CardContent>
       </Card>
 
-      {/* ======================
-          ACTIVE OFFERS
-      ====================== */}
       <Typography variant="h6">
         My Active Offers
       </Typography>
@@ -299,9 +323,6 @@ export default function MerchantDashboard() {
         </Card>
       ))}
 
-      {/* ======================
-          INSTANT OFFER DIALOG
-      ====================== */}
       <Dialog
         open={Boolean(selectedGeo)}
         onClose={() => setSelectedGeo(null)}
