@@ -16,6 +16,8 @@ import {
   addDoc,
   serverTimestamp,
   getDocs,
+  doc,
+  setDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
@@ -63,7 +65,7 @@ export default function CustomerDashboard() {
     localStorage.getItem("oshiro_category") || ""
   );
 
-  const lastTriggeredRef = useRef({}); // merchantId → timestamp
+  const lastTriggeredRef = useRef({});
 
   /* ======================
      AUTH GUARD
@@ -74,17 +76,6 @@ export default function CustomerDashboard() {
       navigate("/login", { replace: true });
     }
   }, [navigate]);
-
-  /* ======================
-     PERSIST CATEGORY
-  ====================== */
-  useEffect(() => {
-    if (category) {
-      localStorage.setItem("oshiro_category", category);
-    } else {
-      localStorage.removeItem("oshiro_category");
-    }
-  }, [category]);
 
   /* ======================
      GET GPS LOCATION
@@ -109,6 +100,31 @@ export default function CustomerDashboard() {
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
+  /* ======================================================
+     🔥🔥🔥 THIS IS THE MISSING TRIGGER (MOST IMPORTANT)
+     THIS FIRES customerGeofenceWatcher FUNCTION
+  ====================================================== */
+  useEffect(() => {
+    if (!location || !customerMobile) return;
+
+    const writeCustomerLocation = async () => {
+      await setDoc(
+        doc(db, "customers", customerMobile), // 🔴 DOC ID = MOBILE
+        {
+          mobile: customerMobile,
+          lat: location.lat,
+          lng: location.lng,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      console.log("📍 Customer location updated", location);
+    };
+
+    writeCustomerLocation();
+  }, [location, customerMobile]);
+
   /* ======================
      LOAD ACTIVE OFFERS
   ====================== */
@@ -124,12 +140,11 @@ export default function CustomerDashboard() {
   }, []);
 
   /* ======================
-     FILTER + AUTO EXPAND + EXPIRY
+     FILTER + AUTO EXPAND
   ====================== */
   useEffect(() => {
     if (!location) return;
 
-    const now = Date.now();
     let results = [];
     let usedRadius = radius;
 
@@ -139,10 +154,6 @@ export default function CustomerDashboard() {
       results = offers.filter((o) => {
         if (!o.lat || !o.lng) return false;
 
-        // ⏰ EXPIRY CHECK
-        if (o.expiresAt && o.expiresAt.toDate().getTime() < now)
-          return false;
-
         const d = distanceMeters(
           location.lat,
           location.lng,
@@ -150,10 +161,7 @@ export default function CustomerDashboard() {
           o.lng
         );
 
-        const offerCategory = (
-          o.category || ""
-        ).toLowerCase();
-
+        const offerCategory = (o.category || "").toLowerCase();
         if (category && offerCategory !== category.toLowerCase())
           return false;
 
@@ -185,52 +193,6 @@ export default function CustomerDashboard() {
   }, [location, offers, category]);
 
   /* ======================
-     🔥 PROXIMITY TRIGGER
-  ====================== */
-  useEffect(() => {
-    if (!location || !customerMobile) return;
-
-    nearbyOffers.forEach(async (o) => {
-      if (!o.merchantId || o.distance > PROXIMITY_TRIGGER_METERS)
-        return;
-
-      const lastTime = lastTriggeredRef.current[o.merchantId];
-      const now = Date.now();
-
-      if (
-        lastTime &&
-        now - lastTime < COOLDOWN_MINUTES * 60 * 1000
-      ) {
-        return;
-      }
-
-      const since = new Date(
-        now - COOLDOWN_MINUTES * 60 * 1000
-      );
-
-      const q = query(
-        collection(db, "geo_events"),
-        where("customerId", "==", customerMobile),
-        where("merchantId", "==", o.merchantId),
-        where("createdAt", ">", since)
-      );
-
-      const snap = await getDocs(q);
-      if (!snap.empty) return;
-
-      await addDoc(collection(db, "geo_events"), {
-        customerId: customerMobile,
-        merchantId: o.merchantId,
-        distanceMeters: Math.round(o.distance),
-        notified: false,
-        createdAt: serverTimestamp(),
-      });
-
-      lastTriggeredRef.current[o.merchantId] = now;
-    });
-  }, [nearbyOffers, location, customerMobile]);
-
-  /* ======================
      LOGOUT
   ====================== */
   const logout = () => {
@@ -254,52 +216,12 @@ export default function CustomerDashboard() {
         Logout
       </Button>
 
-      {/* FILTERS */}
-      <Box sx={{ mt: 3, display: "flex", gap: 2 }}>
-        <TextField
-          select
-          size="small"
-          label="Category"
-          value={category}
-          sx={{ minWidth: 180 }}
-          onChange={(e) => setCategory(e.target.value)}
-        >
-          <MenuItem value="">All</MenuItem>
-          <MenuItem value="Food">Food</MenuItem>
-          <MenuItem value="Beauty & Spa">Beauty & Spa</MenuItem>
-          <MenuItem value="Fashion & Clothing">
-            Fashion & Clothing
-          </MenuItem>
-          <MenuItem value="Medicals">Medicals</MenuItem>
-          <MenuItem value="Hospitals">Hospitals</MenuItem>
-        </TextField>
-
-        <TextField
-          select
-          size="small"
-          label="Distance"
-          value={radius}
-          sx={{ minWidth: 140 }}
-          onChange={(e) => {
-            setRadius(Number(e.target.value));
-            setAutoExpanded(false);
-          }}
-        >
-          <MenuItem value={300}>300 m</MenuItem>
-          <MenuItem value={1000}>1 km</MenuItem>
-          <MenuItem value={4000}>4 km</MenuItem>
-          <MenuItem value={5000}>5 km</MenuItem>
-          <MenuItem value={10000}>10 km</MenuItem>
-        </TextField>
-      </Box>
-
-      {autoExpanded && (
-        <Typography sx={{ mt: 1 }} color="text.secondary">
-          🔍 Expanded search to {radius / 1000} km
+      {gpsError && (
+        <Typography color="error" sx={{ mt: 2 }}>
+          {gpsError}
         </Typography>
       )}
 
-      {/* OFFERS */}
       <Box sx={{ mt: 3 }}>
         {nearbyOffers.map((o) => (
           <Card key={o.id} sx={{ mb: 2 }}>
@@ -307,39 +229,9 @@ export default function CustomerDashboard() {
               <Typography variant="h6">{o.title}</Typography>
               <Typography>{o.description}</Typography>
 
-              <Typography sx={{ mt: 1 }} color="text.secondary">
-                {o.merchantName} • {o.category}
-              </Typography>
-
               <Typography variant="caption" color="primary">
                 📍 {Math.round(o.distance)} meters away
               </Typography>
-
-              {/* ACTION ICONS */}
-              <Box sx={{ mt: 2, display: "flex", gap: 2 }}>
-                <Button
-                  size="small"
-                  href={`https://www.google.com/maps/dir/?api=1&destination=${o.lat},${o.lng}`}
-                  target="_blank"
-                >
-                  🧭 Maps
-                </Button>
-
-                <Button
-                  size="small"
-                  href={`tel:${o.merchantMobile}`}
-                >
-                  📞 Call
-                </Button>
-
-                <Button
-                  size="small"
-                  href={`https://wa.me/91${o.merchantMobile}?text=I saw your offer on OshirO`}
-                  target="_blank"
-                >
-                  💬 WhatsApp
-                </Button>
-              </Box>
             </CardContent>
           </Card>
         ))}
