@@ -2,6 +2,11 @@ import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 
 /* ======================
+   HOME
+====================== */
+import Home from "./pages/Home";
+
+/* ======================
    AUTH PAGES
 ====================== */
 import AdminLogin from "./auth/AdminLogin";
@@ -47,13 +52,9 @@ export default function App() {
   return (
     <Routes>
       {/* ======================
-          ROOT
-          (DO NOT FORCE ADMIN)
+          HOME (PUBLIC)
       ====================== */}
-      <Route
-        path="/"
-        element={<Navigate to="/customer/login" replace />}
-      />
+      <Route path="/" element={<Home />} />
 
       {/* ======================
           AUTH ROUTES (PUBLIC)
@@ -133,7 +134,7 @@ export default function App() {
       ====================== */}
       <Route
         path="*"
-        element={<Navigate to="/customer/login" replace />}
+        element={<Navigate to="/" replace />}
       />
     </Routes>
   );
