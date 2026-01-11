@@ -10,6 +10,7 @@ import { useNavigate } from "react-router-dom";
  * ✔ Prevents deleting +91
  * ✔ Stores customer_mobile in localStorage
  * ✔ Compatible with ProtectedRoute.jsx
+ * ✔ Includes Home navigation (UX improvement)
  * =========================================================
  */
 
@@ -79,25 +80,48 @@ export default function CustomerLogin() {
   };
 
   return (
-    <div style={styles.container}>
-      <h2 style={styles.title}>Customer Login</h2>
+    <div style={{ position: "relative", minHeight: "100vh" }}>
+      {/* ======================
+          HOME BUTTON (UX)
+      ====================== */}
+      <div
+        onClick={() => navigate("/")}
+        style={{
+          position: "absolute",
+          top: 20,
+          left: 20,
+          cursor: "pointer",
+          color: "#2563eb",
+          fontSize: 14,
+          fontWeight: 500,
+        }}
+      >
+        ← Home
+      </div>
 
-      <input
-        type="tel"
-        value={mobile}
-        placeholder="+91XXXXXXXXXX"
-        onChange={handleMobileChange}
-        onFocus={lockCursor}
-        onClick={lockCursor}
-        onKeyUp={lockCursor}
-        style={styles.input}
-      />
+      {/* ======================
+          LOGIN CARD
+      ====================== */}
+      <div style={styles.container}>
+        <h2 style={styles.title}>Customer Login</h2>
 
-      {error && <p style={styles.error}>{error}</p>}
+        <input
+          type="tel"
+          value={mobile}
+          placeholder="+91XXXXXXXXXX"
+          onChange={handleMobileChange}
+          onFocus={lockCursor}
+          onClick={lockCursor}
+          onKeyUp={lockCursor}
+          style={styles.input}
+        />
 
-      <button onClick={handleLogin} style={styles.button}>
-        Login
-      </button>
+        {error && <p style={styles.error}>{error}</p>}
+
+        <button onClick={handleLogin} style={styles.button}>
+          Login
+        </button>
+      </div>
     </div>
   );
 }
@@ -109,7 +133,7 @@ const styles = {
   container: {
     padding: 30,
     maxWidth: 360,
-    margin: "80px auto",
+    margin: "120px auto",
     border: "1px solid #ddd",
     borderRadius: 8,
     background: "#fff",
