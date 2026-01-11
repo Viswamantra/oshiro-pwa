@@ -1,0 +1,148 @@
+/* =========================================================
+   GLOBAL RESET
+========================================================= */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* =========================================================
+   BASE APP STYLES
+========================================================= */
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, Arial, Helvetica, sans-serif;
+  background-color: #f4f6f8;
+  color: #222;
+  line-height: 1.4;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+input,
+textarea,
+select {
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 14px;
+}
+
+/* =========================================================
+   CUSTOMER HEADER (MOBILE FIRST)
+========================================================= */
+.customer-header {
+  position: sticky;
+  top: 0;
+  height: 52px;
+  background-color: #0d6efd;
+  color: #ffffff;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 100;
+}
+
+.customer-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.customer-header button {
+  background: #ffffff;
+  color: #0d6efd;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* =========================================================
+   FILTER BAR
+========================================================= */
+.filter-bar {
+  position: sticky;
+  top: 52px;
+  background: #ffffff;
+  padding: 8px;
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid #ddd;
+  z-index: 90;
+}
+
+.filter-bar select {
+  flex: 1;
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+/* =========================================================
+   MERCHANT LIST
+========================================================= */
+.merchant-list {
+  padding-bottom: 80px;
+}
+
+/* =========================================================
+   MERCHANT CARD (COMPACT)
+========================================================= */
+.merchant-card {
+  background: #ffffff;
+  margin: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.merchant-info h4 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.merchant-info span {
+  font-size: 12px;
+  color: #666;
+}
+
+/* =========================================================
+   ACTION ICONS
+========================================================= */
+.merchant-actions a {
+  font-size: 20px;
+  margin-left: 12px;
+  text-decoration: none;
+}
+
+/* =========================================================
+   ADMIN BASIC SUPPORT (NON-INTRUSIVE)
+========================================================= */
+aside {
+  min-height: 100vh;
+}
+
+/* =========================================================
+   DESKTOP ENHANCEMENTS
+========================================================= */
+@media (min-width: 768px) {
+  .filter-bar,
+  .merchant-list {
+    max-width: 720px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .merchant-card {
+    margin: 12px auto;
+  }
+}
