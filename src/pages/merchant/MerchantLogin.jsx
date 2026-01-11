@@ -11,6 +11,7 @@ import { getMerchantByMobile } from "../../firebase/merchant";
  * ✔ Status-based access control
  * ✔ Stores merchant session in localStorage
  * ✔ Enables GPS Location tab only after approval
+ * ✔ Mobile-first Home navigation (UX)
  * =========================================================
  */
 
@@ -35,7 +36,7 @@ export default function MerchantLogin() {
       value = "+91";
     }
 
-    // Remove non-digits after +91
+    // Digits only after +91
     value = "+91" + value.slice(3).replace(/\D/g, "");
 
     // Limit to +91 + 10 digits
@@ -52,7 +53,6 @@ export default function MerchantLogin() {
   const login = async () => {
     setError("");
 
-    // +91 + 10 digits = length 13
     if (mobile.length !== 13) {
       setError("Enter valid mobile number (+91XXXXXXXXXX)");
       return;
@@ -70,9 +70,6 @@ export default function MerchantLogin() {
         return;
       }
 
-      /* ======================
-         STATUS CHECK
-      ====================== */
       if (merchant.status === "pending") {
         setError("Waiting for admin approval");
         return;
@@ -95,7 +92,7 @@ export default function MerchantLogin() {
         "merchant",
         JSON.stringify({
           id: merchant.id,
-          mobile: mobile, // stored with +91
+          mobile: mobile, // with +91
           name: merchant.shopName || "",
           status: merchant.status,
           role: "merchant",
@@ -112,43 +109,66 @@ export default function MerchantLogin() {
   };
 
   return (
-    <div style={styles.box}>
-      <h2>Merchant Login</h2>
-
-      <input
-        type="tel"
-        value={mobile}
-        onChange={handleMobileChange}
-        placeholder="+91XXXXXXXXXX"
-        onFocus={(e) => e.target.setSelectionRange(3, 3)}
-        style={styles.input}
-      />
-
-      {error && <p style={styles.error}>{error}</p>}
-
-      <button
-        onClick={login}
-        style={styles.button}
-        disabled={loading}
+    <div style={{ position: "relative", minHeight: "100vh" }}>
+      {/* ======================
+          HOME BUTTON (MOBILE-FIRST UX)
+      ====================== */}
+      <div
+        onClick={() => navigate("/")}
+        style={{
+          position: "absolute",
+          top: 16,
+          left: 16,
+          cursor: "pointer",
+          color: "#2563eb",
+          fontSize: 14,
+          fontWeight: 500,
+        }}
       >
-        {loading ? "Checking..." : "Login"}
-      </button>
+        ← Home
+      </div>
 
-      <p style={{ marginTop: 10 }}>
-        New merchant?{" "}
-        <Link to="/merchant/register">Register</Link>
-      </p>
+      {/* ======================
+          LOGIN CARD
+      ====================== */}
+      <div style={styles.box}>
+        <h2>Merchant Login</h2>
+
+        <input
+          type="tel"
+          value={mobile}
+          onChange={handleMobileChange}
+          placeholder="+91XXXXXXXXXX"
+          onFocus={(e) => e.target.setSelectionRange(3, 3)}
+          style={styles.input}
+        />
+
+        {error && <p style={styles.error}>{error}</p>}
+
+        <button
+          onClick={login}
+          style={styles.button}
+          disabled={loading}
+        >
+          {loading ? "Checking..." : "Login"}
+        </button>
+
+        <p style={{ marginTop: 10 }}>
+          New merchant?{" "}
+          <Link to="/merchant/register">Register</Link>
+        </p>
+      </div>
     </div>
   );
 }
 
 /* ======================
-   STYLES
+   STYLES (MOBILE-FIRST)
 ====================== */
 const styles = {
   box: {
     maxWidth: 360,
-    margin: "100px auto",
+    margin: "120px auto",
     textAlign: "center",
   },
   input: {
