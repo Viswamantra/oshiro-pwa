@@ -3,24 +3,30 @@ import { useNavigate } from "react-router-dom";
 
 /**
  * =========================================================
- * CUSTOMER LOGIN
+ * CUSTOMER LOGIN (MOBILE-FIRST)
  * ---------------------------------------------------------
  * ✔ +91 locked mobile input
  * ✔ Allows only 10 digits after +91
  * ✔ Prevents deleting +91
  * ✔ Stores customer_mobile in localStorage
  * ✔ Compatible with ProtectedRoute.jsx
- * ✔ Includes Home navigation (UX improvement)
- * ✔ Oshiro logo added (PUBLIC ASSET)
+ * ✔ Clean, modern UI
+ * ✔ Public logo usage (Vercel-safe)
  * =========================================================
  */
 
 export default function CustomerLogin() {
   const navigate = useNavigate();
 
+  /* ======================
+     STATE
+  ====================== */
   const [mobile, setMobile] = useState("+91");
   const [error, setError] = useState("");
 
+  /* ======================
+     MOBILE INPUT HANDLER
+  ====================== */
   const handleMobileChange = (e) => {
     let value = e.target.value;
 
@@ -36,12 +42,18 @@ export default function CustomerLogin() {
     setMobile("+91" + digits);
   };
 
+  /* ======================
+     LOCK CURSOR AFTER +91
+  ====================== */
   const lockCursor = (e) => {
     if (e.target.selectionStart < 3) {
       e.target.setSelectionRange(3, 3);
     }
   };
 
+  /* ======================
+     LOGIN HANDLER
+  ====================== */
   const handleLogin = () => {
     setError("");
 
@@ -52,30 +64,23 @@ export default function CustomerLogin() {
 
     const customerMobile = mobile.slice(3);
     localStorage.setItem("customer_mobile", customerMobile);
+
     navigate("/customer", { replace: true });
   };
 
   return (
-    <div style={{ position: "relative", minHeight: "100vh" }}>
+    <div style={styles.page}>
       {/* HOME BUTTON */}
       <div
         onClick={() => navigate("/")}
-        style={{
-          position: "absolute",
-          top: 20,
-          left: 20,
-          cursor: "pointer",
-          color: "#2563eb",
-          fontSize: 14,
-          fontWeight: 500,
-        }}
+        style={styles.homeBtn}
       >
         ← Home
       </div>
 
       {/* LOGIN CARD */}
-      <div style={styles.container}>
-        {/* LOGO (FROM PUBLIC) */}
+      <div style={styles.card}>
+        {/* LOGO */}
         <img
           src="/logo/oshiro-logo-compact-3.png"
           alt="Oshiro"
@@ -83,6 +88,9 @@ export default function CustomerLogin() {
         />
 
         <h2 style={styles.title}>Customer Login</h2>
+        <p style={styles.subtitle}>
+          Enter your mobile number to continue
+        </p>
 
         <input
           type="tel"
@@ -95,7 +103,7 @@ export default function CustomerLogin() {
           style={styles.input}
         />
 
-        {error && <p style={styles.error}>{error}</p>}
+        {error && <div style={styles.error}>{error}</div>}
 
         <button onClick={handleLogin} style={styles.button}>
           Login
@@ -105,41 +113,88 @@ export default function CustomerLogin() {
   );
 }
 
+/* ======================
+   STYLES (MOBILE-FIRST)
+====================== */
 const styles = {
-  container: {
-    padding: 30,
-    maxWidth: 360,
-    margin: "120px auto",
-    border: "1px solid #ddd",
-    borderRadius: 8,
-    background: "#fff",
-    textAlign: "center",
+  page: {
+    minHeight: "100vh",
+    background: "linear-gradient(180deg, #f8fafc, #eef2ff)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+    position: "relative",
   },
+
+  homeBtn: {
+    position: "absolute",
+    top: 20,
+    left: 16,
+    padding: "6px 14px",
+    borderRadius: 20,
+    background: "#f1f5f9",
+    color: "#2563eb",
+    fontSize: 14,
+    fontWeight: 500,
+    cursor: "pointer",
+  },
+
+  card: {
+    width: "100%",
+    maxWidth: 360,
+    padding: 28,
+    borderRadius: 16,
+    background: "#ffffff",
+    textAlign: "center",
+    boxShadow: "0 16px 32px rgba(0, 0, 0, 0.1)",
+  },
+
   logo: {
     height: 56,
     width: "auto",
-    marginBottom: 20,
-    display: "block",
-    marginLeft: "auto",
-    marginRight: "auto",
+    marginBottom: 24,
   },
+
   title: {
-    marginBottom: 10,
+    fontSize: 22,
+    fontWeight: 600,
+    marginBottom: 6,
   },
+
+  subtitle: {
+    fontSize: 14,
+    color: "#6b7280",
+    marginBottom: 20,
+  },
+
   input: {
     width: "100%",
-    padding: 10,
+    height: 48,
+    padding: "0 14px",
     fontSize: 16,
-    marginTop: 15,
+    borderRadius: 10,
+    border: "1px solid #d1d5db",
+    outline: "none",
   },
+
+  error: {
+    marginTop: 10,
+    fontSize: 14,
+    color: "#dc2626",
+  },
+
   button: {
     width: "100%",
-    padding: 10,
-    marginTop: 20,
+    height: 48,
+    marginTop: 24,
+    borderRadius: 10,
+    border: "none",
+    background: "linear-gradient(135deg, #2563eb, #1e40af)",
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: 600,
     cursor: "pointer",
-  },
-  error: {
-    color: "red",
-    marginTop: 8,
+    boxShadow: "0 6px 14px rgba(37, 99, 235, 0.35)",
   },
 };
