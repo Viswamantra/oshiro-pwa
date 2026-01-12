@@ -39,6 +39,7 @@ import MerchantApproval from "./pages/admin/MerchantApproval";
 ====================== */
 import CustomerDashboard from "./pages/customer/CustomerDashboard";
 import NearbyOffers from "./pages/customer/NearbyOffers";
+import MerchantDetails from "./pages/customer/MerchantDetails"; // 🔑 ADDED
 
 /* ======================
    MERCHANT PAGES
@@ -106,6 +107,13 @@ export default function App() {
         }
       >
         <Route index element={<CustomerDashboard />} />
+
+        {/* 🔥 THIS WAS MISSING – ROOT CAUSE */}
+        <Route
+          path="merchant/:id"
+          element={<MerchantDetails />}
+        />
+
         <Route
           path="nearby-offers"
           element={<NearbyOffers />}
