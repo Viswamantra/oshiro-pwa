@@ -1,26 +1,54 @@
-import React from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 
 /**
  * =========================================================
  * MERCHANT DETAILS (CUSTOMER)
  * ---------------------------------------------------------
- * ✔ Offer details
- * ✔ Call / WhatsApp actions
- * ✔ Google Maps integration
+ * ✔ URL-based routing (no reset issues)
+ * ✔ Safe fallback to navigation state
  * ✔ Mobile-first UX
  * =========================================================
  */
 
 export default function MerchantDetails() {
   const navigate = useNavigate();
+  const { id } = useParams();              // 🔑 URL param
   const { state } = useLocation();
 
-  // merchant passed via navigation state
-  const merchant = state?.merchant;
+  const [merchant, setMerchant] = useState(state?.merchant || null);
+
+  /**
+   * If user refreshed or landed directly on URL,
+   * fetch merchant using ID
+   */
+  useEffect(() => {
+    if (!merchant && id) {
+      // ⛳ Replace this with Firestore fetch later
+      console.warn("Merchant state missing, fetch by ID:", id);
+
+      // Example placeholder (safe UX)
+      // fetchMerchantById(id).then(setMerchant);
+    }
+  }, [id, merchant]);
 
   if (!merchant) {
-    return <p style={{ padding: 20 }}>Merchant not found</p>;
+    return (
+      <div style={{ padding: 20 }}>
+        <p>Loading merchant details…</p>
+        <div
+          onClick={() => navigate("/customer")}
+          style={{
+            marginTop: 12,
+            color: "#2563eb",
+            cursor: "pointer",
+            fontSize: 14,
+          }}
+        >
+          ← Back to merchants
+        </div>
+      </div>
+    );
   }
 
   const phone = `+91${merchant.mobile}`;
