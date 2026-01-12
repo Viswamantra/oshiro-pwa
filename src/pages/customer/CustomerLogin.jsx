@@ -9,7 +9,7 @@ import { useNavigate } from "react-router-dom";
  * ✔ Allows only 10 digits after +91
  * ✔ Prevents deleting +91
  * ✔ Stores customer_mobile in localStorage
- * ✔ Compatible with ProtectedRoute.jsx
+ * ✔ Triggers notification permission screen (one-time)
  * ✔ Clean, modern UI
  * ✔ Public logo usage (Vercel-safe)
  * =========================================================
@@ -63,9 +63,26 @@ export default function CustomerLogin() {
     }
 
     const customerMobile = mobile.slice(3);
+
+    /* ======================
+       STORE SESSION
+    ====================== */
     localStorage.setItem("customer_mobile", customerMobile);
 
-    navigate("/customer", { replace: true });
+    /* ======================
+       NOTIFICATION PERMISSION FLOW
+       (ONE-TIME ONLY)
+    ====================== */
+    const notificationPermission =
+      localStorage.getItem("notification_permission");
+
+    if (!notificationPermission) {
+      navigate("/customer/notifications", {
+        replace: true,
+      });
+    } else {
+      navigate("/customer", { replace: true });
+    }
   };
 
   return (
