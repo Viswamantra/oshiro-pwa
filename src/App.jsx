@@ -39,7 +39,8 @@ import MerchantApproval from "./pages/admin/MerchantApproval";
 ====================== */
 import CustomerDashboard from "./pages/customer/CustomerDashboard";
 import NearbyOffers from "./pages/customer/NearbyOffers";
-import MerchantDetails from "./pages/customer/MerchantDetails"; // 🔑 ADDED
+import MerchantDetails from "./pages/customer/MerchantDetails";
+import NotificationPermission from "./pages/customer/NotificationPermission";
 
 /* ======================
    MERCHANT PAGES
@@ -66,6 +67,15 @@ export default function App() {
       <Route
         path="/merchant/register"
         element={<MerchantRegister />}
+      />
+
+      {/* ======================
+          CUSTOMER NOTIFICATION PERMISSION
+          (ONE-TIME UX SCREEN)
+      ====================== */}
+      <Route
+        path="/customer/notifications"
+        element={<NotificationPermission />}
       />
 
       {/* ======================
@@ -108,9 +118,9 @@ export default function App() {
       >
         <Route index element={<CustomerDashboard />} />
 
-        {/* 🔥 THIS WAS MISSING – ROOT CAUSE */}
+        {/* Merchant details (opened from MerchantCard) */}
         <Route
-          path="merchant/:id"
+          path="merchant"
           element={<MerchantDetails />}
         />
 
