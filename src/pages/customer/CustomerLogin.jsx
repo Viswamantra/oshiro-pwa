@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import oshiroLogo from "../../assets/logo/oshiro-logo-compact.png";
+import oshiroLogo from "../../assets/logo/oshiro-logo-icon.png";
 
 /**
  * =========================================================
