@@ -1,17 +1,26 @@
 import { NavLink } from "react-router-dom";
+import oshiroLogo from "../assets/logo/oshiro-logo-icon.png";
 
 /**
  * =========================================================
  * ADMIN SIDEBAR
  * ---------------------------------------------------------
  * Left navigation for Admin panel
+ * Logo replaces "OSHIRO" text
  * =========================================================
  */
 
 export default function Sidebar() {
   return (
     <aside style={styles.sidebar}>
-      <h2 style={styles.logo}>OSHIRO</h2>
+      {/* LOGO */}
+      <div style={styles.logoContainer}>
+        <img
+          src={oshiroLogo}
+          alt="Oshiro"
+          style={styles.logoImage}
+        />
+      </div>
 
       <nav style={styles.nav}>
         <NavItem to="/admin" label="Home" end />
@@ -37,7 +46,7 @@ function NavItem({ to, label, end = false }) {
       style={({ isActive }) => ({
         ...styles.navItem,
         backgroundColor: isActive ? "#1976d2" : "transparent",
-        color: isActive ? "#ffffff" : "#d0d0d0"
+        color: isActive ? "#ffffff" : "#d0d0d0",
       })}
     >
       {label}
@@ -57,17 +66,26 @@ const styles = {
     display: "flex",
     flexDirection: "column",
   },
-  logo: {
+
+  logoContainer: {
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 30,
-    textAlign: "center",
-    letterSpacing: 1,
-    fontWeight: "bold",
   },
+
+  logoImage: {
+    height: 32,
+    width: "auto",
+    display: "block",
+  },
+
   nav: {
     display: "flex",
     flexDirection: "column",
     gap: 6,
   },
+
   navItem: {
     padding: "12px 16px",
     borderRadius: 6,
