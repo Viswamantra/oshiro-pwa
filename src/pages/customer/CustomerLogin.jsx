@@ -77,7 +77,7 @@ export default function CustomerLogin() {
       <div style={styles.container}>
         {/* LOGO (FROM PUBLIC) */}
         <img
-          src="/logo/oshiro-logo-compact-2.png"
+          src="/logo/oshiro-logo-compact-3.png"
           alt="Oshiro"
           style={styles.logo}
         />
