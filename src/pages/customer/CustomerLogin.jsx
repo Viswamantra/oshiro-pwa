@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import oshiroLogo from "../../assets/logo/oshiro-logo-compact.png";
 
 /**
  * =========================================================
@@ -11,6 +12,7 @@ import { useNavigate } from "react-router-dom";
  * ✔ Stores customer_mobile in localStorage
  * ✔ Compatible with ProtectedRoute.jsx
  * ✔ Includes Home navigation (UX improvement)
+ * ✔ Oshiro logo added
  * =========================================================
  */
 
@@ -103,6 +105,13 @@ export default function CustomerLogin() {
           LOGIN CARD
       ====================== */}
       <div style={styles.container}>
+        {/* LOGO */}
+        <img
+          src={oshiroLogo}
+          alt="Oshiro"
+          style={styles.logo}
+        />
+
         <h2 style={styles.title}>Customer Login</h2>
 
         <input
@@ -137,9 +146,18 @@ const styles = {
     border: "1px solid #ddd",
     borderRadius: 8,
     background: "#fff",
+    textAlign: "center",
+  },
+  logo: {
+    height: 56,        // 👈 Recommended for login screen
+    width: "auto",
+    marginBottom: 20,
+    display: "block",
+    marginLeft: "auto",
+    marginRight: "auto",
   },
   title: {
-    textAlign: "center",
+    marginBottom: 10,
   },
   input: {
     width: "100%",
