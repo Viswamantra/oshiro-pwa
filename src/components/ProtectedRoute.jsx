@@ -1,14 +1,13 @@
 import React from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 
 /**
  * =========================================================
- * PROTECTED ROUTE – DEV MODE (FINAL)
+ * PROTECTED ROUTE – STABLE VERSION
  * ---------------------------------------------------------
- * ✔ Admin routes    → admin flag
- * ✔ Customer routes → customer_mobile
- * ✔ Merchant routes → merchant object
- * ✔ Deterministic & stable
+ * ✔ No history corruption
+ * ✔ Nested routes safe
+ * ✔ No auto-jump to parent
  * =========================================================
  */
 
@@ -18,9 +17,8 @@ export default function ProtectedRoute({
   customerOnly = false,
   merchantOnly = false,
 }) {
-  /* ======================
-     READ SESSIONS
-  ====================== */
+  const location = useLocation();
+
   const isAdmin = localStorage.getItem("admin") === "true";
   const customerMobile = localStorage.getItem("customer_mobile");
 
@@ -30,35 +28,38 @@ export default function ProtectedRoute({
   /* ======================
      ADMIN ROUTES
   ====================== */
-  if (adminOnly) {
-    if (!isAdmin) {
-      return <Navigate to="/admin/login" replace />;
-    }
-    return children;
+  if (adminOnly && !isAdmin) {
+    return (
+      <Navigate
+        to="/admin/login"
+        state={{ from: location }}
+      />
+    );
   }
 
   /* ======================
      CUSTOMER ROUTES
   ====================== */
-  if (customerOnly) {
-    if (!customerMobile) {
-      return <Navigate to="/customer/login" replace />;
-    }
-    return children;
+  if (customerOnly && !customerMobile) {
+    return (
+      <Navigate
+        to="/customer/login"
+        state={{ from: location }}
+      />
+    );
   }
 
   /* ======================
      MERCHANT ROUTES
   ====================== */
-  if (merchantOnly) {
-    if (!merchant || merchant.role !== "merchant") {
-      return <Navigate to="/merchant/login" replace />;
-    }
-    return children;
+  if (merchantOnly && (!merchant || merchant.role !== "merchant")) {
+    return (
+      <Navigate
+        to="/merchant/login"
+        state={{ from: location }}
+      />
+    );
   }
 
-  /* ======================
-     PUBLIC ROUTES
-  ====================== */
   return children;
 }
