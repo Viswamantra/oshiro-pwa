@@ -3,12 +3,12 @@ import { Outlet, useNavigate, NavLink } from "react-router-dom";
 
 /**
  * =========================================================
- * CUSTOMER LAYOUT (MOBILE-FIRST) – FIXED
+ * CUSTOMER LAYOUT (MOBILE-FIRST) – FINAL FIX
  * ---------------------------------------------------------
- * ✔ NO session guard here (handled by ProtectedRoute)
- * ✔ Sticky header
- * ✔ Bottom navigation
- * ✔ Stable (no redirect loops)
+ * ✔ No auto redirects
+ * ✔ Stable routing
+ * ✔ Bottom nav does NOT intercept content clicks
+ * ✔ Mobile-safe z-index & spacing
  * =========================================================
  */
 
@@ -24,7 +24,13 @@ export default function CustomerLayout() {
   };
 
   return (
-    <div className="customer-layout">
+    <div
+      className="customer-layout"
+      style={{
+        minHeight: "100vh",
+        background: "#f5f5f5",
+      }}
+    >
       {/* ======================
           HEADER
       ====================== */}
@@ -33,7 +39,7 @@ export default function CustomerLayout() {
         style={{
           position: "sticky",
           top: 0,
-          zIndex: 100,
+          zIndex: 200,
           padding: "12px 16px",
           background: "#ffffff",
           borderBottom: "1px solid #ddd",
@@ -43,6 +49,7 @@ export default function CustomerLayout() {
         }}
       >
         <h3 style={{ margin: 0 }}>Nearby Deals</h3>
+
         <button
           onClick={logout}
           style={{
@@ -61,7 +68,9 @@ export default function CustomerLayout() {
         className="customer-content"
         style={{
           padding: 16,
-          paddingBottom: 70, // space for bottom nav
+          paddingBottom: 96,       // 🔑 MORE than nav height
+          position: "relative",
+          zIndex: 150,             // 🔑 ABOVE bottom nav
         }}
       >
         <Outlet />
@@ -83,14 +92,17 @@ export default function CustomerLayout() {
           display: "flex",
           justifyContent: "space-around",
           alignItems: "center",
+          zIndex: 50,              // 🔑 LOWER than content
         }}
       >
         <NavLink
           to="/customer"
           end
+          onClick={(e) => e.stopPropagation()}
           style={({ isActive }) => ({
             textDecoration: "none",
             fontWeight: isActive ? "bold" : "normal",
+            color: "#111",
           })}
         >
           🏠 Home
@@ -98,9 +110,11 @@ export default function CustomerLayout() {
 
         <NavLink
           to="/customer/nearby-offers"
+          onClick={(e) => e.stopPropagation()}
           style={({ isActive }) => ({
             textDecoration: "none",
             fontWeight: isActive ? "bold" : "normal",
+            color: "#111",
           })}
         >
           📍 Nearby
