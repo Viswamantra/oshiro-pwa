@@ -3,12 +3,13 @@ import { useNavigate } from "react-router-dom";
 
 /**
  * =========================================================
- * ADMIN LOGIN – DEV MODE (NO FIREBASE)
+ * ADMIN LOGIN (DEV MODE | MOBILE-FIRST)
  * ---------------------------------------------------------
  * ✔ +91 locked mobile input
- * ✔ Fixed admin mobile + password
- * ✔ Single admin flag in localStorage
- * ✔ Matches ProtectedRoute.jsx
+ * ✔ Fixed admin credentials
+ * ✔ Admin session via localStorage
+ * ✔ UI consistent with Customer & Merchant login
+ * ✔ Oshiro logo added (PUBLIC ASSET)
  * =========================================================
  */
 
@@ -18,9 +19,6 @@ const ADMIN_PASSWORD = "45#67";
 export default function AdminLogin() {
   const navigate = useNavigate();
 
-  /* ======================
-     STATE
-  ====================== */
   const [mobile, setMobile] = useState("+91");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -31,15 +29,12 @@ export default function AdminLogin() {
   const handleMobileChange = (e) => {
     let value = e.target.value;
 
-    // Always keep +91
     if (!value.startsWith("+91")) {
       value = "+91";
     }
 
-    // Remove non-digits after +91
     value = "+91" + value.slice(3).replace(/\D/g, "");
 
-    // Limit to +91 + 10 digits
     if (value.length > 13) {
       value = value.slice(0, 13);
     }
@@ -48,28 +43,23 @@ export default function AdminLogin() {
   };
 
   /* ======================
-     LOGIN
+     LOGIN HANDLER
   ====================== */
   const handleLogin = () => {
     setError("");
 
-    // +91 + 10 digits = length 13
     if (mobile.length !== 13 || !password) {
       setError("Enter valid admin mobile and password");
       return;
     }
 
-    const plainMobile = mobile.slice(3); // remove +91
+    const plainMobile = mobile.slice(3);
 
     if (
       plainMobile === ADMIN_MOBILE &&
       password === ADMIN_PASSWORD
     ) {
-      /* ======================
-         STORE ADMIN SESSION
-      ====================== */
       localStorage.setItem("admin", "true");
-
       navigate("/admin", { replace: true });
     } else {
       setError("Invalid admin credentials");
@@ -77,65 +67,117 @@ export default function AdminLogin() {
   };
 
   return (
-    <div style={styles.container}>
-      <h2>Admin Login</h2>
+    <div style={styles.page}>
+      {/* LOGIN CARD */}
+      <div style={styles.card}>
+        {/* LOGO */}
+        <img
+          src="/logo/oshiro-logo-compact-3.png"
+          alt="Oshiro"
+          style={styles.logo}
+        />
 
-      <input
-        type="tel"
-        value={mobile}
-        onChange={handleMobileChange}
-        placeholder="+91XXXXXXXXXX"
-        onFocus={(e) => e.target.setSelectionRange(3, 3)}
-        style={styles.input}
-      />
+        <h2 style={styles.title}>Admin Login</h2>
+        <p style={styles.subtitle}>
+          Secure access for administrators
+        </p>
 
-      <input
-        type="password"
-        placeholder="Password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        style={styles.input}
-      />
+        <input
+          type="tel"
+          value={mobile}
+          onChange={handleMobileChange}
+          placeholder="+91XXXXXXXXXX"
+          onFocus={(e) => e.target.setSelectionRange(3, 3)}
+          style={styles.input}
+        />
 
-      {error && <p style={styles.error}>{error}</p>}
+        <input
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          style={styles.input}
+        />
 
-      <button onClick={handleLogin} style={styles.button}>
-        Login
-      </button>
+        {error && <div style={styles.error}>{error}</div>}
+
+        <button onClick={handleLogin} style={styles.button}>
+          Login
+        </button>
+      </div>
     </div>
   );
 }
 
 /* ======================
-   STYLES
+   STYLES (MOBILE-FIRST)
 ====================== */
 const styles = {
-  container: {
-    maxWidth: 360,
-    margin: "100px auto",
-    padding: 20,
-    border: "1px solid #ddd",
-    borderRadius: 8,
-    textAlign: "center",
-    background: "#fff",
+  page: {
+    minHeight: "100vh",
+    background: "linear-gradient(180deg, #f8fafc, #eef2ff)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
   },
+
+  card: {
+    width: "100%",
+    maxWidth: 360,
+    padding: 28,
+    borderRadius: 16,
+    background: "#ffffff",
+    textAlign: "center",
+    boxShadow: "0 16px 32px rgba(0, 0, 0, 0.1)",
+  },
+
+  logo: {
+    height: 56,
+    width: "auto",
+    marginBottom: 24,
+  },
+
+  title: {
+    fontSize: 22,
+    fontWeight: 600,
+    marginBottom: 6,
+  },
+
+  subtitle: {
+    fontSize: 14,
+    color: "#6b7280",
+    marginBottom: 20,
+  },
+
   input: {
     width: "100%",
-    padding: 10,
-    marginBottom: 12,
-    fontSize: 14,
+    height: 48,
+    padding: "0 14px",
+    fontSize: 16,
+    borderRadius: 10,
+    border: "1px solid #d1d5db",
+    outline: "none",
+    marginBottom: 14,
   },
+
+  error: {
+    marginBottom: 10,
+    fontSize: 14,
+    color: "#dc2626",
+  },
+
   button: {
     width: "100%",
-    padding: 10,
-    background: "#1976d2",
-    color: "#fff",
+    height: 48,
+    marginTop: 12,
+    borderRadius: 10,
     border: "none",
+    background: "linear-gradient(135deg, #2563eb, #1e40af)",
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: 600,
     cursor: "pointer",
-    fontWeight: "bold",
-  },
-  error: {
-    color: "red",
-    marginBottom: 10,
+    boxShadow: "0 6px 14px rgba(37, 99, 235, 0.35)",
   },
 };
