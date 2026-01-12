@@ -4,42 +4,36 @@ import { getMerchantByMobile } from "../../firebase/merchant";
 
 /**
  * =========================================================
- * MERCHANT LOGIN
+ * MERCHANT LOGIN (MOBILE-FIRST)
  * ---------------------------------------------------------
- * ✔ Mobile-based login (DEV MODE)
+ * ✔ Mobile-based login
  * ✔ +91 locked mobile input
  * ✔ Status-based access control
- * ✔ Stores merchant session in localStorage
- * ✔ Enables GPS Location tab only after approval
- * ✔ Mobile-first Home navigation (UX)
+ * ✔ Stores merchant session
+ * ✔ Consistent UI with Customer Login
+ * ✔ Oshiro logo added (PUBLIC ASSET)
  * =========================================================
  */
 
 export default function MerchantLogin() {
   const navigate = useNavigate();
 
-  /* ======================
-     STATE
-  ====================== */
   const [mobile, setMobile] = useState("+91");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   /* ======================
-     MOBILE HANDLER (+91 LOCK)
+     MOBILE HANDLER
   ====================== */
   const handleMobileChange = (e) => {
     let value = e.target.value;
 
-    // Always keep +91
     if (!value.startsWith("+91")) {
       value = "+91";
     }
 
-    // Digits only after +91
     value = "+91" + value.slice(3).replace(/\D/g, "");
 
-    // Limit to +91 + 10 digits
     if (value.length > 13) {
       value = value.slice(0, 13);
     }
@@ -48,7 +42,7 @@ export default function MerchantLogin() {
   };
 
   /* ======================
-     LOGIN
+     LOGIN HANDLER
   ====================== */
   const login = async () => {
     setError("");
@@ -58,11 +52,10 @@ export default function MerchantLogin() {
       return;
     }
 
-    const plainMobile = mobile.slice(3); // remove +91
+    const plainMobile = mobile.slice(3);
 
     try {
       setLoading(true);
-
       const merchant = await getMerchantByMobile(plainMobile);
 
       if (!merchant) {
@@ -85,14 +78,11 @@ export default function MerchantLogin() {
         return;
       }
 
-      /* ======================
-         STORE SESSION
-      ====================== */
       localStorage.setItem(
         "merchant",
         JSON.stringify({
           id: merchant.id,
-          mobile: mobile, // with +91
+          mobile,
           name: merchant.shopName || "",
           status: merchant.status,
           role: "merchant",
@@ -101,7 +91,7 @@ export default function MerchantLogin() {
 
       navigate("/merchant", { replace: true });
     } catch (err) {
-      console.error("Merchant login error:", err);
+      console.error(err);
       setError("Login failed. Please try again.");
     } finally {
       setLoading(false);
@@ -109,30 +99,28 @@ export default function MerchantLogin() {
   };
 
   return (
-    <div style={{ position: "relative", minHeight: "100vh" }}>
-      {/* ======================
-          HOME BUTTON (MOBILE-FIRST UX)
-      ====================== */}
+    <div style={styles.page}>
+      {/* HOME BUTTON */}
       <div
         onClick={() => navigate("/")}
-        style={{
-          position: "absolute",
-          top: 16,
-          left: 16,
-          cursor: "pointer",
-          color: "#2563eb",
-          fontSize: 14,
-          fontWeight: 500,
-        }}
+        style={styles.homeBtn}
       >
         ← Home
       </div>
 
-      {/* ======================
-          LOGIN CARD
-      ====================== */}
-      <div style={styles.box}>
-        <h2>Merchant Login</h2>
+      {/* LOGIN CARD */}
+      <div style={styles.card}>
+        {/* LOGO */}
+        <img
+          src="/logo/oshiro-logo-compact-3.png"
+          alt="Oshiro"
+          style={styles.logo}
+        />
+
+        <h2 style={styles.title}>Merchant Login</h2>
+        <p style={styles.subtitle}>
+          Login to manage your shop & offers
+        </p>
 
         <input
           type="tel"
@@ -143,7 +131,7 @@ export default function MerchantLogin() {
           style={styles.input}
         />
 
-        {error && <p style={styles.error}>{error}</p>}
+        {error && <div style={styles.error}>{error}</div>}
 
         <button
           onClick={login}
@@ -153,9 +141,11 @@ export default function MerchantLogin() {
           {loading ? "Checking..." : "Login"}
         </button>
 
-        <p style={{ marginTop: 10 }}>
+        <p style={styles.register}>
           New merchant?{" "}
-          <Link to="/merchant/register">Register</Link>
+          <Link to="/merchant/register" style={styles.link}>
+            Register
+          </Link>
         </p>
       </div>
     </div>
@@ -166,23 +156,96 @@ export default function MerchantLogin() {
    STYLES (MOBILE-FIRST)
 ====================== */
 const styles = {
-  box: {
-    maxWidth: 360,
-    margin: "120px auto",
-    textAlign: "center",
+  page: {
+    minHeight: "100vh",
+    background: "linear-gradient(180deg, #f8fafc, #eef2ff)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+    position: "relative",
   },
-  input: {
-    width: "100%",
-    padding: 10,
-    marginBottom: 10,
-    fontSize: 16,
-  },
-  button: {
-    width: "100%",
-    padding: 10,
+
+  homeBtn: {
+    position: "absolute",
+    top: 20,
+    left: 16,
+    padding: "6px 14px",
+    borderRadius: 20,
+    background: "#f1f5f9",
+    color: "#2563eb",
+    fontSize: 14,
+    fontWeight: 500,
     cursor: "pointer",
   },
+
+  card: {
+    width: "100%",
+    maxWidth: 360,
+    padding: 28,
+    borderRadius: 16,
+    background: "#ffffff",
+    textAlign: "center",
+    boxShadow: "0 16px 32px rgba(0, 0, 0, 0.1)",
+  },
+
+  logo: {
+    height: 56,
+    width: "auto",
+    marginBottom: 24,
+  },
+
+  title: {
+    fontSize: 22,
+    fontWeight: 600,
+    marginBottom: 6,
+  },
+
+  subtitle: {
+    fontSize: 14,
+    color: "#6b7280",
+    marginBottom: 20,
+  },
+
+  input: {
+    width: "100%",
+    height: 48,
+    padding: "0 14px",
+    fontSize: 16,
+    borderRadius: 10,
+    border: "1px solid #d1d5db",
+    outline: "none",
+  },
+
   error: {
-    color: "red",
+    marginTop: 10,
+    fontSize: 14,
+    color: "#dc2626",
+  },
+
+  button: {
+    width: "100%",
+    height: 48,
+    marginTop: 24,
+    borderRadius: 10,
+    border: "none",
+    background: "linear-gradient(135deg, #2563eb, #1e40af)",
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: 600,
+    cursor: "pointer",
+    boxShadow: "0 6px 14px rgba(37, 99, 235, 0.35)",
+  },
+
+  register: {
+    marginTop: 16,
+    fontSize: 14,
+    color: "#374151",
+  },
+
+  link: {
+    color: "#2563eb",
+    fontWeight: 500,
+    textDecoration: "none",
   },
 };
