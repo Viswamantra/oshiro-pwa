@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import oshiroLogo from "../../assets/logo/oshiro-logo-icon.png";
 
 /**
  * =========================================================
@@ -12,34 +11,24 @@ import oshiroLogo from "../../assets/logo/oshiro-logo-icon.png";
  * ✔ Stores customer_mobile in localStorage
  * ✔ Compatible with ProtectedRoute.jsx
  * ✔ Includes Home navigation (UX improvement)
- * ✔ Oshiro logo added
+ * ✔ Oshiro logo added (PUBLIC ASSET)
  * =========================================================
  */
 
 export default function CustomerLogin() {
   const navigate = useNavigate();
 
-  /* ======================
-     STATE
-  ====================== */
   const [mobile, setMobile] = useState("+91");
   const [error, setError] = useState("");
 
-  /* ======================
-     MOBILE INPUT HANDLER
-  ====================== */
   const handleMobileChange = (e) => {
     let value = e.target.value;
 
-    // Always keep +91
     if (!value.startsWith("+91")) {
       value = "+91";
     }
 
-    // Digits after +91 only
     let digits = value.slice(3).replace(/\D/g, "");
-
-    // Limit to 10 digits
     if (digits.length > 10) {
       digits = digits.slice(0, 10);
     }
@@ -47,45 +36,28 @@ export default function CustomerLogin() {
     setMobile("+91" + digits);
   };
 
-  /* ======================
-     LOCK CURSOR AFTER +91
-  ====================== */
   const lockCursor = (e) => {
     if (e.target.selectionStart < 3) {
       e.target.setSelectionRange(3, 3);
     }
   };
 
-  /* ======================
-     LOGIN HANDLER
-  ====================== */
   const handleLogin = () => {
     setError("");
 
-    // +91 + 10 digits = 13 chars
     if (mobile.length !== 13) {
       setError("Enter valid mobile number (+91XXXXXXXXXX)");
       return;
     }
 
-    const customerMobile = mobile.slice(3); // remove +91
-
-    console.log("✅ Customer logged in:", customerMobile);
-
-    /* ======================
-       SINGLE SOURCE OF TRUTH
-       (USED BY ProtectedRoute)
-    ====================== */
+    const customerMobile = mobile.slice(3);
     localStorage.setItem("customer_mobile", customerMobile);
-
     navigate("/customer", { replace: true });
   };
 
   return (
     <div style={{ position: "relative", minHeight: "100vh" }}>
-      {/* ======================
-          HOME BUTTON (UX)
-      ====================== */}
+      {/* HOME BUTTON */}
       <div
         onClick={() => navigate("/")}
         style={{
@@ -101,13 +73,11 @@ export default function CustomerLogin() {
         ← Home
       </div>
 
-      {/* ======================
-          LOGIN CARD
-      ====================== */}
+      {/* LOGIN CARD */}
       <div style={styles.container}>
-        {/* LOGO */}
+        {/* LOGO (FROM PUBLIC) */}
         <img
-          src={oshiroLogo}
+          src="/logo/oshiro-logo-icon.png"
           alt="Oshiro"
           style={styles.logo}
         />
@@ -135,9 +105,6 @@ export default function CustomerLogin() {
   );
 }
 
-/* ======================
-   STYLES
-====================== */
 const styles = {
   container: {
     padding: 30,
@@ -149,7 +116,7 @@ const styles = {
     textAlign: "center",
   },
   logo: {
-    height: 56,        // 👈 Recommended for login screen
+    height: 56,
     width: "auto",
     marginBottom: 20,
     display: "block",
