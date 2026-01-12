@@ -7,24 +7,27 @@ import HoverActions from "../../components/HoverActions";
  * MERCHANT CARD – CUSTOMER MODULE (MOBILE-FIRST)
  * ---------------------------------------------------------
  * ✔ Tap card → open merchant details
- * ✔ Icons still work (call / whatsapp / map)
- * ✔ Mobile-first (no hover dependency)
+ * ✔ Icons work independently (call / whatsapp / map)
+ * ✔ No event bubbling issues
+ * ✔ URL-based navigation (no state loss)
  * =========================================================
  */
 
 export default function MerchantCard({ merchant }) {
   const navigate = useNavigate();
 
+  // 🔑 Use ID-based routing instead of state
   const openDetails = () => {
-    navigate("/customer/merchant", {
-      state: { merchant },
-    });
+    navigate(`/customer/merchant/${merchant.id}`);
   };
 
   return (
     <div
       className="merchant-card"
+      role="button"
+      tabIndex={0}
       onClick={openDetails}
+      onKeyDown={(e) => e.key === "Enter" && openDetails()}
       style={{
         display: "flex",
         justifyContent: "space-between",
@@ -49,11 +52,12 @@ export default function MerchantCard({ merchant }) {
 
       {/* ======================
           ACTIONS
-          (prevent card click)
+          (STOP EVENT BUBBLING)
       ====================== */}
       <div
         className="merchant-actions"
         onClick={(e) => e.stopPropagation()}
+        role="presentation"
       >
         <HoverActions
           mobile={merchant.mobile}
