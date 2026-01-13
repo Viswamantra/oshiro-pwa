@@ -5,17 +5,20 @@ import {
   signInAnonymously,
   onAuthStateChanged,
 } from "firebase/auth";
+import { getMessaging, isSupported } from "firebase/messaging";
 
 /* ======================
    FIREBASE CONFIG
+   (VITE + VERCEL SAFE)
 ====================== */
 const firebaseConfig = {
-  apiKey: "AIzaSyBekN6ULTaosrBQzv-JvBlnMcCOMXZ-_JU",
-  authDomain: "oshiro-app.firebaseapp.com",
-  projectId: "oshiro-app",
-  storageBucket: "oshiro-app.appspot.com",
-  messagingSenderId: "1066886336420",
-  appId: "1:1066886336420:web:458379909954c206917b31",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId:
+    import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
 /* ======================
@@ -31,6 +34,25 @@ const app =
 ====================== */
 export const db = getFirestore(app);
 export const auth = getAuth(app);
+
+/**
+ * Messaging is NOT supported on all browsers
+ * (e.g., Safari iOS)
+ */
+export let messaging = null;
+
+isSupported()
+  .then((supported) => {
+    if (supported) {
+      messaging = getMessaging(app);
+      console.log("✅ Firebase Messaging supported");
+    } else {
+      console.warn(
+        "⚠️ Firebase Messaging not supported on this browser"
+      );
+    }
+  })
+  .catch(console.error);
 
 /* ======================
    DEV AUTO AUTH
