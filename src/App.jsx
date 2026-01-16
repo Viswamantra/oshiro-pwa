@@ -64,14 +64,10 @@ export default function App() {
       <Route path="/admin/login" element={<AdminLogin />} />
       <Route path="/customer/login" element={<CustomerLogin />} />
       <Route path="/merchant/login" element={<MerchantLogin />} />
-      <Route
-        path="/merchant/register"
-        element={<MerchantRegister />}
-      />
+      <Route path="/merchant/register" element={<MerchantRegister />} />
 
       {/* ======================
           CUSTOMER NOTIFICATION PERMISSION
-          (ONE-TIME UX SCREEN)
       ====================== */}
       <Route
         path="/customer/notifications"
@@ -92,17 +88,11 @@ export default function App() {
         <Route index element={<Dashboard />} />
         <Route path="customers" element={<Customers />} />
         <Route path="merchants" element={<Merchants />} />
-        <Route
-          path="merchant-approval"
-          element={<MerchantApproval />}
-        />
+        <Route path="merchant-approval" element={<MerchantApproval />} />
         <Route path="categories" element={<Categories />} />
         <Route path="offers" element={<Offers />} />
         <Route path="geo-alerts" element={<GeoAlerts />} />
-        <Route
-          path="notifications"
-          element={<Notifications />}
-        />
+        <Route path="notifications" element={<Notifications />} />
       </Route>
 
       {/* ======================
@@ -116,14 +106,16 @@ export default function App() {
           </ProtectedRoute>
         }
       >
+        {/* Customer Home */}
         <Route index element={<CustomerDashboard />} />
 
-        {/* Merchant details (opened from MerchantCard) */}
+        {/* ✅ FIXED: Merchant Details (DYNAMIC ROUTE) */}
         <Route
-          path="merchant"
+          path="merchant/:merchantId"
           element={<MerchantDetails />}
         />
 
+        {/* Nearby Offers */}
         <Route
           path="nearby-offers"
           element={<NearbyOffers />}
@@ -150,10 +142,7 @@ export default function App() {
       {/* ======================
           FALLBACK
       ====================== */}
-      <Route
-        path="*"
-        element={<Navigate to="/" replace />}
-      />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
