@@ -1,49 +1,71 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate, useParams, useLocation } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../../firebase";
 
 /**
  * =========================================================
  * MERCHANT DETAILS (CUSTOMER)
  * ---------------------------------------------------------
- * ✔ URL-based routing (no reset issues)
- * ✔ Safe fallback to navigation state
+ * ✔ URL-safe (refresh proof)
+ * ✔ Firestore fetch by ID
+ * ✔ No Home redirect bugs
  * ✔ Mobile-first UX
  * =========================================================
  */
 
 export default function MerchantDetails() {
   const navigate = useNavigate();
-  const { id } = useParams();              // 🔑 URL param
-  const { state } = useLocation();
+  const { merchantId } = useParams(); // ✅ MUST match App.jsx
+  const [merchant, setMerchant] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const [merchant, setMerchant] = useState(state?.merchant || null);
-
-  /**
-   * If user refreshed or landed directly on URL,
-   * fetch merchant using ID
-   */
+  /* ======================
+     FETCH MERCHANT
+  ====================== */
   useEffect(() => {
-    if (!merchant && id) {
-      // ⛳ Replace this with Firestore fetch later
-      console.warn("Merchant state missing, fetch by ID:", id);
+    let mounted = true;
 
-      // Example placeholder (safe UX)
-      // fetchMerchantById(id).then(setMerchant);
+    async function fetchMerchant() {
+      try {
+        const ref = doc(db, "merchants", merchantId);
+        const snap = await getDoc(ref);
+
+        if (snap.exists() && mounted) {
+          setMerchant(snap.data());
+        }
+      } catch (err) {
+        console.error("Failed to load merchant:", err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
     }
-  }, [id, merchant]);
+
+    if (merchantId) fetchMerchant();
+
+    return () => {
+      mounted = false;
+    };
+  }, [merchantId]);
+
+  /* ======================
+     UI STATES
+  ====================== */
+  if (loading) {
+    return (
+      <div style={{ padding: 20 }}>
+        <p>Loading merchant details…</p>
+      </div>
+    );
+  }
 
   if (!merchant) {
     return (
       <div style={{ padding: 20 }}>
-        <p>Loading merchant details…</p>
+        <p>Merchant not found.</p>
         <div
           onClick={() => navigate("/customer")}
-          style={{
-            marginTop: 12,
-            color: "#2563eb",
-            cursor: "pointer",
-            fontSize: 14,
-          }}
+          style={styles.back}
         >
           ← Back to merchants
         </div>
@@ -51,26 +73,24 @@ export default function MerchantDetails() {
     );
   }
 
+  /* ======================
+     DATA
+  ====================== */
   const phone = `+91${merchant.mobile}`;
   const whatsappLink = `https://wa.me/91${merchant.mobile}`;
   const mapLink = `https://www.google.com/maps?q=${merchant.lat},${merchant.lng}`;
 
+  /* ======================
+     RENDER
+  ====================== */
   return (
     <div style={{ padding: 16 }}>
       {/* BACK */}
-      <div
-        onClick={() => navigate(-1)}
-        style={{
-          marginBottom: 12,
-          color: "#2563eb",
-          cursor: "pointer",
-          fontSize: 14,
-        }}
-      >
+      <div onClick={() => navigate(-1)} style={styles.back}>
         ← Back
       </div>
 
-      {/* MERCHANT INFO */}
+      {/* INFO */}
       <h2>{merchant.shopName}</h2>
       <p style={{ color: "#555" }}>{merchant.category}</p>
 
@@ -82,7 +102,7 @@ export default function MerchantDetails() {
         </div>
       )}
 
-      {/* ACTION BUTTONS */}
+      {/* ACTIONS */}
       <div style={styles.actions}>
         <a href={`tel:${phone}`} style={styles.call}>
           📞 Call
@@ -99,26 +119,29 @@ export default function MerchantDetails() {
       </div>
 
       {/* MAP */}
-      <div style={styles.mapBox}>
-        <iframe
-          title="map"
-          width="100%"
-          height="200"
-          style={{ border: 0, borderRadius: 8 }}
-          loading="lazy"
-          referrerPolicy="no-referrer-when-downgrade"
-          src={`https://www.google.com/maps?q=${merchant.lat},${merchant.lng}&output=embed`}
-        />
-      </div>
+      {merchant.lat && merchant.lng && (
+        <>
+          <div style={styles.mapBox}>
+            <iframe
+              title="map"
+              width="100%"
+              height="200"
+              style={{ border: 0, borderRadius: 8 }}
+              loading="lazy"
+              src={`https://www.google.com/maps?q=${merchant.lat},${merchant.lng}&output=embed`}
+            />
+          </div>
 
-      <a
-        href={mapLink}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={styles.mapLink}
-      >
-        🗺️ Open in Google Maps
-      </a>
+          <a
+            href={mapLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={styles.mapLink}
+          >
+            🗺️ Open in Google Maps
+          </a>
+        </>
+      )}
     </div>
   );
 }
@@ -127,6 +150,12 @@ export default function MerchantDetails() {
    STYLES
 ====================== */
 const styles = {
+  back: {
+    marginBottom: 12,
+    color: "#2563eb",
+    cursor: "pointer",
+    fontSize: 14,
+  },
   card: {
     marginTop: 16,
     padding: 14,
