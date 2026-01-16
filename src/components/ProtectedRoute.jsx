@@ -3,11 +3,12 @@ import { Navigate, useLocation } from "react-router-dom";
 
 /**
  * =========================================================
- * PROTECTED ROUTE – STABLE VERSION
+ * PROTECTED ROUTE – FINAL STABLE VERSION
  * ---------------------------------------------------------
- * ✔ No history corruption
+ * ✔ Deep-link safe (merchant details, offers, etc.)
+ * ✔ No redirect loops
  * ✔ Nested routes safe
- * ✔ No auto-jump to parent
+ * ✔ Preserves intended destination
  * =========================================================
  */
 
@@ -19,11 +20,21 @@ export default function ProtectedRoute({
 }) {
   const location = useLocation();
 
+  /* ======================
+     AUTH STATE
+  ====================== */
   const isAdmin = localStorage.getItem("admin") === "true";
+
   const customerMobile = localStorage.getItem("customer_mobile");
 
-  const merchantRaw = localStorage.getItem("merchant");
-  const merchant = merchantRaw ? JSON.parse(merchantRaw) : null;
+  let merchant = null;
+  try {
+    merchant = JSON.parse(
+      localStorage.getItem("merchant") || "null"
+    );
+  } catch {
+    merchant = null;
+  }
 
   /* ======================
      ADMIN ROUTES
@@ -32,6 +43,7 @@ export default function ProtectedRoute({
     return (
       <Navigate
         to="/admin/login"
+        replace
         state={{ from: location }}
       />
     );
@@ -44,6 +56,7 @@ export default function ProtectedRoute({
     return (
       <Navigate
         to="/customer/login"
+        replace
         state={{ from: location }}
       />
     );
@@ -52,14 +65,21 @@ export default function ProtectedRoute({
   /* ======================
      MERCHANT ROUTES
   ====================== */
-  if (merchantOnly && (!merchant || merchant.role !== "merchant")) {
+  if (
+    merchantOnly &&
+    (!merchant || merchant.role !== "merchant")
+  ) {
     return (
       <Navigate
         to="/merchant/login"
+        replace
         state={{ from: location }}
       />
     );
   }
 
+  /* ======================
+     ACCESS GRANTED
+  ====================== */
   return children;
 }
