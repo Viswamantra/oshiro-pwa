@@ -5,7 +5,6 @@ import MerchantCard from "./MerchantCard";
 
 /* =========================================================
    CATEGORY ID → CATEGORY NAME MAP
-   (Matches your EXISTING merchant data)
 ========================================================= */
 const CATEGORY_ID_TO_NAME = {
   EHuriAgh3jlwpZhvGi2N: "Food",
@@ -19,7 +18,7 @@ const CATEGORY_ID_TO_NAME = {
 };
 
 /* =========================================================
-   DISTANCE (METERS)
+   DISTANCE CALCULATION (METERS)
 ========================================================= */
 function getDistance(lat1, lon1, lat2, lon2) {
   const R = 6371000;
@@ -49,52 +48,61 @@ export default function MerchantList({
   useEffect(() => {
     let mounted = true;
 
-    async function load() {
-      setLoading(true);
+    async function loadMerchants() {
+      try {
+        setLoading(true);
 
-      // ✅ FETCH ONLY APPROVED MERCHANTS
-      const q = query(
-        collection(db, "merchants"),
-        where("status", "==", "approved")
-      );
-
-      const snap = await getDocs(q);
-
-      let list = snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
-
-      // ✅ CATEGORY FILTER (ID → NAME)
-      if (category) {
-        const categoryName = CATEGORY_ID_TO_NAME[category];
-        list = list.filter(
-          (m) => m.category === categoryName
-        );
-      }
-
-      // ✅ DISTANCE FILTER
-      list = list.filter((m) => {
-        if (!m.lat || !m.lng) return false;
-
-        const d = getDistance(
-          userLat,
-          userLng,
-          Number(m.lat),
-          Number(m.lng)
+        // ✅ Only approved merchants
+        const q = query(
+          collection(db, "merchants"),
+          where("status", "==", "approved")
         );
 
-        return d <= distance;
-      });
+        const snap = await getDocs(q);
 
-      if (mounted) {
-        setMerchants(list);
-        setLoading(false);
+        let list = snap.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+
+        // ✅ Category filter (ID → Name)
+        if (category && CATEGORY_ID_TO_NAME[category]) {
+          const categoryName = CATEGORY_ID_TO_NAME[category];
+          list = list.filter(
+            (m) => m.category === categoryName
+          );
+        }
+
+        // ✅ Distance filter
+        if (userLat && userLng && distance) {
+          list = list.filter((m) => {
+            if (!m.lat || !m.lng) return false;
+
+            const d = getDistance(
+              Number(userLat),
+              Number(userLng),
+              Number(m.lat),
+              Number(m.lng)
+            );
+
+            return d <= distance;
+          });
+        }
+
+        if (mounted) {
+          setMerchants(list);
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error("Failed to load merchants:", err);
+        if (mounted) setLoading(false);
       }
     }
 
-    load();
-    return () => (mounted = false);
+    loadMerchants();
+    return () => {
+      mounted = false;
+    };
   }, [category, distance, userLat, userLng]);
 
   /* ======================
@@ -107,9 +115,12 @@ export default function MerchantList({
      RENDER
   ====================== */
   return (
-    <div>
-      {merchants.map((m) => (
-        <MerchantCard key={m.id} merchant={m} />
+    <div className="merchant-list">
+      {merchants.map((merchant) => (
+        <MerchantCard
+          key={merchant.id}
+          merchant={merchant}
+        />
       ))}
     </div>
   );
