@@ -155,7 +155,7 @@ export default function Customers() {
      DELETE
   ====================== */
   const deleteCustomer = async (id) => {
-    if (!window.confirm("Delete customer?")) return;
+    if (!window.confirm("Delete customer permanently?")) return;
 
     try {
       await deleteDoc(doc(db, "customers", id));
@@ -179,17 +179,49 @@ export default function Customers() {
   };
 
   return (
-    <div style={{ padding: 20 }}>
-      <h2>Customers</h2>
+    <div style={{ padding: 24 }}>
+      <h2 style={{ fontSize: 22, marginBottom: 4 }}>Customers</h2>
+      <p style={{ color: "#6B7280", marginBottom: 20 }}>
+        Manage registered customers
+      </p>
 
       {/* SEARCH */}
-      <div style={{ marginBottom: 15 }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 12,
+          padding: 16,
+          background: "#F9FAFB",
+          border: "1px solid #E5E7EB",
+          borderRadius: 14,
+          marginBottom: 20,
+          maxWidth: 520
+        }}
+      >
         <input
           placeholder="Search by mobile"
           value={search}
           onChange={e => setSearch(e.target.value)}
+          style={{
+            flex: 1,
+            padding: "12px 14px",
+            borderRadius: 10,
+            border: "1px solid #D1D5DB"
+          }}
         />
-        <button onClick={searchCustomers}>Search</button>
+        <button
+          onClick={searchCustomers}
+          style={{
+            background: "#2563EB",
+            color: "#fff",
+            padding: "12px 18px",
+            borderRadius: 10,
+            border: "none",
+            fontWeight: 600
+          }}
+        >
+          Search
+        </button>
         <button
           onClick={() => {
             setSearch("");
@@ -197,76 +229,149 @@ export default function Customers() {
             setLastDoc(null);
             loadCustomers(true);
           }}
+          style={{
+            background: "#fff",
+            padding: "12px 16px",
+            borderRadius: 10,
+            border: "1px solid #D1D5DB"
+          }}
         >
           Reset
         </button>
       </div>
 
-      {/* FORM */}
-      <div style={{ marginBottom: 20 }}>
-        <input
-          placeholder="Name"
-          value={form.name}
-          onChange={e =>
-            setForm({ ...form, name: e.target.value })
-          }
-        />
-        <input
-          placeholder="Mobile"
-          value={form.mobile}
-          onChange={e =>
-            setForm({ ...form, mobile: e.target.value })
-          }
-        />
-        <input
-          placeholder="City"
-          value={form.city}
-          onChange={e =>
-            setForm({ ...form, city: e.target.value })
-          }
-        />
-        <button onClick={saveCustomer}>
-          {form.id ? "Update" : "Add"} Customer
-        </button>
+      {/* ADD / UPDATE FORM */}
+      <div
+        style={{
+          background: "#fff",
+          border: "1px solid #E5E7EB",
+          borderRadius: 14,
+          padding: 16,
+          marginBottom: 24,
+          maxWidth: 720
+        }}
+      >
+        <div style={{ display: "flex", gap: 12 }}>
+          <input
+            placeholder="Name"
+            value={form.name}
+            onChange={e =>
+              setForm({ ...form, name: e.target.value })
+            }
+            style={{ flex: 1, padding: 10 }}
+          />
+          <input
+            placeholder="Mobile"
+            value={form.mobile}
+            onChange={e =>
+              setForm({ ...form, mobile: e.target.value })
+            }
+            style={{ flex: 1, padding: 10 }}
+          />
+          <input
+            placeholder="City"
+            value={form.city}
+            onChange={e =>
+              setForm({ ...form, city: e.target.value })
+            }
+            style={{ flex: 1, padding: 10 }}
+          />
+          <button
+            onClick={saveCustomer}
+            style={{
+              background: "#2563EB",
+              color: "#fff",
+              padding: "10px 18px",
+              borderRadius: 10,
+              border: "none",
+              fontWeight: 600
+            }}
+          >
+            {form.id ? "Update" : "Add"} Customer
+          </button>
+        </div>
       </div>
 
       {/* TABLE */}
-      <table border="1" width="100%" cellPadding="8">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Mobile</th>
-            <th>City</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {customers.map(c => (
-            <tr key={c.id}>
-              <td>{c.name}</td>
-              <td>{c.mobile}</td>
-              <td>{c.city}</td>
-              <td>
-                <button onClick={() => editCustomer(c)}>
-                  Edit
-                </button>
-                <button onClick={() => deleteCustomer(c.id)}>
-                  Delete
-                </button>
-              </td>
+      <div
+        style={{
+          background: "#fff",
+          borderRadius: 14,
+          border: "1px solid #E5E7EB",
+          overflow: "hidden"
+        }}
+      >
+        <table width="100%" cellPadding="14">
+          <thead style={{ background: "#F9FAFB" }}>
+            <tr>
+              <th align="left">Name</th>
+              <th align="left">Mobile</th>
+              <th align="left">City</th>
+              <th align="left">Actions</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {customers.map(c => (
+              <tr key={c.id} style={{ borderTop: "1px solid #E5E7EB" }}>
+                <td>{c.name || "-"}</td>
+                <td>{c.mobile}</td>
+                <td>{c.city || "-"}</td>
+                <td>
+                  <button
+                    onClick={() => editCustomer(c)}
+                    style={{
+                      marginRight: 8,
+                      padding: "6px 12px",
+                      borderRadius: 8,
+                      border: "1px solid #D1D5DB",
+                      background: "#fff"
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => deleteCustomer(c.id)}
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: 8,
+                      border: "1px solid #FCA5A5",
+                      background: "#fff",
+                      color: "#DC2626"
+                    }}
+                  >
+                    🗑 Delete
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
 
-      {/* PAGINATION */}
+        {customers.length === 0 && (
+          <div style={{ padding: 24, textAlign: "center", color: "#6B7280" }}>
+            No customers found.
+          </div>
+        )}
+      </div>
+
+      {/* LOAD MORE */}
       {hasMore && (
-        <button
-          disabled={loading}
-          onClick={() => loadCustomers(false)}
-        >
-          {loading ? "Loading..." : "Load More"}
-        </button>
+        <div style={{ textAlign: "center", marginTop: 28 }}>
+          <button
+            disabled={loading}
+            onClick={() => loadCustomers(false)}
+            style={{
+              padding: "12px 28px",
+              borderRadius: 999,
+              background: "#2563EB",
+              color: "#fff",
+              border: "none",
+              fontWeight: 600
+            }}
+          >
+            {loading ? "Loading…" : "Load More"}
+          </button>
+        </div>
       )}
     </div>
   );
