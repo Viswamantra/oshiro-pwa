@@ -15,9 +15,6 @@ import { db } from "../../firebase";
 
 const PAGE_SIZE = 10;
 
-/* ======================
-   UI CONSTANTS
-====================== */
 const STATUS_COLORS = {
   pending: "#F59E0B",
   approved: "#16A34A",
@@ -38,7 +35,6 @@ export default function Merchants() {
   const [merchants, setMerchants] = useState([]);
   const [status, setStatus] = useState("pending");
   const [search, setSearch] = useState("");
-
   const [lastDoc, setLastDoc] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -74,9 +70,6 @@ export default function Merchants() {
       setMerchants(reset ? data : [...merchants, ...data]);
       setLastDoc(snap.docs[snap.docs.length - 1] || null);
       setHasMore(snap.docs.length === PAGE_SIZE);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to load merchants");
     } finally {
       setLoading(false);
     }
@@ -94,40 +87,39 @@ export default function Merchants() {
   ====================== */
   const searchMerchants = async () => {
     if (!search.trim()) {
-      setMerchants([]);
-      setLastDoc(null);
-      loadMerchants(true);
+      resetSearch();
       return;
     }
 
-    try {
-      setLoading(true);
+    setLoading(true);
 
-      const q = query(
-        collection(db, "merchants"),
-        orderBy("mobile"),
-        limit(PAGE_SIZE)
+    const q = query(
+      collection(db, "merchants"),
+      orderBy("mobile"),
+      limit(PAGE_SIZE)
+    );
+
+    const snap = await getDocs(q);
+
+    const data = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter(
+        (m) =>
+          m.status === status &&
+          m.mobile &&
+          m.mobile.startsWith(search)
       );
 
-      const snap = await getDocs(q);
+    setMerchants(data);
+    setHasMore(false);
+    setLoading(false);
+  };
 
-      const data = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() }))
-        .filter(
-          (m) =>
-            m.status === status &&
-            m.mobile &&
-            m.mobile.startsWith(search)
-        );
-
-      setMerchants(data);
-      setHasMore(false);
-    } catch (err) {
-      console.error(err);
-      alert("Search failed");
-    } finally {
-      setLoading(false);
-    }
+  const resetSearch = () => {
+    setSearch("");
+    setMerchants([]);
+    setLastDoc(null);
+    loadMerchants(true);
   };
 
   /* ======================
@@ -160,10 +152,7 @@ export default function Merchants() {
 
   return (
     <div style={{ padding: 24 }}>
-      {/* HEADER */}
-      <h2 style={{ fontSize: 20, marginBottom: 6 }}>
-        Merchants
-      </h2>
+      <h2 style={{ fontSize: 20 }}>Merchants</h2>
       <p style={{ color: "#6B7280", marginBottom: 20 }}>
         Review and manage merchant onboarding
       </p>
@@ -181,77 +170,89 @@ export default function Merchants() {
         ))}
       </div>
 
-      {/* SEARCH BAR */}
+      {/* SEARCH BAR – REDESIGNED */}
       <div
         style={{
           display: "flex",
           gap: 10,
+          padding: 16,
+          background: "#F9FAFB",
+          borderRadius: 12,
+          border: "1px solid #E5E7EB",
           marginBottom: 20,
           alignItems: "center",
+          maxWidth: 520,
         }}
       >
         <input
-          placeholder="Search by mobile number"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by mobile number"
           style={{
-            padding: 10,
-            width: 260,
+            flex: 1,
+            padding: "10px 12px",
             borderRadius: 8,
-            border: "1px solid #E5E7EB",
+            border: "1px solid #D1D5DB",
           }}
         />
-        <button onClick={searchMerchants}>Search</button>
+
         <button
-          onClick={() => {
-            setSearch("");
-            setMerchants([]);
-            setLastDoc(null);
-            loadMerchants(true);
+          onClick={searchMerchants}
+          style={{
+            background: "#2563EB",
+            color: "#fff",
+            padding: "10px 16px",
+            borderRadius: 8,
+            border: "none",
+            fontWeight: 500,
+          }}
+        >
+          Search
+        </button>
+
+        <button
+          onClick={resetSearch}
+          style={{
+            background: "#fff",
+            color: "#374151",
+            padding: "10px 14px",
+            borderRadius: 8,
+            border: "1px solid #D1D5DB",
           }}
         >
           Reset
         </button>
       </div>
 
-      {/* TABLE CARD */}
+      {/* TABLE */}
       <div
         style={{
           background: "#fff",
-          border: "1px solid #E5E7EB",
           borderRadius: 12,
+          border: "1px solid #E5E7EB",
           overflow: "hidden",
         }}
       >
         <table width="100%" cellPadding="14">
           <thead style={{ background: "#F9FAFB" }}>
-            <tr style={{ textAlign: "left", fontSize: 14 }}>
-              <th>Merchant</th>
-              <th>Mobile</th>
-              <th>Status</th>
-              <th style={{ width: 240 }}>Actions</th>
+            <tr>
+              <th align="left">Merchant</th>
+              <th align="left">Mobile</th>
+              <th align="left">Status</th>
+              <th align="left">Actions</th>
             </tr>
           </thead>
-
           <tbody>
             {merchants.map((m) => (
-              <tr
-                key={m.id}
-                style={{ borderTop: "1px solid #E5E7EB" }}
-              >
-                <td>
-                  <strong>{m.name || "—"}</strong>
-                </td>
-
+              <tr key={m.id} style={{ borderTop: "1px solid #E5E7EB" }}>
+                <td><strong>{m.name || "—"}</strong></td>
                 <td>{m.mobile}</td>
-
                 <td>
                   <span
                     style={{
                       padding: "4px 10px",
                       borderRadius: 999,
-                      background:
-                        STATUS_COLORS[m.status] + "22",
+                      background: STATUS_COLORS[m.status] + "22",
                       color: STATUS_COLORS[m.status],
                       fontSize: 12,
                       fontWeight: 600,
@@ -260,19 +261,18 @@ export default function Merchants() {
                     {m.status}
                   </span>
                 </td>
-
                 <td>
                   {status === "pending" ? (
                     <>
                       <button
                         onClick={() => approveMerchant(m.id)}
                         style={{
-                          marginRight: 8,
                           background: "#16A34A",
                           color: "#fff",
                           padding: "6px 14px",
                           borderRadius: 6,
                           border: "none",
+                          marginRight: 8,
                         }}
                       >
                         Approve
@@ -309,24 +309,24 @@ export default function Merchants() {
             ))}
           </tbody>
         </table>
-
-        {merchants.length === 0 && !loading && (
-          <div
-            style={{
-              padding: 24,
-              textAlign: "center",
-              color: "#6B7280",
-            }}
-          >
-            No merchants found
-          </div>
-        )}
       </div>
 
-      {/* PAGINATION */}
+      {/* LOAD MORE – REDESIGNED */}
       {hasMore && (
-        <div style={{ marginTop: 20 }}>
-          <button disabled={loading} onClick={() => loadMerchants(false)}>
+        <div style={{ textAlign: "center", marginTop: 24 }}>
+          <button
+            disabled={loading}
+            onClick={() => loadMerchants(false)}
+            style={{
+              padding: "10px 24px",
+              borderRadius: 999,
+              background: loading ? "#E5E7EB" : "#2563EB",
+              color: loading ? "#6B7280" : "#fff",
+              border: "none",
+              fontWeight: 500,
+              cursor: loading ? "not-allowed" : "pointer",
+            }}
+          >
             {loading ? "Loading..." : "Load More"}
           </button>
         </div>
