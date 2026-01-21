@@ -17,16 +17,10 @@ const PAGE_SIZE = 10;
 /* ======================
    UI CONSTANTS
 ====================== */
-const STATUS_COLORS = {
-  active: "#16A34A",
-  disabled: "#F59E0B",
-  expired: "#DC2626",
-};
-
-const STATUS_BG = {
-  active: "#DCFCE7",
-  disabled: "#FEF3C7",
-  expired: "#FEE2E2",
+const STATUS_META = {
+  active: { color: "#16A34A", bg: "#DCFCE7" },
+  disabled: { color: "#D97706", bg: "#FEF3C7" },
+  expired: { color: "#DC2626", bg: "#FEE2E2" },
 };
 
 export default function Offers() {
@@ -39,7 +33,7 @@ export default function Offers() {
   const [loading, setLoading] = useState(false);
 
   /* ======================
-     LOAD OFFERS (FIXED)
+     LOAD OFFERS
   ====================== */
   const loadOffers = async (reset = false) => {
     try {
@@ -67,7 +61,6 @@ export default function Offers() {
         const o = d.data();
         let computedStatus = (o.status || "active").toLowerCase();
 
-        // Auto-expire (UI level)
         if (o.validTill?.seconds) {
           const expiry = new Date(o.validTill.seconds * 1000);
           if (expiry < now) computedStatus = "expired";
@@ -87,20 +80,15 @@ export default function Offers() {
       setLastDoc(snap.docs[snap.docs.length - 1] || null);
       setHasMore(snap.docs.length === PAGE_SIZE);
     } catch (err) {
-      console.error("Load offers error:", err);
       alert("Failed to load offers");
     } finally {
       setLoading(false);
     }
   };
 
-  /* ======================
-     INITIAL LOAD
-  ====================== */
   useEffect(() => {
     setOffers([]);
     setLastDoc(null);
-    setHasMore(true);
     loadOffers(true);
     // eslint-disable-next-line
   }, []);
@@ -110,121 +98,110 @@ export default function Offers() {
   ====================== */
   const visibleOffers = offers.filter((o) => {
     if (o.status !== status) return false;
-    if (
-      search &&
-      !o.title.toLowerCase().includes(search.toLowerCase())
-    )
+    if (search && !o.title.toLowerCase().includes(search.toLowerCase()))
       return false;
     return true;
   });
 
   /* ======================
-     ENABLE / DISABLE
-     (Expired offers protected)
+     ACTIONS
   ====================== */
   const toggleOffer = async (id, currentStatus) => {
-    if (currentStatus === "expired") {
-      alert("Expired offers cannot be re-enabled.");
-      return;
-    }
+    if (currentStatus === "expired") return;
 
-    try {
-      const newStatus =
-        currentStatus === "active" ? "disabled" : "active";
+    const newStatus =
+      currentStatus === "active" ? "disabled" : "active";
 
-      await updateDoc(doc(db, "offers", id), {
-        status: newStatus,
-      });
+    await updateDoc(doc(db, "offers", id), { status: newStatus });
 
-      setOffers((prev) =>
-        prev.map((o) =>
-          o.id === id ? { ...o, status: newStatus } : o
-        )
-      );
-    } catch (err) {
-      console.error("Toggle offer error:", err);
-      alert("Failed to update offer");
-    }
+    setOffers((prev) =>
+      prev.map((o) =>
+        o.id === id ? { ...o, status: newStatus } : o
+      )
+    );
   };
 
-  /* ======================
-     DELETE
-  ====================== */
   const deleteOffer = async (id) => {
-    if (!window.confirm("Delete offer permanently?")) return;
-
-    try {
-      await deleteDoc(doc(db, "offers", id));
-      setOffers((prev) => prev.filter((o) => o.id !== id));
-    } catch (err) {
-      console.error("Delete offer error:", err);
-      alert("Failed to delete offer");
-    }
+    if (!window.confirm("Delete this offer permanently?")) return;
+    await deleteDoc(doc(db, "offers", id));
+    setOffers((prev) => prev.filter((o) => o.id !== id));
   };
 
   return (
-    <div style={{ padding: 24 }}>
-      <h2 style={{ fontSize: 22, marginBottom: 4 }}>Offers</h2>
-      <p style={{ color: "#6B7280", marginBottom: 20 }}>
-        Manage active, disabled and expired offers
-      </p>
+    <div style={{ padding: 32, maxWidth: 1200 }}>
+      {/* HEADER */}
+      <div style={{ marginBottom: 24 }}>
+        <h1 style={{ fontSize: 26, fontWeight: 700 }}>Offers</h1>
+        <p style={{ color: "#6B7280" }}>
+          Manage active, disabled and expired offers
+        </p>
+      </div>
 
-      {/* STATUS FILTER */}
-      <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+      {/* STATUS TABS */}
+      <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
         {["active", "disabled", "expired"].map((s) => (
           <button
             key={s}
             onClick={() => setStatus(s)}
             style={{
-              padding: "6px 16px",
+              padding: "8px 20px",
               borderRadius: 999,
-              border: `1px solid ${STATUS_COLORS[s]}`,
-              background: status === s ? STATUS_COLORS[s] : "#fff",
-              color: status === s ? "#fff" : STATUS_COLORS[s],
-              fontWeight: 500,
+              border:
+                status === s
+                  ? "none"
+                  : `1px solid ${STATUS_META[s].color}`,
+              background:
+                status === s ? STATUS_META[s].color : "#fff",
+              color: status === s ? "#fff" : STATUS_META[s].color,
+              fontWeight: 600,
               cursor: "pointer",
             }}
           >
-            {s.charAt(0).toUpperCase() + s.slice(1)}
+            {s.toUpperCase()}
           </button>
         ))}
       </div>
 
-      {/* SEARCH */}
+      {/* SEARCH BAR */}
       <div
         style={{
           display: "flex",
+          alignItems: "center",
           gap: 12,
-          padding: 16,
+          padding: 14,
           background: "#F9FAFB",
           border: "1px solid #E5E7EB",
-          borderRadius: 14,
-          marginBottom: 24,
-          maxWidth: 560,
+          borderRadius: 12,
+          maxWidth: 520,
+          marginBottom: 28,
         }}
       >
+        <span>🔍</span>
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by offer title"
+          placeholder="Search offers by title"
           style={{
             flex: 1,
-            padding: "12px 14px",
-            borderRadius: 10,
-            border: "1px solid #D1D5DB",
+            border: "none",
+            outline: "none",
+            background: "transparent",
           }}
         />
-        <button
-          onClick={() => setSearch("")}
-          style={{
-            background: "#fff",
-            padding: "12px 16px",
-            borderRadius: 10,
-            border: "1px solid #D1D5DB",
-          }}
-        >
-          Reset
-        </button>
+        {search && (
+          <button
+            onClick={() => setSearch("")}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#2563EB",
+              cursor: "pointer",
+              fontWeight: 600,
+            }}
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       {/* TABLE */}
@@ -236,91 +213,97 @@ export default function Offers() {
           overflow: "hidden",
         }}
       >
-        <table width="100%" cellPadding="14">
+        <table width="100%" cellPadding="16">
           <thead style={{ background: "#F9FAFB" }}>
             <tr>
               <th align="left">Title</th>
               <th align="left">Merchant</th>
               <th align="left">Category</th>
               <th align="left">Status</th>
-              <th align="left">Valid Till</th>
-              <th align="left">Actions</th>
+              <th align="right">Actions</th>
             </tr>
           </thead>
 
           <tbody>
+            {visibleOffers.length === 0 && (
+              <tr>
+                <td colSpan={5} style={{ padding: 40, textAlign: "center" }}>
+                  📭 No offers found
+                </td>
+              </tr>
+            )}
+
             {visibleOffers.map((o) => (
-              <tr key={o.id} style={{ borderTop: "1px solid #E5E7EB" }}>
-                <td><strong>{o.title}</strong></td>
+              <tr
+                key={o.id}
+                style={{
+                  borderTop: "1px solid #E5E7EB",
+                  background: "#fff",
+                }}
+              >
+                <td style={{ fontWeight: 600 }}>{o.title}</td>
                 <td>{o.merchantMobile}</td>
                 <td>{o.categoryName}</td>
                 <td>
                   <span
                     style={{
-                      padding: "4px 10px",
+                      padding: "4px 12px",
                       borderRadius: 999,
-                      background: STATUS_BG[o.status],
-                      color: STATUS_COLORS[o.status],
                       fontSize: 12,
                       fontWeight: 600,
+                      background: STATUS_META[o.status].bg,
+                      color: STATUS_META[o.status].color,
                     }}
                   >
                     {o.status}
                   </span>
                 </td>
-                <td>
-                  {o.validTill?.seconds
-                    ? new Date(o.validTill.seconds * 1000).toLocaleDateString()
-                    : "-"}
-                </td>
-                <td>
+                <td align="right">
                   <button
-                    onClick={() => toggleOffer(o.id, o.status)}
                     disabled={o.status === "expired"}
+                    onClick={() => toggleOffer(o.id, o.status)}
                     style={{
-                      marginRight: 8,
-                      padding: "6px 12px",
+                      padding: "6px 14px",
                       borderRadius: 8,
                       border: "1px solid #D1D5DB",
                       background: "#fff",
+                      marginRight: 8,
+                      cursor: "pointer",
                       opacity: o.status === "expired" ? 0.5 : 1,
                     }}
                   >
                     {o.status === "active" ? "Disable" : "Enable"}
                   </button>
+
                   <button
                     onClick={() => deleteOffer(o.id)}
+                    title="Delete offer"
                     style={{
-                      padding: "6px 12px",
+                      padding: "6px 10px",
                       borderRadius: 8,
                       border: "1px solid #FCA5A5",
                       background: "#fff",
                       color: "#DC2626",
+                      cursor: "pointer",
                     }}
                   >
-                    🗑 Delete
+                    🗑
                   </button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-
-        {visibleOffers.length === 0 && (
-          <div style={{ padding: 24, textAlign: "center", color: "#6B7280" }}>
-            No offers found.
-          </div>
-        )}
       </div>
 
       {/* LOAD MORE */}
       {hasMore && (
-        <div style={{ textAlign: "center", marginTop: 28 }}>
+        <div style={{ textAlign: "center", marginTop: 32 }}>
           <button
-            disabled={loading}
             onClick={() => loadOffers(false)}
+            disabled={loading}
             style={{
-              padding: "12px 28px",
+              padding: "12px 32px",
               borderRadius: 999,
               background: "#2563EB",
               color: "#fff",
