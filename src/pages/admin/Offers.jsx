@@ -8,6 +8,7 @@ import {
   updateDoc,
   deleteDoc,
   doc,
+  orderBy,
 } from "firebase/firestore";
 import { db } from "../../firebase";
 
@@ -38,32 +39,46 @@ export default function Offers() {
   const [loading, setLoading] = useState(false);
 
   /* ======================
-     LOAD OFFERS (SAFE)
+     LOAD OFFERS (FIXED)
   ====================== */
   const loadOffers = async (reset = false) => {
     try {
       setLoading(true);
 
-      let q = query(collection(db, "offers"), limit(PAGE_SIZE));
+      let q = query(
+        collection(db, "offers"),
+        orderBy("createdAt", "desc"),
+        limit(PAGE_SIZE)
+      );
 
       if (!reset && lastDoc) {
         q = query(
           collection(db, "offers"),
+          orderBy("createdAt", "desc"),
           startAfter(lastDoc),
           limit(PAGE_SIZE)
         );
       }
 
       const snap = await getDocs(q);
+      const now = new Date();
 
       const data = snap.docs.map((d) => {
         const o = d.data();
+        let computedStatus = (o.status || "active").toLowerCase();
+
+        // Auto-expire (UI level)
+        if (o.validTill?.seconds) {
+          const expiry = new Date(o.validTill.seconds * 1000);
+          if (expiry < now) computedStatus = "expired";
+        }
+
         return {
           id: d.id,
           title: o.title || "(No title)",
           merchantMobile: o.merchantMobile || "-",
           categoryName: o.categoryName || "-",
-          status: (o.status || "active").toLowerCase(),
+          status: computedStatus,
           validTill: o.validTill || null,
         };
       });
@@ -79,9 +94,13 @@ export default function Offers() {
     }
   };
 
+  /* ======================
+     INITIAL LOAD
+  ====================== */
   useEffect(() => {
     setOffers([]);
     setLastDoc(null);
+    setHasMore(true);
     loadOffers(true);
     // eslint-disable-next-line
   }, []);
@@ -101,8 +120,14 @@ export default function Offers() {
 
   /* ======================
      ENABLE / DISABLE
+     (Expired offers protected)
   ====================== */
   const toggleOffer = async (id, currentStatus) => {
+    if (currentStatus === "expired") {
+      alert("Expired offers cannot be re-enabled.");
+      return;
+    }
+
     try {
       const newStatus =
         currentStatus === "active" ? "disabled" : "active";
@@ -111,8 +136,8 @@ export default function Offers() {
         status: newStatus,
       });
 
-      setOffers(
-        offers.map((o) =>
+      setOffers((prev) =>
+        prev.map((o) =>
           o.id === id ? { ...o, status: newStatus } : o
         )
       );
@@ -130,7 +155,7 @@ export default function Offers() {
 
     try {
       await deleteDoc(doc(db, "offers", id));
-      setOffers(offers.filter((o) => o.id !== id));
+      setOffers((prev) => prev.filter((o) => o.id !== id));
     } catch (err) {
       console.error("Delete offer error:", err);
       alert("Failed to delete offer");
@@ -165,7 +190,7 @@ export default function Offers() {
         ))}
       </div>
 
-      {/* SEARCH / RESET */}
+      {/* SEARCH */}
       <div
         style={{
           display: "flex",
@@ -245,20 +270,20 @@ export default function Offers() {
                 </td>
                 <td>
                   {o.validTill?.seconds
-                    ? new Date(
-                        o.validTill.seconds * 1000
-                      ).toLocaleDateString()
+                    ? new Date(o.validTill.seconds * 1000).toLocaleDateString()
                     : "-"}
                 </td>
                 <td>
                   <button
                     onClick={() => toggleOffer(o.id, o.status)}
+                    disabled={o.status === "expired"}
                     style={{
                       marginRight: 8,
                       padding: "6px 12px",
                       borderRadius: 8,
                       border: "1px solid #D1D5DB",
                       background: "#fff",
+                      opacity: o.status === "expired" ? 0.5 : 1,
                     }}
                   >
                     {o.status === "active" ? "Disable" : "Enable"}
