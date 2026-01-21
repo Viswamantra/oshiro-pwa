@@ -21,20 +21,14 @@ const STATUS_COLORS = {
   rejected: "#DC2626",
 };
 
-const pillStyle = (active, color) => ({
-  padding: "6px 16px",
-  borderRadius: 999,
-  border: `1px solid ${color}`,
-  background: active ? color : "transparent",
-  color: active ? "#fff" : color,
-  cursor: "pointer",
-  fontWeight: 500,
-});
-
 export default function Merchants() {
+  /* ======================
+     STATE
+  ====================== */
   const [merchants, setMerchants] = useState([]);
-  const [status, setStatus] = useState("pending");
+  const [status, setStatus] = useState("approved"); // ✅ DEFAULT = APPROVED
   const [search, setSearch] = useState("");
+
   const [lastDoc, setLastDoc] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -63,6 +57,7 @@ export default function Merchants() {
 
       const snap = await getDocs(q);
 
+      // Filter by status on client side (no index)
       const data = snap.docs
         .map((d) => ({ id: d.id, ...d.data() }))
         .filter((m) => m.status === status);
@@ -70,6 +65,9 @@ export default function Merchants() {
       setMerchants(reset ? data : [...merchants, ...data]);
       setLastDoc(snap.docs[snap.docs.length - 1] || null);
       setHasMore(snap.docs.length === PAGE_SIZE);
+    } catch (err) {
+      console.error("Load merchants error:", err);
+      alert("Failed to load merchants");
     } finally {
       setLoading(false);
     }
@@ -83,7 +81,7 @@ export default function Merchants() {
   }, [status]);
 
   /* ======================
-     SEARCH
+     SEARCH (SHOP NAME / MOBILE)
   ====================== */
   const searchMerchants = async () => {
     if (!search.trim()) {
@@ -91,28 +89,36 @@ export default function Merchants() {
       return;
     }
 
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    const q = query(
-      collection(db, "merchants"),
-      orderBy("mobile"),
-      limit(PAGE_SIZE)
-    );
-
-    const snap = await getDocs(q);
-
-    const data = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() }))
-      .filter(
-        (m) =>
-          m.status === status &&
-          m.mobile &&
-          m.mobile.startsWith(search)
+      const q = query(
+        collection(db, "merchants"),
+        orderBy("mobile"),
+        limit(PAGE_SIZE)
       );
 
-    setMerchants(data);
-    setHasMore(false);
-    setLoading(false);
+      const snap = await getDocs(q);
+
+      const data = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter(
+          (m) =>
+            m.status === status &&
+            (
+              (m.mobile && m.mobile.startsWith(search)) ||
+              (m.name && m.name.toLowerCase().includes(search.toLowerCase()))
+            )
+        );
+
+      setMerchants(data);
+      setHasMore(false);
+    } catch (err) {
+      console.error("Search error:", err);
+      alert("Search failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const resetSearch = () => {
@@ -130,6 +136,7 @@ export default function Merchants() {
       status: "approved",
       approvedAt: serverTimestamp(),
     });
+
     setMerchants(merchants.filter((m) => m.id !== id));
   };
 
@@ -140,6 +147,7 @@ export default function Merchants() {
       status: "rejected",
       rejectedAt: serverTimestamp(),
     });
+
     setMerchants(merchants.filter((m) => m.id !== id));
   };
 
@@ -150,183 +158,110 @@ export default function Merchants() {
     setMerchants(merchants.filter((m) => m.id !== id));
   };
 
+  /* ======================
+     UI
+  ====================== */
   return (
     <div style={{ padding: 24 }}>
-      <h2 style={{ fontSize: 20 }}>Merchants</h2>
-      <p style={{ color: "#6B7280", marginBottom: 20 }}>
-        Review and manage merchant onboarding
+      <h2>Merchants</h2>
+      <p style={{ color: "#6B7280" }}>
+        Approved merchants are shown by default
       </p>
 
       {/* STATUS FILTER */}
       <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
-        {["pending", "approved", "rejected"].map((s) => (
+        {["approved", "pending", "rejected"].map((s) => (
           <button
             key={s}
-            style={pillStyle(status === s, STATUS_COLORS[s])}
             onClick={() => setStatus(s)}
+            style={{
+              padding: "6px 14px",
+              borderRadius: 999,
+              border: `1px solid ${STATUS_COLORS[s]}`,
+              background: status === s ? STATUS_COLORS[s] : "transparent",
+              color: status === s ? "#fff" : STATUS_COLORS[s],
+            }}
           >
             {s.charAt(0).toUpperCase() + s.slice(1)}
           </button>
         ))}
       </div>
 
-      {/* SEARCH BAR – REDESIGNED */}
-      <div
-        style={{
-          display: "flex",
-          gap: 10,
-          padding: 16,
-          background: "#F9FAFB",
-          borderRadius: 12,
-          border: "1px solid #E5E7EB",
-          marginBottom: 20,
-          alignItems: "center",
-          maxWidth: 520,
-        }}
-      >
+      {/* SEARCH */}
+      <div style={{ marginBottom: 20 }}>
         <input
+          placeholder="Search by shop name or mobile"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by mobile number"
-          style={{
-            flex: 1,
-            padding: "10px 12px",
-            borderRadius: 8,
-            border: "1px solid #D1D5DB",
-          }}
+          style={{ padding: 8, marginRight: 8 }}
         />
-
-        <button
-          onClick={searchMerchants}
-          style={{
-            background: "#2563EB",
-            color: "#fff",
-            padding: "10px 16px",
-            borderRadius: 8,
-            border: "none",
-            fontWeight: 500,
-          }}
-        >
-          Search
-        </button>
-
-        <button
-          onClick={resetSearch}
-          style={{
-            background: "#fff",
-            color: "#374151",
-            padding: "10px 14px",
-            borderRadius: 8,
-            border: "1px solid #D1D5DB",
-          }}
-        >
+        <button onClick={searchMerchants}>Search</button>
+        <button onClick={resetSearch} style={{ marginLeft: 6 }}>
           Reset
         </button>
       </div>
 
       {/* TABLE */}
-      <div
-        style={{
-          background: "#fff",
-          borderRadius: 12,
-          border: "1px solid #E5E7EB",
-          overflow: "hidden",
-        }}
-      >
-        <table width="100%" cellPadding="14">
-          <thead style={{ background: "#F9FAFB" }}>
-            <tr>
-              <th align="left">Merchant</th>
-              <th align="left">Mobile</th>
-              <th align="left">Status</th>
-              <th align="left">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {merchants.map((m) => (
-              <tr key={m.id} style={{ borderTop: "1px solid #E5E7EB" }}>
-                <td><strong>{m.name || "—"}</strong></td>
-                <td>{m.mobile}</td>
-                <td>
-                  <span
-                    style={{
-                      padding: "4px 10px",
-                      borderRadius: 999,
-                      background: STATUS_COLORS[m.status] + "22",
-                      color: STATUS_COLORS[m.status],
-                      fontSize: 12,
-                      fontWeight: 600,
-                    }}
-                  >
-                    {m.status}
-                  </span>
-                </td>
-                <td>
-                  {status === "pending" ? (
-                    <>
-                      <button
-                        onClick={() => approveMerchant(m.id)}
-                        style={{
-                          background: "#16A34A",
-                          color: "#fff",
-                          padding: "6px 14px",
-                          borderRadius: 6,
-                          border: "none",
-                          marginRight: 8,
-                        }}
-                      >
-                        Approve
-                      </button>
-                      <button
-                        onClick={() => rejectMerchant(m.id)}
-                        style={{
-                          background: "#DC2626",
-                          color: "#fff",
-                          padding: "6px 14px",
-                          borderRadius: 6,
-                          border: "none",
-                        }}
-                      >
-                        Reject
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      onClick={() => deleteMerchant(m.id)}
-                      style={{
-                        background: "#FEE2E2",
-                        color: "#991B1B",
-                        padding: "6px 14px",
-                        borderRadius: 6,
-                        border: "1px solid #FCA5A5",
-                      }}
-                    >
-                      Delete
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <table width="100%" cellPadding="10" style={{ background: "#fff" }}>
+        <thead>
+          <tr>
+            <th align="left">Shop Name</th>
+            <th align="left">Category</th>
+            <th align="left">Mobile</th>
+            <th align="left">Status</th>
+            <th align="left">Actions</th>
+          </tr>
+        </thead>
 
-      {/* LOAD MORE – REDESIGNED */}
+        <tbody>
+          {merchants.map((m) => (
+            <tr key={m.id} style={{ borderTop: "1px solid #eee" }}>
+              <td><strong>{m.name || "-"}</strong></td>
+              <td>{m.category || "-"}</td>
+              <td>{m.mobile}</td>
+              <td>
+                <span
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: 999,
+                    background: STATUS_COLORS[m.status] + "22",
+                    color: STATUS_COLORS[m.status],
+                    fontSize: 12,
+                  }}
+                >
+                  {m.status}
+                </span>
+              </td>
+              <td>
+                {status === "pending" && (
+                  <>
+                    <button onClick={() => approveMerchant(m.id)}>
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => rejectMerchant(m.id)}
+                      style={{ marginLeft: 6 }}
+                    >
+                      Reject
+                    </button>
+                  </>
+                )}
+
+                {status !== "pending" && (
+                  <button onClick={() => deleteMerchant(m.id)}>
+                    Delete
+                  </button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {/* LOAD MORE */}
       {hasMore && (
-        <div style={{ textAlign: "center", marginTop: 24 }}>
-          <button
-            disabled={loading}
-            onClick={() => loadMerchants(false)}
-            style={{
-              padding: "10px 24px",
-              borderRadius: 999,
-              background: loading ? "#E5E7EB" : "#2563EB",
-              color: loading ? "#6B7280" : "#fff",
-              border: "none",
-              fontWeight: 500,
-              cursor: loading ? "not-allowed" : "pointer",
-            }}
-          >
+        <div style={{ marginTop: 20 }}>
+          <button disabled={loading} onClick={() => loadMerchants(false)}>
             {loading ? "Loading..." : "Load More"}
           </button>
         </div>
