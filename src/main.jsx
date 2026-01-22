@@ -12,19 +12,38 @@ import "./index.css";
  * =========================================================
  * FCM SERVICE WORKER REGISTRATION
  * ---------------------------------------------------------
- * Used for Firebase Cloud Messaging (Push Notifications)
+ * ✔ Required for background push notifications
+ * ✔ Safe for Vite / React 18
+ * ✔ Prevents duplicate registrations
  * =========================================================
  */
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker
-      .register("/firebase-messaging-sw.js")
-      .then(() => {
-        console.log("FCM service worker registered");
-      })
-      .catch((err) => {
-        console.warn("FCM service worker registration failed:", err);
-      });
+  window.addEventListener("load", async () => {
+    try {
+      // Avoid duplicate registration during HMR / refresh
+      const registrations =
+        await navigator.serviceWorker.getRegistrations();
+
+      const alreadyRegistered = registrations.some(
+        (reg) =>
+          reg.active &&
+          reg.active.scriptURL.includes("firebase-messaging-sw.js")
+      );
+
+      if (!alreadyRegistered) {
+        await navigator.serviceWorker.register(
+          "/firebase-messaging-sw.js"
+        );
+        console.log("✅ FCM service worker registered");
+      } else {
+        console.log("ℹ️ FCM service worker already registered");
+      }
+    } catch (err) {
+      console.warn(
+        "❌ FCM service worker registration failed:",
+        err
+      );
+    }
   });
 }
 
