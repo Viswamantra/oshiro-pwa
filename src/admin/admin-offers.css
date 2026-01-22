@@ -1,180 +1,225 @@
 /* ===============================
-   ADMIN OFFERS – FINAL UI
+   ADMIN OFFERS – FINAL UI (FIXED)
+   OVERRIDE SAFE
+================================ */
+
+.admin-offers,
+.admin-offers * {
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+/* ===============================
+   LAYOUT
 ================================ */
 
 .admin-offers {
-  padding: 32px;
-  max-width: 1200px;
+  padding: 32px !important;
+  max-width: 1200px !important;
 }
 
-/* HEADER */
-.offers-header h1 {
-  font-size: 26px;
-  font-weight: 700;
+/* ===============================
+   HEADER
+================================ */
+
+.admin-offers .offers-header h1 {
+  font-size: 26px !important;
+  font-weight: 700 !important;
+  margin: 0;
 }
-.offers-header p {
-  color: #6b7280;
+
+.admin-offers .offers-header p {
+  color: #6b7280 !important;
   margin-top: 4px;
 }
 
-/* STATUS TABS */
-.status-tabs {
-  display: flex;
-  gap: 12px;
-  margin: 24px 0;
+/* ===============================
+   STATUS TABS (SEGMENTED)
+================================ */
+
+.admin-offers .status-tabs {
+  display: flex !important;
+  gap: 12px !important;
+  margin: 24px 0 !important;
 }
 
-.status-tab {
-  padding: 8px 22px;
-  border-radius: 999px;
-  font-weight: 600;
-  border: 1px solid transparent;
-  cursor: pointer;
-  background: white;
+.admin-offers .status-tab {
+  padding: 8px 22px !important;
+  border-radius: 999px !important;
+  font-weight: 600 !important;
+  border: 1px solid #d1d5db !important;
+  background: #ffffff !important;
+  cursor: pointer !important;
+  text-transform: uppercase;
 }
 
-.status-tab.active.active {
-  background: #16a34a;
-  color: white;
-}
-.status-tab.disabled.active {
-  background: #f59e0b;
-  color: white;
-}
-.status-tab.expired.active {
-  background: #dc2626;
-  color: white;
+.admin-offers .status-tab.active.active {
+  background: #16a34a !important;
+  color: #ffffff !important;
+  border-color: #16a34a !important;
 }
 
-.status-tab:not(.active) {
-  border-color: #d1d5db;
-  color: #374151;
+.admin-offers .status-tab.disabled.active {
+  background: #f59e0b !important;
+  color: #ffffff !important;
+  border-color: #f59e0b !important;
 }
 
-/* SEARCH */
-.search-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px;
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  max-width: 520px;
-  margin-bottom: 28px;
+.admin-offers .status-tab.expired.active {
+  background: #dc2626 !important;
+  color: #ffffff !important;
+  border-color: #dc2626 !important;
 }
 
-.search-bar input {
-  flex: 1;
+/* ===============================
+   SEARCH BAR
+================================ */
+
+.admin-offers .search-bar {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 14px !important;
+  background: #f9fafb !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 12px !important;
+  max-width: 520px !important;
+  margin-bottom: 28px !important;
+}
+
+.admin-offers .search-bar input {
+  flex: 1 !important;
   border: none !important;
-  outline: none;
-  background: transparent;
+  outline: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
-.clear-btn {
-  background: none;
-  border: none;
-  color: #2563eb;
-  font-weight: 600;
-  cursor: pointer;
+.admin-offers .clear-btn {
+  background: none !important;
+  border: none !important;
+  color: #2563eb !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
 }
 
-/* TABLE */
-.table-card {
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 14px;
-  overflow: hidden;
+/* ===============================
+   TABLE CARD
+================================ */
+
+.admin-offers .table-card {
+  background: #ffffff !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 14px !important;
+  overflow: hidden !important;
 }
 
-.table-card table {
-  width: 100%;
+.admin-offers .table-card table {
+  width: 100% !important;
   border-collapse: separate !important;
-  border-spacing: 0;
+  border-spacing: 0 !important;
 }
 
-.table-card th {
-  background: #f9fafb;
-  padding: 14px;
-  text-align: left;
-  font-weight: 600;
+.admin-offers .table-card th {
+  background: #f9fafb !important;
+  padding: 14px !important;
+  text-align: left !important;
+  font-weight: 600 !important;
+  font-size: 14px !important;
+  color: #374151 !important;
 }
 
-.table-card td {
-  padding: 14px;
-  border-top: 1px solid #e5e7eb;
+.admin-offers .table-card td {
+  padding: 14px !important;
+  border-top: 1px solid #e5e7eb !important;
+  font-size: 14px !important;
 }
 
-.table-card tr:hover {
-  background: #f9fafb;
+.admin-offers .table-card tr:hover {
+  background: #f9fafb !important;
 }
 
-.title {
-  font-weight: 600;
+.admin-offers .title {
+  font-weight: 600 !important;
 }
 
-/* STATUS PILL */
-.status-pill {
-  padding: 4px 12px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
+/* ===============================
+   STATUS PILL
+================================ */
+
+.admin-offers .status-pill {
+  padding: 4px 12px !important;
+  border-radius: 999px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
 }
 
-.status-pill.active {
-  background: #dcfce7;
-  color: #16a34a;
-}
-.status-pill.disabled {
-  background: #fef3c7;
-  color: #d97706;
-}
-.status-pill.expired {
-  background: #fee2e2;
-  color: #dc2626;
+.admin-offers .status-pill.active {
+  background: #dcfce7 !important;
+  color: #16a34a !important;
 }
 
-/* ACTIONS */
-.actions-col {
-  text-align: right;
+.admin-offers .status-pill.disabled {
+  background: #fef3c7 !important;
+  color: #d97706 !important;
 }
 
-.action-btn {
-  padding: 6px 14px;
-  border-radius: 8px;
-  border: 1px solid #d1d5db;
-  background: white;
-  margin-right: 8px;
-  cursor: pointer;
+.admin-offers .status-pill.expired {
+  background: #fee2e2 !important;
+  color: #dc2626 !important;
 }
 
-.delete-btn {
-  padding: 6px 10px;
-  border-radius: 8px;
-  border: 1px solid #fca5a5;
-  background: white;
-  color: #dc2626;
-  cursor: pointer;
+/* ===============================
+   ACTION BUTTONS
+================================ */
+
+.admin-offers .actions-col {
+  text-align: right !important;
 }
 
-/* EMPTY */
-.empty-state {
-  padding: 40px;
-  text-align: center;
-  color: #6b7280;
+.admin-offers .action-btn {
+  padding: 6px 14px !important;
+  border-radius: 8px !important;
+  border: 1px solid #d1d5db !important;
+  background: #ffffff !important;
+  margin-right: 8px !important;
+  cursor: pointer !important;
 }
 
-/* LOAD MORE */
-.load-more {
-  text-align: center;
-  margin-top: 32px;
+.admin-offers .delete-btn {
+  padding: 6px 10px !important;
+  border-radius: 8px !important;
+  border: 1px solid #fca5a5 !important;
+  background: #ffffff !important;
+  color: #dc2626 !important;
+  cursor: pointer !important;
 }
 
-.load-more button {
-  padding: 12px 32px;
-  border-radius: 999px;
-  background: #2563eb;
-  color: white;
-  border: none;
-  font-weight: 600;
+/* ===============================
+   EMPTY STATE
+================================ */
+
+.admin-offers .empty-state {
+  padding: 40px !important;
+  text-align: center !important;
+  color: #6b7280 !important;
+}
+
+/* ===============================
+   LOAD MORE
+================================ */
+
+.admin-offers .load-more {
+  text-align: center !important;
+  margin-top: 32px !important;
+}
+
+.admin-offers .load-more button {
+  padding: 12px 32px !important;
+  border-radius: 999px !important;
+  background: #2563eb !important;
+  color: #ffffff !important;
+  border: none !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
 }
