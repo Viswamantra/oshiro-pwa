@@ -11,7 +11,8 @@ import {
   orderBy,
 } from "firebase/firestore";
 import { db } from "../../firebase";
-import "./admin-offers.css";
+import "../../admin/admin-offers.css";
+
 
 const PAGE_SIZE = 10;
 
