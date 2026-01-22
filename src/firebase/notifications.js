@@ -19,7 +19,7 @@ import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 ====================== */
 
 // 🔑 Firebase Console → Cloud Messaging → Web Push Certificates
-const VAPID_KEY = "PASTE_YOUR_WEB_PUSH_VAPID_KEY_HERE";
+const VAPID_KEY = "BLQz2BIY-XXDRG0euqFN0YSxRv0v_flyYEPsZUFQc3AxOz693IuHUrdz48A7z6EPTyffkr42ND3gB0mDUm4XroM";
 
 /* ======================
    ENABLE PUSH (MERCHANT)
