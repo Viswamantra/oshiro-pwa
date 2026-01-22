@@ -32,7 +32,7 @@ export default function Merchants() {
      STATE
   ====================== */
   const [merchants, setMerchants] = useState([]);
-  const [status, setStatus] = useState("approved"); // default
+  const [status, setStatus] = useState("approved");
   const [search, setSearch] = useState("");
 
   const [lastDoc, setLastDoc] = useState(null);
@@ -105,14 +105,16 @@ export default function Merchants() {
 
       const snap = await getDocs(q);
 
+      const keyword = search.toLowerCase();
+
       const data = snap.docs
         .map((d) => ({ id: d.id, ...d.data() }))
         .filter(
           (m) =>
             m.status === status &&
             (
-              (m.name &&
-                m.name.toLowerCase().includes(search.toLowerCase())) ||
+              (m.shop_name &&
+                m.shop_name.toLowerCase().includes(keyword)) ||
               (m.mobile && m.mobile.startsWith(search))
             )
         );
@@ -193,7 +195,7 @@ export default function Merchants() {
         ))}
       </div>
 
-      {/* SEARCH / RESET */}
+      {/* SEARCH */}
       <div
         style={{
           display: "flex",
@@ -266,8 +268,14 @@ export default function Merchants() {
           <tbody>
             {merchants.map((m) => (
               <tr key={m.id} style={{ borderTop: "1px solid #E5E7EB" }}>
-                <td><strong>{m.name || "-"}</strong></td>
-                <td>{m.category || "-"}</td>
+                <td>
+                  <strong>
+                    {m.shop_name ? m.shop_name : "⚠ Missing"}
+                  </strong>
+                </td>
+                <td>
+                  {m.category ? m.category : "⚠ Missing"}
+                </td>
                 <td>{m.mobile}</td>
                 <td>
                   <span
