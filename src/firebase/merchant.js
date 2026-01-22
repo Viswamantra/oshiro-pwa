@@ -13,9 +13,8 @@ import { db } from "./index.js";
  * MERCHANT AUTH & PROFILE (MERCHANT SIDE)
  * ---------------------------------------------------------
  * ✔ Single source of truth
- * ✔ Uses NEW merchant model
- * ✔ Compatible with Admin approval flow
- * ✔ Geo + Offers ready
+ * ✔ Admin-compatible schema
+ * ✔ Customer-safe fields
  * =========================================================
  */
 
@@ -45,25 +44,25 @@ export async function getMerchantByMobile(mobile) {
 
 /* ======================
    REGISTER MERCHANT
-   - Always creates PENDING merchant
-   - Admin must approve
+   - ALWAYS creates PENDING merchant
+   - Admin reads SAME fields
 ====================== */
 export async function registerMerchant({
   mobile,
   shopName,
-  categoryId,
+  category,
   lat,
   lng,
 }) {
-  if (!mobile || !shopName || !categoryId) {
+  if (!mobile || !shopName || !category) {
     throw new Error("Missing required merchant fields");
   }
 
   const merchantData = {
     mobile,
-    shopName,                  // ✅ consistent everywhere
-    categoryId,
-    status: "pending",         // 🔒 admin approval required
+    shop_name: shopName,       // ✅ FIXED: admin-compatible
+    category: category,        // ✅ FIXED: no categoryId drift
+    status: "pending",
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
