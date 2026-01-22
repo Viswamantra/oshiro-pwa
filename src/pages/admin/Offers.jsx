@@ -20,15 +20,11 @@ export default function Offers() {
   const [status, setStatus] = useState("active");
   const [search, setSearch] = useState("");
   const [lastDoc, setLastDoc] = useState(null);
-  const [hasMore, setHasMore] = useState(true);
-  const [loading, setLoading] = useState(false);
 
   /* ======================
-     LOAD OFFERS
+     LOAD OFFERS (SAFE)
   ====================== */
   const loadOffers = async (reset = false) => {
-    setLoading(true);
-
     let q = query(
       collection(db, "offers"),
       orderBy("createdAt", "desc"),
@@ -49,31 +45,35 @@ export default function Offers() {
 
     const data = snap.docs.map((d) => {
       const o = d.data();
-      let computedStatus = (o.status || "active").toLowerCase();
 
-      let expiryDate = "-";
+      // ✅ Normalize status
+      let normalizedStatus = (o.status || "active").toLowerCase();
+
+      // ✅ Expiry handling (optional field)
+      let expiryText = "-";
       if (o.validTill?.seconds) {
         const expiry = new Date(o.validTill.seconds * 1000);
-        expiryDate = expiry.toLocaleDateString();
-        if (expiry < now) computedStatus = "expired";
+        expiryText = expiry.toLocaleDateString();
+        if (expiry < now) normalizedStatus = "expired";
       }
 
       return {
         id: d.id,
-        shopName: o.shopName || "-",
-        merchantMobile: o.merchantMobile || "-",
-        categoryName: o.categoryName || "-",
-        title: o.title || "-",
-        description: o.description || "-",
-        expiry: expiryDate,
-        status: computedStatus,
+
+        // ✅ Optional-safe fields
+        shopName: o.shopName ?? "—",
+        merchantMobile: o.merchantMobile ?? "—",
+        categoryName: o.categoryName ?? "—",
+        title: o.title ?? "—",
+        description: o.description ?? "—",
+        expiry: expiryText,
+
+        status: normalizedStatus,
       };
     });
 
     setOffers(reset ? data : [...offers, ...data]);
     setLastDoc(snap.docs[snap.docs.length - 1] || null);
-    setHasMore(snap.docs.length === PAGE_SIZE);
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -81,45 +81,27 @@ export default function Offers() {
     // eslint-disable-next-line
   }, []);
 
-  const visibleOffers = offers.filter(
-    (o) =>
-      o.status === status &&
-      o.title.toLowerCase().includes(search.toLowerCase())
-  );
-
   /* ======================
-     ACTIONS
+     FILTER (FAIL-SAFE)
   ====================== */
-  const toggleOffer = async (id, currentStatus) => {
-    if (currentStatus === "expired") return;
-
-    const newStatus =
-      currentStatus === "active" ? "disabled" : "active";
-
-    await updateDoc(doc(db, "offers", id), { status: newStatus });
-
-    setOffers((prev) =>
-      prev.map((o) =>
-        o.id === id ? { ...o, status: newStatus } : o
-      )
-    );
-  };
-
-  const deleteOffer = async (id) => {
-    if (!window.confirm("Delete offer permanently?")) return;
-    await deleteDoc(doc(db, "offers", id));
-    setOffers((prev) => prev.filter((o) => o.id !== id));
-  };
+  const visibleOffers = offers.filter((o) => {
+    if (o.status !== status) return false;
+    if (
+      search &&
+      !o.title.toLowerCase().includes(search.toLowerCase())
+    )
+      return false;
+    return true;
+  });
 
   return (
     <div className="admin-offers">
-      {/* HEADER */}
       <div className="offers-header">
         <h1>Offers</h1>
         <p>Manage active, disabled and expired offers</p>
       </div>
 
-      {/* STATUS FILTER */}
+      {/* STATUS TABS */}
       <div className="status-tabs">
         {["active", "disabled", "expired"].map((s) => (
           <button
@@ -136,9 +118,9 @@ export default function Offers() {
       <div className="search-bar">
         <span>🔍</span>
         <input
+          placeholder="Search by offer title"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by offer title"
         />
         {search && (
           <button className="clear-btn" onClick={() => setSearch("")}>
@@ -159,15 +141,14 @@ export default function Offers() {
               <th>Description</th>
               <th>Expiry</th>
               <th>Status</th>
-              <th className="actions-col">Actions</th>
             </tr>
           </thead>
 
           <tbody>
             {visibleOffers.length === 0 && (
               <tr>
-                <td colSpan="8" className="empty-state">
-                  📭 No offers found
+                <td colSpan="7" className="empty-state">
+                  No offers available for this filter
                 </td>
               </tr>
             )}
@@ -178,43 +159,18 @@ export default function Offers() {
                 <td>{o.merchantMobile}</td>
                 <td>{o.categoryName}</td>
                 <td className="title">{o.title}</td>
-                <td style={{ maxWidth: 260 }}>
-                  {o.description}
-                </td>
+                <td style={{ maxWidth: 260 }}>{o.description}</td>
                 <td>{o.expiry}</td>
                 <td>
                   <span className={`status-pill ${o.status}`}>
                     {o.status}
                   </span>
                 </td>
-                <td className="actions-col">
-                  <button
-                    className="action-btn"
-                    disabled={o.status === "expired"}
-                    onClick={() => toggleOffer(o.id, o.status)}
-                  >
-                    {o.status === "active" ? "Disable" : "Enable"}
-                  </button>
-                  <button
-                    className="delete-btn"
-                    onClick={() => deleteOffer(o.id)}
-                  >
-                    🗑
-                  </button>
-                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-
-      {hasMore && (
-        <div className="load-more">
-          <button onClick={() => loadOffers(false)} disabled={loading}>
-            {loading ? "Loading…" : "Load More"}
-          </button>
-        </div>
-      )}
     </div>
   );
 }
