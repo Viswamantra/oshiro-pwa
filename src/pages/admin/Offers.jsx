@@ -51,16 +51,21 @@ export default function Offers() {
       const o = d.data();
       let computedStatus = (o.status || "active").toLowerCase();
 
+      let expiryDate = "-";
       if (o.validTill?.seconds) {
         const expiry = new Date(o.validTill.seconds * 1000);
+        expiryDate = expiry.toLocaleDateString();
         if (expiry < now) computedStatus = "expired";
       }
 
       return {
         id: d.id,
-        title: o.title || "(No title)",
+        shopName: o.shopName || "-",
         merchantMobile: o.merchantMobile || "-",
         categoryName: o.categoryName || "-",
+        title: o.title || "-",
+        description: o.description || "-",
+        expiry: expiryDate,
         status: computedStatus,
       };
     });
@@ -82,6 +87,9 @@ export default function Offers() {
       o.title.toLowerCase().includes(search.toLowerCase())
   );
 
+  /* ======================
+     ACTIONS
+  ====================== */
   const toggleOffer = async (id, currentStatus) => {
     if (currentStatus === "expired") return;
 
@@ -130,7 +138,7 @@ export default function Offers() {
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search offers by title"
+          placeholder="Search by offer title"
         />
         {search && (
           <button className="clear-btn" onClick={() => setSearch("")}>
@@ -144,9 +152,12 @@ export default function Offers() {
         <table>
           <thead>
             <tr>
-              <th>Title</th>
-              <th>Merchant</th>
+              <th>Shop Name</th>
+              <th>Merchant Mobile</th>
               <th>Category</th>
+              <th>Offer Title</th>
+              <th>Description</th>
+              <th>Expiry</th>
               <th>Status</th>
               <th className="actions-col">Actions</th>
             </tr>
@@ -155,7 +166,7 @@ export default function Offers() {
           <tbody>
             {visibleOffers.length === 0 && (
               <tr>
-                <td colSpan="5" className="empty-state">
+                <td colSpan="8" className="empty-state">
                   📭 No offers found
                 </td>
               </tr>
@@ -163,9 +174,14 @@ export default function Offers() {
 
             {visibleOffers.map((o) => (
               <tr key={o.id}>
-                <td className="title">{o.title}</td>
+                <td>{o.shopName}</td>
                 <td>{o.merchantMobile}</td>
                 <td>{o.categoryName}</td>
+                <td className="title">{o.title}</td>
+                <td style={{ maxWidth: 260 }}>
+                  {o.description}
+                </td>
+                <td>{o.expiry}</td>
                 <td>
                   <span className={`status-pill ${o.status}`}>
                     {o.status}
