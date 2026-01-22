@@ -20,10 +20,10 @@ import {
 } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import { getMessaging, getToken } from "firebase/messaging";
-import { db } from "../../firebase"; // ✅ correct relative path
+import { db } from "../../firebase";
 
 /* ======================
-   DISTANCE HELPER (HAVERSINE)
+   DISTANCE HELPER
 ====================== */
 function distanceMeters(lat1, lon1, lat2, lon2) {
   const R = 6371000;
@@ -43,10 +43,6 @@ const GEOFENCE_RADIUS_METERS = 300;
 
 export default function CustomerDashboard() {
   const navigate = useNavigate();
-
-  /* ======================
-     CUSTOMER SESSION
-  ====================== */
   const customerMobile = localStorage.getItem("customer_mobile");
 
   /* ======================
@@ -56,39 +52,33 @@ export default function CustomerDashboard() {
   const [categories, setCategories] = useState([]);
   const [category, setCategory] = useState("");
   const [location, setLocation] = useState(null);
-  const triggeredRef = useRef({}); // prevent repeat triggers
+  const [trackingEnabled, setTrackingEnabled] = useState(false);
+
+  const triggeredRef = useRef({});
+  const watchIdRef = useRef(null);
 
   /* ======================
      AUTH GUARD
   ====================== */
   useEffect(() => {
-    const loggedIn = localStorage.getItem("customer_logged_in");
-
-    if (!loggedIn || !customerMobile) {
+    if (!localStorage.getItem("customer_logged_in") || !customerMobile) {
       navigate("/customer/login", { replace: true });
     }
   }, [navigate, customerMobile]);
 
   /* ======================
-     SAVE FCM TOKEN (OPTIONAL)
+     SAVE CUSTOMER FCM TOKEN (OPTIONAL)
   ====================== */
   useEffect(() => {
-    if (!customerMobile) return;
-    if (!("Notification" in window)) return;
-
-    let messaging;
-    try {
-      messaging = getMessaging();
-    } catch {
-      return; // Firebase messaging not configured
-    }
+    if (!customerMobile || !("Notification" in window)) return;
 
     Notification.requestPermission().then(async (permission) => {
       if (permission !== "granted") return;
 
       try {
+        const messaging = getMessaging();
         const token = await getToken(messaging, {
-          vapidKey: "YOUR_VAPID_KEY_HERE",
+          vapidKey: "BLQz2BIY-XXDRG0euqFN0YSxRv0v_flyYEPsZUFQc3AxOz693IuHUrdz48A7z6EPTyffkr42ND3gB0mDUm4XroM",
         });
 
         if (!token) return;
@@ -97,13 +87,13 @@ export default function CustomerDashboard() {
           doc(db, "fcm_tokens", customerMobile),
           {
             token,
-            updatedAt: serverTimestamp(),
             role: "customer",
+            updatedAt: serverTimestamp(),
           },
           { merge: true }
         );
-      } catch (err) {
-        console.warn("FCM skipped:", err.message);
+      } catch {
+        // silently skip
       }
     });
   }, [customerMobile]);
@@ -112,20 +102,14 @@ export default function CustomerDashboard() {
      LOAD OFFERS & CATEGORIES
   ====================== */
   useEffect(() => {
-    if (!db) return;
-
     const unsubOffers = onSnapshot(
       query(collection(db, "offers"), where("active", "==", true)),
-      (snapshot) => {
-        setOffers(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
-      }
+      (snap) =>
+        setOffers(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
 
-    const unsubCats = onSnapshot(
-      collection(db, "categories"),
-      (snapshot) => {
-        setCategories(snapshot.docs.map((d) => d.data().name));
-      }
+    const unsubCats = onSnapshot(collection(db, "categories"), (snap) =>
+      setCategories(snap.docs.map((d) => d.data().name))
     );
 
     return () => {
@@ -135,24 +119,46 @@ export default function CustomerDashboard() {
   }, []);
 
   /* ======================
-     GPS TRACKING
+     START LOCATION TRACKING (USER GESTURE)
   ====================== */
-  useEffect(() => {
-    if (!navigator.geolocation) return;
+  const startLocationTracking = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation not supported");
+      return;
+    }
 
-    const watchId = navigator.geolocation.watchPosition(
+    if (watchIdRef.current !== null) return;
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
         setLocation({
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
         });
       },
-      () => {},
-      { enableHighAccuracy: true }
+      (err) => {
+        console.error("Location error:", err);
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 15000,
+      }
     );
 
-    return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
+    setTrackingEnabled(true);
+  };
+
+  /* ======================
+     STOP TRACKING (OPTIONAL)
+  ====================== */
+  const stopLocationTracking = () => {
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    setTrackingEnabled(false);
+  };
 
   /* ======================
      GEO-FENCE TRIGGER
@@ -176,18 +182,13 @@ export default function CustomerDashboard() {
       if (d <= GEOFENCE_RADIUS_METERS) {
         triggeredRef.current[key] = true;
 
-        try {
-          await addDoc(collection(db, "geo_events"), {
-            customerMobile,
-            merchantId: o.merchantId,
-            merchantMobile: o.merchantMobile || "",
-            distanceMeters: Math.round(d),
-            status: "entered",
-            createdAt: serverTimestamp(),
-          });
-        } catch (e) {
-          console.error("Geo event failed", e);
-        }
+        await addDoc(collection(db, "geo_events"), {
+          customerMobile,
+          merchantId: o.merchantId,
+          distanceMeters: Math.round(d),
+          status: "entered",
+          createdAt: serverTimestamp(),
+        });
       }
     });
   }, [location, offers, customerMobile]);
@@ -196,8 +197,8 @@ export default function CustomerDashboard() {
      LOGOUT
   ====================== */
   const logout = () => {
-    localStorage.removeItem("customer_logged_in");
-    localStorage.removeItem("customer_mobile");
+    stopLocationTracking();
+    localStorage.clear();
     navigate("/customer/login", { replace: true });
   };
 
@@ -208,8 +209,23 @@ export default function CustomerDashboard() {
     <Box p={3}>
       <Typography variant="h5">Nearby Offers</Typography>
 
+      {/* 📍 LOCATION CTA */}
+      {!trackingEnabled ? (
+        <Button
+          sx={{ mt: 2 }}
+          variant="contained"
+          onClick={startLocationTracking}
+        >
+          Enable Location Tracking
+        </Button>
+      ) : (
+        <Button sx={{ mt: 2 }} color="success" variant="outlined">
+          Location Tracking Active
+        </Button>
+      )}
+
       <Button
-        sx={{ mt: 1 }}
+        sx={{ mt: 2, ml: 2 }}
         color="error"
         variant="outlined"
         onClick={logout}
