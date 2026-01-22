@@ -13,7 +13,6 @@ import {
 import { db } from "../../firebase";
 import "../../admin/admin-offers.css";
 
-
 const PAGE_SIZE = 10;
 
 export default function Offers() {
@@ -25,7 +24,7 @@ export default function Offers() {
   const [loading, setLoading] = useState(false);
 
   /* ======================
-     LOAD OFFERS (SAFE)
+     LOAD OFFERS
   ====================== */
   const loadOffers = async (reset = false) => {
     setLoading(true);
@@ -51,10 +50,8 @@ export default function Offers() {
     const data = snap.docs.map((d) => {
       const o = d.data();
 
-      // Normalize status
       let computedStatus = (o.status || "active").toLowerCase();
 
-      // Expiry handling
       let expiryText = "—";
       if (o.validTill?.seconds) {
         const expiry = new Date(o.validTill.seconds * 1000);
@@ -95,9 +92,6 @@ export default function Offers() {
     return true;
   });
 
-  /* ======================
-     ACTIONS
-  ====================== */
   const toggleOffer = async (id, currentStatus) => {
     if (currentStatus === "expired") return;
 
@@ -121,13 +115,11 @@ export default function Offers() {
 
   return (
     <div className="admin-offers">
-      {/* HEADER */}
       <div className="offers-header">
         <h1>Offers</h1>
         <p>Manage active, disabled and expired offers</p>
       </div>
 
-      {/* STATUS FILTER */}
       <div className="status-tabs">
         {["active", "disabled", "expired"].map((s) => (
           <button
@@ -140,13 +132,12 @@ export default function Offers() {
         ))}
       </div>
 
-      {/* SEARCH */}
       <div className="search-bar">
         <span>🔍</span>
         <input
+          placeholder="Search by offer title"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by offer title"
         />
         {search && (
           <button className="clear-btn" onClick={() => setSearch("")}>
@@ -155,7 +146,6 @@ export default function Offers() {
         )}
       </div>
 
-      {/* TABLE */}
       <div className="table-card">
         <table>
           <thead>
@@ -186,9 +176,7 @@ export default function Offers() {
                 <td>{o.merchantMobile}</td>
                 <td>{o.categoryName}</td>
                 <td className="title">{o.title}</td>
-                <td style={{ maxWidth: 260 }}>
-                  {o.description}
-                </td>
+                <td className="desc">{o.description}</td>
                 <td>{o.expiry}</td>
                 <td>
                   <span className={`status-pill ${o.status}`}>
