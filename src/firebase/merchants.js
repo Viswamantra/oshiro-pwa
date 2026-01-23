@@ -13,7 +13,7 @@ import { db } from "./index.js";
  * ✔ Fetch nearby merchants
  * ✔ Filter by category (optional)
  * ✔ Distance-based filtering (client-side)
- * ✔ ONLY approved & COMPLETE merchants
+ * ✔ ONLY approved & profile-complete merchants
  * ✔ Schema-aligned with onboarding & admin
  * =========================================================
  */
@@ -58,11 +58,12 @@ export async function fetchNearbyMerchants({
 
   /* ======================
      BASE QUERY
-     - ONLY approved merchants
+     - ONLY approved & complete merchants
   ====================== */
   let q = query(
     collection(db, "merchants"),
-    where("status", "==", "approved")
+    where("status", "==", "approved"),
+    where("profileComplete", "==", true)
   );
 
   /* ======================
@@ -73,6 +74,7 @@ export async function fetchNearbyMerchants({
     q = query(
       collection(db, "merchants"),
       where("status", "==", "approved"),
+      where("profileComplete", "==", true),
       where("category", "==", category)
     );
   }
@@ -88,16 +90,8 @@ export async function fetchNearbyMerchants({
       ...doc.data(),
     }))
     .filter((m) => {
-      /* ======================
-         HARD GUARDS (CRITICAL)
-      ====================== */
-
-      // Must have valid identity
-      if (!m.shop_name || !m.category) {
-        return false;
-      }
-
-      // Must have valid location
+      // Location is guaranteed by profileComplete,
+      // but keep this guard for safety
       if (
         typeof m.location?.lat !== "number" ||
         typeof m.location?.lng !== "number"
