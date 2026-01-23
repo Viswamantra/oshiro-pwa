@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { getMerchantByMobile } from "../../firebase/merchant";
+import { getMerchantByMobile } from "../../firebase/merchants"; // ✅ FIXED
 
 /**
  * =========================================================
@@ -10,8 +10,7 @@ import { getMerchantByMobile } from "../../firebase/merchant";
  * ✔ +91 locked mobile input
  * ✔ Status-based access control
  * ✔ Stores merchant session
- * ✔ Consistent UI with Customer Login
- * ✔ Oshiro logo added (PUBLIC ASSET)
+ * ✔ Rollup / Vercel safe
  * =========================================================
  */
 
@@ -56,6 +55,7 @@ export default function MerchantLogin() {
 
     try {
       setLoading(true);
+
       const merchant = await getMerchantByMobile(plainMobile);
 
       if (!merchant) {
@@ -83,15 +83,16 @@ export default function MerchantLogin() {
         JSON.stringify({
           id: merchant.id,
           mobile,
-          name: merchant.shopName || "",
+          name: merchant.shop_name || "", // ✅ FIXED
           status: merchant.status,
           role: "merchant",
         })
       );
 
       navigate("/merchant", { replace: true });
+
     } catch (err) {
-      console.error(err);
+      console.error("Merchant login error:", err);
       setError("Login failed. Please try again.");
     } finally {
       setLoading(false);
@@ -101,16 +102,12 @@ export default function MerchantLogin() {
   return (
     <div style={styles.page}>
       {/* HOME BUTTON */}
-      <div
-        onClick={() => navigate("/")}
-        style={styles.homeBtn}
-      >
+      <div onClick={() => navigate("/")} style={styles.homeBtn}>
         ← Home
       </div>
 
       {/* LOGIN CARD */}
       <div style={styles.card}>
-        {/* LOGO */}
         <img
           src="/logo/oshiro-logo-compact-3.png"
           alt="Oshiro"
@@ -153,7 +150,7 @@ export default function MerchantLogin() {
 }
 
 /* ======================
-   STYLES (MOBILE-FIRST)
+   STYLES
 ====================== */
 const styles = {
   page: {
@@ -165,7 +162,6 @@ const styles = {
     padding: 16,
     position: "relative",
   },
-
   homeBtn: {
     position: "absolute",
     top: 20,
@@ -178,7 +174,6 @@ const styles = {
     fontWeight: 500,
     cursor: "pointer",
   },
-
   card: {
     width: "100%",
     maxWidth: 360,
@@ -188,25 +183,20 @@ const styles = {
     textAlign: "center",
     boxShadow: "0 16px 32px rgba(0, 0, 0, 0.1)",
   },
-
   logo: {
     height: 56,
-    width: "auto",
     marginBottom: 24,
   },
-
   title: {
     fontSize: 22,
     fontWeight: 600,
     marginBottom: 6,
   },
-
   subtitle: {
     fontSize: 14,
     color: "#6b7280",
     marginBottom: 20,
   },
-
   input: {
     width: "100%",
     height: 48,
@@ -214,15 +204,12 @@ const styles = {
     fontSize: 16,
     borderRadius: 10,
     border: "1px solid #d1d5db",
-    outline: "none",
   },
-
   error: {
     marginTop: 10,
     fontSize: 14,
     color: "#dc2626",
   },
-
   button: {
     width: "100%",
     height: 48,
@@ -230,19 +217,15 @@ const styles = {
     borderRadius: 10,
     border: "none",
     background: "linear-gradient(135deg, #2563eb, #1e40af)",
-    color: "#ffffff",
+    color: "#fff",
     fontSize: 16,
     fontWeight: 600,
     cursor: "pointer",
-    boxShadow: "0 6px 14px rgba(37, 99, 235, 0.35)",
   },
-
   register: {
     marginTop: 16,
     fontSize: 14,
-    color: "#374151",
   },
-
   link: {
     color: "#2563eb",
     fontWeight: 500,
