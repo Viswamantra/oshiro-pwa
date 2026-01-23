@@ -9,18 +9,33 @@ import {
   doc,
   updateDoc,
   serverTimestamp,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "../../firebase";
 
 export default function MerchantOffers() {
-  const merchant = JSON.parse(localStorage.getItem("merchant"));
+  const session = JSON.parse(localStorage.getItem("merchant"));
 
+  const [merchant, setMerchant] = useState(null);
   const [offers, setOffers] = useState([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [validTill, setValidTill] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  /* ======================
+     LOAD MERCHANT (🔥 FIX)
+  ====================== */
+  useEffect(() => {
+    if (!session?.id) return;
+
+    getDoc(doc(db, "merchants", session.id)).then((snap) => {
+      if (snap.exists()) {
+        setMerchant({ id: snap.id, ...snap.data() });
+      }
+    });
+  }, [session?.id]);
 
   /* ======================
      LOAD MERCHANT OFFERS
@@ -54,22 +69,22 @@ export default function MerchantOffers() {
       return;
     }
 
-    if (!merchant?.id) {
-      alert("Merchant not logged in");
+    if (!merchant) {
+      alert("Merchant not ready");
       return;
     }
 
     try {
       setLoading(true);
 
-      /* 🔥 ALWAYS DENORMALIZE MERCHANT DATA */
-      const basePayload = {
+      /* 🔥 RULE-COMPLIANT PAYLOAD */
+      const offerPayload = {
         merchantId: merchant.id,
 
-        // MUST MATCH ADMIN UI
-        shop_name: merchant.shopName || "",
-        mobile: merchant.mobile || "",
-        category: merchant.category || "",
+        // ✅ REQUIRED BY RULES + ADMIN UI
+        shop_name: merchant.shop_name,
+        mobile: merchant.mobile,
+        category: merchant.category,
 
         title,
         description,
@@ -79,10 +94,15 @@ export default function MerchantOffers() {
       };
 
       if (editingId) {
-        await updateDoc(doc(db, "offers", editingId), basePayload);
+        await updateDoc(doc(db, "offers", editingId), {
+          title,
+          description,
+          validTill: validTill || null,
+          updatedAt: serverTimestamp(),
+        });
       } else {
         await addDoc(collection(db, "offers"), {
-          ...basePayload,
+          ...offerPayload,
           createdAt: serverTimestamp(),
         });
       }
@@ -91,7 +111,6 @@ export default function MerchantOffers() {
       setDescription("");
       setValidTill("");
       setEditingId(null);
-
     } catch (err) {
       console.error("Offer save failed:", err);
       alert("Failed to save offer");
