@@ -35,9 +35,9 @@ export default function MerchantOffers() {
 
     const unsub = onSnapshot(q, (snapshot) => {
       setOffers(
-        snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
+        snapshot.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
         }))
       );
     });
@@ -47,6 +47,7 @@ export default function MerchantOffers() {
 
   /* ======================
      ADD / UPDATE OFFER
+     (DENORMALIZED DATA FIX)
   ====================== */
   const saveOffer = async () => {
     if (!title.trim()) {
@@ -54,27 +55,39 @@ export default function MerchantOffers() {
       return;
     }
 
+    if (!merchant?.id) {
+      alert("Merchant session missing");
+      return;
+    }
+
     try {
       setLoading(true);
 
+      const payload = {
+        title,
+        description,
+        validTill: validTill || null,
+        isActive: true,
+
+        // 🔥 DENORMALIZED MERCHANT DATA (FIX)
+        merchantId: merchant.id,
+        merchantShopName: merchant.shopName || "",
+        merchantMobile: merchant.mobile || "",
+        merchantCategory: merchant.category || "",
+
+        updatedAt: serverTimestamp(),
+      };
+
       if (editingId) {
-        await updateDoc(doc(db, "offers", editingId), {
-          title,
-          description,
-          validTill,
-          updatedAt: serverTimestamp(),
-        });
+        await updateDoc(doc(db, "offers", editingId), payload);
       } else {
         await addDoc(collection(db, "offers"), {
-          merchantId: merchant.id,
-          title,
-          description,
-          validTill,
-          isActive: true,
+          ...payload,
           createdAt: serverTimestamp(),
         });
       }
 
+      // Reset form
       setTitle("");
       setDescription("");
       setValidTill("");
