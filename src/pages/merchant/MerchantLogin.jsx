@@ -1,15 +1,14 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { getMerchantByMobile } from "../../firebase/merchants"; // ✅ FIXED
+import { getMerchantByMobile } from "../../firebase/merchants";
 
 /**
  * =========================================================
- * MERCHANT LOGIN (MOBILE-FIRST)
+ * MERCHANT LOGIN (FINAL, SCHEMA-ALIGNED)
  * ---------------------------------------------------------
- * ✔ Mobile-based login
+ * ✔ Approved merchants can login
+ * ✔ profileComplete enforced via redirect
  * ✔ +91 locked mobile input
- * ✔ Status-based access control
- * ✔ Stores merchant session
  * ✔ Rollup / Vercel safe
  * =========================================================
  */
@@ -32,10 +31,7 @@ export default function MerchantLogin() {
     }
 
     value = "+91" + value.slice(3).replace(/\D/g, "");
-
-    if (value.length > 13) {
-      value = value.slice(0, 13);
-    }
+    if (value.length > 13) value = value.slice(0, 13);
 
     setMobile(value);
   };
@@ -78,17 +74,32 @@ export default function MerchantLogin() {
         return;
       }
 
+      /* ======================
+         STORE SESSION
+      ====================== */
       localStorage.setItem(
         "merchant",
         JSON.stringify({
           id: merchant.id,
-          mobile,
-          name: merchant.shop_name || "", // ✅ FIXED
+          mobile: merchant.mobile,
+          shopName: merchant.shop_name || "",
           status: merchant.status,
+          profileComplete: merchant.profileComplete === true,
           role: "merchant",
         })
       );
 
+      /* ======================
+         FORCE PROFILE SETUP
+      ====================== */
+      if (merchant.profileComplete !== true) {
+        navigate("/merchant/location", { replace: true });
+        return;
+      }
+
+      /* ======================
+         FULL ACCESS
+      ====================== */
       navigate("/merchant", { replace: true });
 
     } catch (err) {
@@ -132,8 +143,8 @@ export default function MerchantLogin() {
 
         <button
           onClick={login}
-          style={styles.button}
           disabled={loading}
+          style={styles.button}
         >
           {loading ? "Checking..." : "Login"}
         </button>
