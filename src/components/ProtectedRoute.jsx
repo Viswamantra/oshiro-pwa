@@ -3,12 +3,13 @@ import { Navigate, useLocation } from "react-router-dom";
 
 /**
  * =========================================================
- * PROTECTED ROUTE – FINAL STABLE VERSION
+ * PROTECTED ROUTE – FINAL HARDENED VERSION
  * ---------------------------------------------------------
- * ✔ Deep-link safe (merchant details, offers, etc.)
+ * ✔ Deep-link safe
  * ✔ No redirect loops
  * ✔ Nested routes safe
- * ✔ Preserves intended destination
+ * ✔ Backward-compatible auth checks
+ * ✔ Rollup / Vercel safe
  * =========================================================
  */
 
@@ -21,12 +22,19 @@ export default function ProtectedRoute({
   const location = useLocation();
 
   /* ======================
-     AUTH STATE
+     AUTH STATE (SAFE PARSE)
   ====================== */
-  const isAdmin = localStorage.getItem("admin") === "true";
 
-  const customerMobile = localStorage.getItem("customer_mobile");
+  // Admin (DEV + PROD compatible)
+  const isAdmin =
+    localStorage.getItem("admin") === "true" ||
+    !!localStorage.getItem("admin_token");
 
+  // Customer
+  const customerMobile =
+    localStorage.getItem("customer_mobile");
+
+  // Merchant
   let merchant = null;
   try {
     merchant = JSON.parse(
@@ -35,6 +43,11 @@ export default function ProtectedRoute({
   } catch {
     merchant = null;
   }
+
+  const isMerchant =
+    merchant &&
+    typeof merchant === "object" &&
+    !!merchant.id;
 
   /* ======================
      ADMIN ROUTES
@@ -65,10 +78,7 @@ export default function ProtectedRoute({
   /* ======================
      MERCHANT ROUTES
   ====================== */
-  if (
-    merchantOnly &&
-    (!merchant || merchant.role !== "merchant")
-  ) {
+  if (merchantOnly && !isMerchant) {
     return (
       <Navigate
         to="/merchant/login"
