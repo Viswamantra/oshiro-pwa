@@ -4,11 +4,12 @@ import { getMerchantByMobile } from "../../firebase/merchants";
 
 /**
  * =========================================================
- * MERCHANT LOGIN (FINAL, SCHEMA-ALIGNED)
+ * MERCHANT LOGIN – FINAL PRODUCTION VERSION
  * ---------------------------------------------------------
  * ✔ Approved merchants can login
  * ✔ profileComplete enforced via redirect
- * ✔ +91 locked mobile input
+ * ✔ Mobile normalization fixed
+ * ✔ Reload / ProtectedRoute safe
  * ✔ Rollup / Vercel safe
  * =========================================================
  */
@@ -26,9 +27,7 @@ export default function MerchantLogin() {
   const handleMobileChange = (e) => {
     let value = e.target.value;
 
-    if (!value.startsWith("+91")) {
-      value = "+91";
-    }
+    if (!value.startsWith("+91")) value = "+91";
 
     value = "+91" + value.slice(3).replace(/\D/g, "");
     if (value.length > 13) value = value.slice(0, 13);
@@ -47,7 +46,7 @@ export default function MerchantLogin() {
       return;
     }
 
-    const plainMobile = mobile.slice(3);
+    const plainMobile = mobile.slice(3); // digits only
 
     try {
       setLoading(true);
@@ -75,13 +74,13 @@ export default function MerchantLogin() {
       }
 
       /* ======================
-         STORE SESSION
+         STORE SESSION (FIXED)
       ====================== */
       localStorage.setItem(
         "merchant",
         JSON.stringify({
           id: merchant.id,
-          mobile: merchant.mobile,
+          mobile: plainMobile, // ✅ ALWAYS digits
           shopName: merchant.shop_name || "",
           status: merchant.status,
           profileComplete: merchant.profileComplete === true,
@@ -112,12 +111,10 @@ export default function MerchantLogin() {
 
   return (
     <div style={styles.page}>
-      {/* HOME BUTTON */}
       <div onClick={() => navigate("/")} style={styles.homeBtn}>
         ← Home
       </div>
 
-      {/* LOGIN CARD */}
       <div style={styles.card}>
         <img
           src="/logo/oshiro-logo-compact-3.png"
