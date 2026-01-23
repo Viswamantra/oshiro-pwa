@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { registerMerchant } from "../../firebase/merchant";
+import { registerMerchant } from "../../firebase/merchants"; // ✅ FIXED
 import { fetchActiveCategories } from "../../firebase/categories";
 
 /**
@@ -11,8 +11,7 @@ import { fetchActiveCategories } from "../../firebase/categories";
  * ✔ 10 digits only
  * ✔ Category selection
  * ✔ Status = pending (admin approval required)
- * ✔ UI consistent with Merchant Login
- * ✔ Oshiro logo added (PUBLIC ASSET)
+ * ✔ profileComplete = false (rules-safe)
  * =========================================================
  */
 
@@ -24,7 +23,7 @@ export default function MerchantRegister() {
   ====================== */
   const [mobile, setMobile] = useState("+91");
   const [shopName, setShopName] = useState("");
-  const [categoryId, setCategoryId] = useState("");
+  const [category, setCategory] = useState(""); // ✅ FIXED
   const [categories, setCategories] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -70,7 +69,7 @@ export default function MerchantRegister() {
       return;
     }
 
-    if (!categoryId) {
+    if (!category) {
       setError("Select category");
       return;
     }
@@ -79,16 +78,22 @@ export default function MerchantRegister() {
       setLoading(true);
 
       await registerMerchant({
-        mobile: mobile.slice(3),
+        mobile: mobile.slice(3), // store digits only
         shopName,
-        categoryId,
+        category,               // ✅ FIXED
       });
 
       alert("Registration successful.\nWaiting for admin approval.");
       navigate("/merchant/login", { replace: true });
+
     } catch (err) {
       console.error("Merchant register error:", err);
-      setError("Registration failed. Try again.");
+
+      if (err.message?.includes("Missing required merchant fields")) {
+        setError("Please fill all required fields");
+      } else {
+        setError("Registration failed. Try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -97,16 +102,12 @@ export default function MerchantRegister() {
   return (
     <div style={styles.page}>
       {/* HOME BUTTON */}
-      <div
-        onClick={() => navigate("/")}
-        style={styles.homeBtn}
-      >
+      <div onClick={() => navigate("/")} style={styles.homeBtn}>
         ← Home
       </div>
 
       {/* REGISTER CARD */}
       <div style={styles.card}>
-        {/* LOGO */}
         <img
           src="/logo/oshiro-logo-compact-3.png"
           alt="Oshiro"
@@ -139,13 +140,13 @@ export default function MerchantRegister() {
 
         {/* CATEGORY */}
         <select
-          value={categoryId}
-          onChange={(e) => setCategoryId(e.target.value)}
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
           style={styles.select}
         >
           <option value="">Select Category</option>
           {categories.map((c) => (
-            <option key={c.id} value={c.id}>
+            <option key={c.id} value={c.name}>
               {c.name}
             </option>
           ))}
@@ -170,7 +171,7 @@ export default function MerchantRegister() {
 }
 
 /* ======================
-   STYLES (MOBILE-FIRST)
+   STYLES
 ====================== */
 const styles = {
   page: {
@@ -182,7 +183,6 @@ const styles = {
     padding: 16,
     position: "relative",
   },
-
   homeBtn: {
     position: "absolute",
     top: 20,
@@ -195,7 +195,6 @@ const styles = {
     fontWeight: 500,
     cursor: "pointer",
   },
-
   card: {
     width: "100%",
     maxWidth: 380,
@@ -205,25 +204,20 @@ const styles = {
     textAlign: "center",
     boxShadow: "0 16px 32px rgba(0, 0, 0, 0.1)",
   },
-
   logo: {
     height: 56,
-    width: "auto",
     marginBottom: 24,
   },
-
   title: {
     fontSize: 22,
     fontWeight: 600,
     marginBottom: 6,
   },
-
   subtitle: {
     fontSize: 14,
     color: "#6b7280",
     marginBottom: 20,
   },
-
   input: {
     width: "100%",
     height: 48,
@@ -231,10 +225,8 @@ const styles = {
     fontSize: 16,
     borderRadius: 10,
     border: "1px solid #d1d5db",
-    outline: "none",
     marginBottom: 14,
   },
-
   select: {
     width: "100%",
     height: 48,
@@ -242,17 +234,14 @@ const styles = {
     fontSize: 16,
     borderRadius: 10,
     border: "1px solid #d1d5db",
-    outline: "none",
     marginBottom: 14,
     background: "#fff",
   },
-
   error: {
     marginBottom: 10,
     fontSize: 14,
     color: "#dc2626",
   },
-
   button: {
     width: "100%",
     height: 48,
@@ -260,13 +249,11 @@ const styles = {
     borderRadius: 10,
     border: "none",
     background: "linear-gradient(135deg, #2563eb, #1e40af)",
-    color: "#ffffff",
+    color: "#fff",
     fontSize: 16,
     fontWeight: 600,
     cursor: "pointer",
-    boxShadow: "0 6px 14px rgba(37, 99, 235, 0.35)",
   },
-
   note: {
     marginTop: 14,
     fontSize: 13,
