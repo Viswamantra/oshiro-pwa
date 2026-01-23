@@ -14,15 +14,16 @@ import { db } from "./index.js";
  * ---------------------------------------------------------
  * ✔ Merchant registration
  * ✔ Customer-side nearby queries
- * ✔ Schema-aligned with admin & rules
- * ✔ Rollup / Vercel safe
+ * ✔ Schema-aligned with admin & security rules
+ * ✔ Rollup / Vercel build-safe
  * =========================================================
  */
 
 /* ======================
-   DISTANCE CALC (METERS)
+   PRIVATE: DISTANCE CALC (METERS)
+   (NOT EXPORTED – Rollup safe)
 ====================== */
-function getDistance(lat1, lon1, lat2, lon2) {
+function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371000;
   const toRad = (v) => (v * Math.PI) / 180;
 
@@ -50,13 +51,13 @@ export async function registerMerchant({
     throw new Error("Missing required merchant fields");
   }
 
-  return await addDoc(collection(db, "merchants"), {
+  return addDoc(collection(db, "merchants"), {
     mobile,
     shop_name: shopName,
     category,
     status: "pending",
 
-    // 🔐 REQUIRED BY SECURITY RULES
+    // Required by Firestore security rules
     profileComplete: false,
 
     createdAt: serverTimestamp(),
@@ -73,29 +74,16 @@ export async function fetchNearbyMerchants({
   category = "",
   distance = 3000, // meters
 }) {
-  /* ======================
-     SAFETY CHECK
-  ====================== */
-  if (
-    typeof userLat !== "number" ||
-    typeof userLng !== "number"
-  ) {
+  if (typeof userLat !== "number" || typeof userLng !== "number") {
     return [];
   }
 
-  /* ======================
-     BASE QUERY
-     - ONLY approved & profile-complete merchants
-  ====================== */
   let q = query(
     collection(db, "merchants"),
     where("status", "==", "approved"),
     where("profileComplete", "==", true)
   );
 
-  /* ======================
-     OPTIONAL CATEGORY FILTER
-  ====================== */
   if (category) {
     q = query(
       collection(db, "merchants"),
@@ -120,7 +108,7 @@ export async function fetchNearbyMerchants({
         return false;
       }
 
-      const d = getDistance(
+      const d = calculateDistance(
         userLat,
         userLng,
         m.location.lat,
