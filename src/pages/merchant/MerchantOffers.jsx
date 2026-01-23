@@ -35,9 +35,9 @@ export default function MerchantOffers() {
 
     const unsub = onSnapshot(q, (snapshot) => {
       setOffers(
-        snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
+        snapshot.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
         }))
       );
     });
@@ -54,7 +54,7 @@ export default function MerchantOffers() {
       return;
     }
 
-    if (!merchant) {
+    if (!merchant?.id) {
       alert("Merchant not logged in");
       return;
     }
@@ -62,13 +62,17 @@ export default function MerchantOffers() {
     try {
       setLoading(true);
 
-      const payload = {
+      /* ======================
+         OFFER PAYLOAD
+         🔥 DENORMALIZED DATA (FIX)
+      ====================== */
+      const offerPayload = {
         merchantId: merchant.id,
 
-        // ✅ DENORMALIZED MERCHANT DATA (CRITICAL)
-        shopName: merchant.shopName,
-        merchantMobile: merchant.mobile,
-        category: merchant.category,
+        // ✅ MUST MATCH ADMIN UI FIELDS
+        shop_name: merchant.shopName || "",
+        mobile: merchant.mobile || "",
+        category: merchant.category || "",
 
         title,
         description,
@@ -78,10 +82,16 @@ export default function MerchantOffers() {
       };
 
       if (editingId) {
-        await updateDoc(doc(db, "offers", editingId), payload);
+        // ✅ Update ONLY offer fields
+        await updateDoc(doc(db, "offers", editingId), {
+          title,
+          description,
+          validTill: validTill || null,
+          updatedAt: serverTimestamp(),
+        });
       } else {
         await addDoc(collection(db, "offers"), {
-          ...payload,
+          ...offerPayload,
           createdAt: serverTimestamp(),
         });
       }
@@ -90,6 +100,7 @@ export default function MerchantOffers() {
       setDescription("");
       setValidTill("");
       setEditingId(null);
+
     } catch (err) {
       console.error("Offer save failed:", err);
       alert("Failed to save offer");
