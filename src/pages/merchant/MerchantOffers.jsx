@@ -62,14 +62,11 @@ export default function MerchantOffers() {
     try {
       setLoading(true);
 
-      /* ======================
-         OFFER PAYLOAD
-         🔥 DENORMALIZED DATA (FIX)
-      ====================== */
-      const offerPayload = {
+      /* 🔥 ALWAYS DENORMALIZE MERCHANT DATA */
+      const basePayload = {
         merchantId: merchant.id,
 
-        // ✅ MUST MATCH ADMIN UI FIELDS
+        // MUST MATCH ADMIN UI
         shop_name: merchant.shopName || "",
         mobile: merchant.mobile || "",
         category: merchant.category || "",
@@ -82,16 +79,10 @@ export default function MerchantOffers() {
       };
 
       if (editingId) {
-        // ✅ Update ONLY offer fields
-        await updateDoc(doc(db, "offers", editingId), {
-          title,
-          description,
-          validTill: validTill || null,
-          updatedAt: serverTimestamp(),
-        });
+        await updateDoc(doc(db, "offers", editingId), basePayload);
       } else {
         await addDoc(collection(db, "offers"), {
-          ...offerPayload,
+          ...basePayload,
           createdAt: serverTimestamp(),
         });
       }
