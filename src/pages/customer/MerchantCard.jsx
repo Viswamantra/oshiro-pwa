@@ -6,22 +6,39 @@ import HoverActions from "../../components/HoverActions";
  * =========================================================
  * MERCHANT CARD – CUSTOMER MODULE
  * ---------------------------------------------------------
+ * ✔ Schema-aligned (shop_name, category, location)
  * ✔ Card click → Merchant Details
  * ✔ Icons work independently
  * ✔ No bubbling / no redirect bugs
- * ✔ Keyboard & mobile friendly
+ * ✔ Safe & predictable rendering
  * =========================================================
  */
 
 export default function MerchantCard({ merchant }) {
   const navigate = useNavigate();
 
+  if (!merchant) return null;
+
+  const {
+    id,
+    shop_name,
+    category,
+    mobile,
+    location,
+  } = merchant;
+
+  /* ======================
+     HARD GUARDS
+  ====================== */
+  if (!id || !shop_name || !category) {
+    return null; // ❌ never render broken merchants
+  }
+
   /* ======================
      OPEN DETAILS
   ====================== */
   const openDetails = () => {
-    if (!merchant?.id) return;
-    navigate(`/customer/merchant/${merchant.id}`);
+    navigate(`/customer/merchant/${id}`);
   };
 
   return (
@@ -29,7 +46,7 @@ export default function MerchantCard({ merchant }) {
       className="merchant-card"
       role="button"
       tabIndex={0}
-      aria-label={`Open details for ${merchant.shopName}`}
+      aria-label={`Open details for ${shop_name}`}
       onClick={openDetails}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -53,9 +70,9 @@ export default function MerchantCard({ merchant }) {
           MERCHANT INFO
       ====================== */}
       <div className="merchant-info">
-        <h4 style={{ margin: 0 }}>{merchant.shopName}</h4>
+        <h4 style={{ margin: 0 }}>{shop_name}</h4>
         <span style={{ fontSize: 13, color: "#666" }}>
-          {merchant.category}
+          {category}
         </span>
       </div>
 
@@ -69,9 +86,9 @@ export default function MerchantCard({ merchant }) {
         onKeyDown={(e) => e.stopPropagation()}
       >
         <HoverActions
-          mobile={merchant.mobile}
-          lat={merchant.lat}
-          lng={merchant.lng}
+          mobile={mobile}
+          lat={location?.lat}
+          lng={location?.lng}
         />
       </div>
     </div>
