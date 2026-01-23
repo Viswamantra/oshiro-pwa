@@ -20,9 +20,56 @@ import { db } from "./index.js";
  * =========================================================
  */
 
-/* ======================
+/* =========================================================
+   GET MERCHANT BY MOBILE (LOGIN)
+   🔒 MUST be a named export (Rollup requirement)
+========================================================= */
+export async function getMerchantByMobile(mobile) {
+  if (!mobile || typeof mobile !== "string") return null;
+
+  const q = query(
+    collection(db, "merchants"),
+    where("mobile", "==", mobile)
+  );
+
+  const snapshot = await getDocs(q);
+
+  if (snapshot.empty) return null;
+
+  const docSnap = snapshot.docs[0];
+
+  return {
+    id: docSnap.id,
+    ...docSnap.data(),
+  };
+}
+
+/* =========================================================
+   REGISTER MERCHANT (MERCHANT SIDE)
+========================================================= */
+export async function registerMerchant({
+  mobile,
+  shopName,
+  category,
+}) {
+  if (!mobile || !shopName || !category) {
+    throw new Error("Missing required merchant fields");
+  }
+
+  return addDoc(collection(db, "merchants"), {
+    mobile, // digits only
+    shop_name: shopName,
+    category,
+    status: "pending",
+    profileComplete: false,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/* =========================================================
    PRIVATE: DISTANCE CALC (METERS)
-====================== */
+========================================================= */
 function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371000;
   const toRad = (v) => (v * Math.PI) / 180;
@@ -40,62 +87,13 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 }
 
 /* =========================================================
-   GET MERCHANT BY MOBILE (LOGIN)
-========================================================= */
-export async function getMerchantByMobile(mobile) {
-  if (!mobile) return null;
-
-  const q = query(
-    collection(db, "merchants"),
-    where("mobile", "==", mobile)
-  );
-
-  const snapshot = await getDocs(q);
-
-  if (snapshot.empty) return null;
-
-  const d = snapshot.docs[0];
-
-  return {
-    id: d.id,
-    ...d.data(),
-  };
-}
-
-/* =========================================================
-   REGISTER MERCHANT (MERCHANT SIDE)
-========================================================= */
-export async function registerMerchant({
-  mobile,
-  shopName,
-  category,
-}) {
-  if (!mobile || !shopName || !category) {
-    throw new Error("Missing required merchant fields");
-  }
-
-  return addDoc(collection(db, "merchants"), {
-    mobile,                 // digits only
-    shop_name: shopName,
-    category,
-    status: "pending",
-
-    // Required by Firestore rules
-    profileComplete: false,
-
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
-}
-
-/* =========================================================
    FETCH NEARBY MERCHANTS (CUSTOMER SIDE)
 ========================================================= */
 export async function fetchNearbyMerchants({
   userLat,
   userLng,
   category = "",
-  distance = 3000, // meters
+  distance = 3000,
 }) {
   if (typeof userLat !== "number" || typeof userLng !== "number") {
     return [];
