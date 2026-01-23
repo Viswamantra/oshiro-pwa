@@ -12,6 +12,7 @@ import { db } from "./index.js";
  * =========================================================
  * MERCHANT DATA ACCESS (SINGLE SOURCE OF TRUTH)
  * ---------------------------------------------------------
+ * ✔ Merchant login
  * ✔ Merchant registration
  * ✔ Customer-side nearby queries
  * ✔ Schema-aligned with admin & security rules
@@ -21,7 +22,6 @@ import { db } from "./index.js";
 
 /* ======================
    PRIVATE: DISTANCE CALC (METERS)
-   (NOT EXPORTED – Rollup safe)
 ====================== */
 function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371000;
@@ -40,6 +40,29 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 }
 
 /* =========================================================
+   GET MERCHANT BY MOBILE (LOGIN)
+========================================================= */
+export async function getMerchantByMobile(mobile) {
+  if (!mobile) return null;
+
+  const q = query(
+    collection(db, "merchants"),
+    where("mobile", "==", mobile)
+  );
+
+  const snapshot = await getDocs(q);
+
+  if (snapshot.empty) return null;
+
+  const d = snapshot.docs[0];
+
+  return {
+    id: d.id,
+    ...d.data(),
+  };
+}
+
+/* =========================================================
    REGISTER MERCHANT (MERCHANT SIDE)
 ========================================================= */
 export async function registerMerchant({
@@ -52,12 +75,12 @@ export async function registerMerchant({
   }
 
   return addDoc(collection(db, "merchants"), {
-    mobile,
+    mobile,                 // digits only
     shop_name: shopName,
     category,
     status: "pending",
 
-    // Required by Firestore security rules
+    // Required by Firestore rules
     profileComplete: false,
 
     createdAt: serverTimestamp(),
