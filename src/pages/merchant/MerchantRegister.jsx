@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { registerMerchant } from "../../firebase/merchants"; // ✅ FIXED
+import { registerMerchant } from "../../firebase/merchants";
 import { fetchActiveCategories } from "../../firebase/categories";
 
 /**
@@ -9,9 +9,10 @@ import { fetchActiveCategories } from "../../firebase/categories";
  * ---------------------------------------------------------
  * ✔ +91 locked mobile input
  * ✔ 10 digits only
- * ✔ Category selection
+ * ✔ Category stored as NAME (schema-aligned)
  * ✔ Status = pending (admin approval required)
  * ✔ profileComplete = false (rules-safe)
+ * ✔ Rollup / Vercel safe
  * =========================================================
  */
 
@@ -23,7 +24,7 @@ export default function MerchantRegister() {
   ====================== */
   const [mobile, setMobile] = useState("+91");
   const [shopName, setShopName] = useState("");
-  const [category, setCategory] = useState(""); // ✅ FIXED
+  const [category, setCategory] = useState(""); // category NAME
   const [categories, setCategories] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -32,7 +33,19 @@ export default function MerchantRegister() {
      LOAD CATEGORIES
   ====================== */
   useEffect(() => {
-    fetchActiveCategories().then(setCategories);
+    let mounted = true;
+
+    fetchActiveCategories()
+      .then((data) => {
+        if (mounted) setCategories(data);
+      })
+      .catch((err) => {
+        console.error("Failed to load categories", err);
+      });
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   /* ======================
@@ -57,6 +70,7 @@ export default function MerchantRegister() {
      REGISTER HANDLER
   ====================== */
   const register = async () => {
+    if (loading) return; // prevent double submit
     setError("");
 
     if (mobile.length !== 13) {
@@ -80,7 +94,7 @@ export default function MerchantRegister() {
       await registerMerchant({
         mobile: mobile.slice(3), // store digits only
         shopName,
-        category,               // ✅ FIXED
+        category, // stored as string name
       });
 
       alert("Registration successful.\nWaiting for admin approval.");
