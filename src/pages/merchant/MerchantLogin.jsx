@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { getMerchantByMobile } from "../../firebase/merchants";
+import { getMerchantByMobile } from "../../firebase/barrel"; // ✅ FIXED (IMPORTANT)
 
 /**
  * =========================================================
@@ -74,13 +74,13 @@ export default function MerchantLogin() {
       }
 
       /* ======================
-         STORE SESSION (FIXED)
+         STORE SESSION
       ====================== */
       localStorage.setItem(
         "merchant",
         JSON.stringify({
           id: merchant.id,
-          mobile: plainMobile, // ✅ ALWAYS digits
+          mobile: plainMobile,
           shopName: merchant.shop_name || "",
           status: merchant.status,
           profileComplete: merchant.profileComplete === true,
