@@ -3,18 +3,19 @@ import {
   getDocs,
   query,
   where,
+  addDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import { db } from "./index.js";
 
 /**
  * =========================================================
- * CUSTOMER-SIDE MERCHANT QUERIES
+ * MERCHANT DATA ACCESS (SINGLE SOURCE OF TRUTH)
  * ---------------------------------------------------------
- * ✔ Fetch nearby merchants
- * ✔ Filter by category (optional)
- * ✔ Distance-based filtering (client-side)
- * ✔ ONLY approved & profile-complete merchants
- * ✔ Schema-aligned with onboarding & admin
+ * ✔ Merchant registration
+ * ✔ Customer-side nearby queries
+ * ✔ Schema-aligned with admin & rules
+ * ✔ Rollup / Vercel safe
  * =========================================================
  */
 
@@ -37,9 +38,35 @@ function getDistance(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-/* ======================
-   FETCH NEARBY MERCHANTS
-====================== */
+/* =========================================================
+   REGISTER MERCHANT (MERCHANT SIDE)
+========================================================= */
+export async function registerMerchant({
+  mobile,
+  shopName,
+  category,
+}) {
+  if (!mobile || !shopName || !category) {
+    throw new Error("Missing required merchant fields");
+  }
+
+  return await addDoc(collection(db, "merchants"), {
+    mobile,
+    shop_name: shopName,
+    category,
+    status: "pending",
+
+    // 🔐 REQUIRED BY SECURITY RULES
+    profileComplete: false,
+
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/* =========================================================
+   FETCH NEARBY MERCHANTS (CUSTOMER SIDE)
+========================================================= */
 export async function fetchNearbyMerchants({
   userLat,
   userLng,
@@ -58,7 +85,7 @@ export async function fetchNearbyMerchants({
 
   /* ======================
      BASE QUERY
-     - ONLY approved & complete merchants
+     - ONLY approved & profile-complete merchants
   ====================== */
   let q = query(
     collection(db, "merchants"),
@@ -68,7 +95,6 @@ export async function fetchNearbyMerchants({
 
   /* ======================
      OPTIONAL CATEGORY FILTER
-     (SCHEMA-ALIGNED)
   ====================== */
   if (category) {
     q = query(
@@ -79,19 +105,14 @@ export async function fetchNearbyMerchants({
     );
   }
 
-  /* ======================
-     FETCH DATA
-  ====================== */
   const snapshot = await getDocs(q);
 
-  const merchants = snapshot.docs
+  return snapshot.docs
     .map((doc) => ({
       id: doc.id,
       ...doc.data(),
     }))
     .filter((m) => {
-      // Location is guaranteed by profileComplete,
-      // but keep this guard for safety
       if (
         typeof m.location?.lat !== "number" ||
         typeof m.location?.lng !== "number"
@@ -108,6 +129,4 @@ export async function fetchNearbyMerchants({
 
       return d <= distance;
     });
-
-  return merchants;
 }
