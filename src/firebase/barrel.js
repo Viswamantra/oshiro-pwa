@@ -1,21 +1,20 @@
 /**
  * =========================================================
- * FIREBASE BARREL EXPORT
+ * FIREBASE BARREL (SINGLE ENTRY POINT)
  * ---------------------------------------------------------
- * ✔ Single import surface for entire app
- * ✔ Prevents path mistakes
  * ✔ Rollup / Vite / Vercel safe
- * ✔ Explicit named exports (no magic)
+ * ✔ Explicit named exports only
+ * ✔ Prevents import/export mismatches
  * =========================================================
  */
 
 /* ======================
    CORE FIREBASE
 ====================== */
-export { app, db, auth, getFirebaseMessaging } from "./index";
+export { db, auth } from "./index";
 
 /* ======================
-   MERCHANT APIs
+   MERCHANT API (CRITICAL)
 ====================== */
 export {
   getMerchantByMobile,
@@ -24,16 +23,16 @@ export {
 } from "./merchants";
 
 /* ======================
-   CUSTOMER APIs
+   CUSTOMER API
 ====================== */
 export * from "./customer";
 
 /* ======================
-   CATEGORY APIs
+   CATEGORIES
 ====================== */
 export * from "./categories";
 
 /* ======================
-   NOTIFICATIONS (OPTIONAL)
+   NOTIFICATIONS
 ====================== */
 export * from "./notifications";
