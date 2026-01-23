@@ -13,8 +13,8 @@ import { db } from "./index.js";
  * ✔ Fetch nearby merchants
  * ✔ Filter by category (optional)
  * ✔ Distance-based filtering (client-side)
- * ✔ ONLY approved merchants
- * ✔ Safe & predictable
+ * ✔ ONLY approved & COMPLETE merchants
+ * ✔ Schema-aligned with onboarding & admin
  * =========================================================
  */
 
@@ -22,7 +22,7 @@ import { db } from "./index.js";
    DISTANCE CALC (METERS)
 ====================== */
 function getDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371000; // Earth radius (meters)
+  const R = 6371000;
   const toRad = (v) => (v * Math.PI) / 180;
 
   const dLat = toRad(lat2 - lat1);
@@ -43,7 +43,7 @@ function getDistance(lat1, lon1, lat2, lon2) {
 export async function fetchNearbyMerchants({
   userLat,
   userLng,
-  categoryId = "",
+  category = "",
   distance = 3000, // meters
 }) {
   /* ======================
@@ -67,12 +67,13 @@ export async function fetchNearbyMerchants({
 
   /* ======================
      OPTIONAL CATEGORY FILTER
+     (SCHEMA-ALIGNED)
   ====================== */
-  if (categoryId) {
+  if (category) {
     q = query(
       collection(db, "merchants"),
       where("status", "==", "approved"),
-      where("categoryId", "==", categoryId)
+      where("category", "==", category)
     );
   }
 
@@ -87,6 +88,15 @@ export async function fetchNearbyMerchants({
       ...doc.data(),
     }))
     .filter((m) => {
+      /* ======================
+         HARD GUARDS (CRITICAL)
+      ====================== */
+
+      // Must have valid identity
+      if (!m.shop_name || !m.category) {
+        return false;
+      }
+
       // Must have valid location
       if (
         typeof m.location?.lat !== "number" ||
