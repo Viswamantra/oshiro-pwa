@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 
 /* ======================
@@ -50,25 +50,7 @@ import MerchantOffers from "./pages/merchant/MerchantOffers";
 import MerchantProfile from "./pages/merchant/MerchantProfile";
 import MerchantLocation from "./pages/merchant/MerchantLocation";
 
-/* ======================
-   ONE-TIME MIGRATION
-====================== */
-import { migrateMerchants } from "./utils/migrateMerchants";
-
 export default function App() {
-
-  /* ======================
-     ONE-TIME SCHEMA MIGRATION
-     ⚠ REMOVE after running once
-  ====================== */
-  useEffect(() => {
-    migrateMerchants()
-      .then(() => console.log("✅ Merchant migration done"))
-      .catch((err) =>
-        console.error("❌ Merchant migration failed", err)
-      );
-  }, []);
-
   return (
     <Routes>
       {/* ======================
