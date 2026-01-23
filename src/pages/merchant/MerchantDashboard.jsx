@@ -12,16 +12,28 @@ import {
  * ✔ Navigation
  * ✔ Push notification enable flow
  * ✔ Foreground message listener
- * ✔ UX-safe permission handling
+ * ✔ Safe merchant session handling
+ * ✔ Rollup / Vercel safe
  * =========================================================
  */
 
 export default function MerchantDashboard() {
-  const merchantId = localStorage.getItem("merchantId");
+  /* ======================
+     GET MERCHANT SESSION
+  ====================== */
+  let merchantId = null;
 
-  const [notificationStatus, setNotificationStatus] = useState(
-    Notification?.permission || "default"
-  );
+  try {
+    const stored = JSON.parse(localStorage.getItem("merchant"));
+    merchantId = stored?.id || null;
+  } catch (e) {
+    merchantId = null;
+  }
+
+  const [notificationStatus, setNotificationStatus] = useState(() => {
+    if (typeof Notification === "undefined") return "default";
+    return Notification.permission;
+  });
 
   /* ======================
      FOREGROUND LISTENER
@@ -39,8 +51,16 @@ export default function MerchantDashboard() {
       return;
     }
 
-    await enablePushNotifications(merchantId);
-    setNotificationStatus(Notification.permission);
+    try {
+      await enablePushNotifications(merchantId);
+
+      if (typeof Notification !== "undefined") {
+        setNotificationStatus(Notification.permission);
+      }
+    } catch (err) {
+      console.error("Enable notifications failed:", err);
+      alert("Failed to enable notifications");
+    }
   };
 
   return (
