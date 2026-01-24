@@ -6,22 +6,10 @@ import {
   query,
   where,
 } from "firebase/firestore";
-import { db } from "../index"; // ✅ correct + consistent import
-
-/**
- * =========================================================
- * CUSTOMER FIREBASE QUERIES
- * ---------------------------------------------------------
- * ✔ Fetch active categories
- * ✔ Log customer visits (safe)
- * ✔ Optional geo capture
- * ✔ Analytics-ready structure
- * =========================================================
- */
+import { db } from "./firebase"; // ✅ FIXED
 
 /* ======================
    FETCH ACTIVE CATEGORIES
-   (Customer UI)
 ====================== */
 export async function fetchCategories() {
   if (!db) return [];
@@ -46,13 +34,12 @@ export async function fetchCategories() {
 
 /* ======================
    LOG CUSTOMER VISIT
-   (OPTIONAL – SAFE)
 ====================== */
 export async function logCustomerVisit({
   mobile,
   lat,
   lng,
-  source = "app", // optional analytics tag
+  source = "app",
 }) {
   if (!db || !mobile) return;
 
@@ -62,17 +49,13 @@ export async function logCustomerVisit({
     createdAt: serverTimestamp(),
   };
 
-  // ✅ Attach location only if valid
   if (
     typeof lat === "number" &&
     typeof lng === "number" &&
     !isNaN(lat) &&
     !isNaN(lng)
   ) {
-    payload.location = {
-      lat,
-      lng,
-    };
+    payload.location = { lat, lng };
   }
 
   try {
