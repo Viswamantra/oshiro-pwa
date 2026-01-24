@@ -1,5 +1,16 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
+
+/**
+ * =========================================
+ * FIREBASE INITIALIZATION (SINGLE SOURCE)
+ * -----------------------------------------
+ * ✔ Vite-compatible env vars
+ * ✔ Firestore
+ * ✔ Auth (future-ready)
+ * =========================================
+ */
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -8,4 +19,7 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+
+// 🔥 Export shared Firebase services
 export const db = getFirestore(app);
+export const auth = getAuth(app);
