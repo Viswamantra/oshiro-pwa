@@ -5,6 +5,8 @@ import {
   getDocs,
   addDoc,
   serverTimestamp,
+  updateDoc,
+  doc,
 } from "firebase/firestore";
 import { db } from "./index.js";
 
@@ -14,8 +16,8 @@ import { db } from "./index.js";
  * ---------------------------------------------------------
  * ✔ Mobile normalization
  * ✔ Location-safe (geo-ready)
+ * ✔ Auto-sync location → active offers
  * ✔ Admin + Customer compatible
- * ✔ Single source of truth
  * =========================================================
  */
 
@@ -41,8 +43,31 @@ function normalizeMobile(mobile) {
 }
 
 /* ======================
+   SYNC LOCATION → ACTIVE OFFERS
+====================== */
+async function syncMerchantLocationToOffers(merchantId, location) {
+  if (!merchantId || !location) return;
+
+  const q = query(
+    collection(db, "offers"),
+    where("merchantId", "==", merchantId),
+    where("isActive", "==", true)
+  );
+
+  const snap = await getDocs(q);
+
+  const updates = snap.docs.map((d) =>
+    updateDoc(doc(db, "offers", d.id), {
+      location,
+      updatedAt: serverTimestamp(),
+    })
+  );
+
+  await Promise.all(updates);
+}
+
+/* ======================
    GET MERCHANT BY MOBILE
-   - Used during login
 ====================== */
 export async function getMerchantByMobile(mobile) {
   const normalizedMobile = normalizeMobile(mobile);
@@ -56,11 +81,11 @@ export async function getMerchantByMobile(mobile) {
   const snapshot = await getDocs(q);
   if (snapshot.empty) return null;
 
-  const doc = snapshot.docs[0];
+  const docSnap = snapshot.docs[0];
 
   return {
-    id: doc.id,
-    ...doc.data(),
+    id: docSnap.id,
+    ...docSnap.data(),
   };
 }
 
@@ -68,6 +93,7 @@ export async function getMerchantByMobile(mobile) {
    REGISTER MERCHANT
    - ALWAYS creates PENDING merchant
    - Saves PRESENT LOCATION
+   - Syncs location to offers (future-safe)
 ====================== */
 export async function registerMerchant({
   mobile,
@@ -91,23 +117,27 @@ export async function registerMerchant({
     updatedAt: serverTimestamp(),
   };
 
-  /* ======================
-     PRESENT LOCATION (CRITICAL)
-  ====================== */
+  let location = null;
+
   if (
     typeof lat === "number" &&
     typeof lng === "number" &&
     !isNaN(lat) &&
     !isNaN(lng)
   ) {
-    merchantData.location = {
-      lat,
-      lng,
-    };
+    location = { lat, lng };
+    merchantData.location = location;
   }
 
-  return await addDoc(
+  const docRef = await addDoc(
     collection(db, "merchants"),
     merchantData
   );
+
+  // 🔥 FUTURE-SAFE: if offers already exist, sync location
+  if (location) {
+    await syncMerchantLocationToOffers(docRef.id, location);
+  }
+
+  return docRef;
 }
