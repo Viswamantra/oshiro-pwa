@@ -73,16 +73,19 @@ export default function MerchantList({
           );
         }
 
-        // ✅ Distance filter
+        // ✅ Distance filter (SUPPORT BOTH lat/lng & location.lat/lng)
         if (userLat && userLng && distance) {
           list = list.filter((m) => {
-            if (!m.lat || !m.lng) return false;
+            const lat = m.lat ?? m.location?.lat;
+            const lng = m.lng ?? m.location?.lng;
+
+            if (!lat || !lng) return false;
 
             const d = getDistance(
               Number(userLat),
               Number(userLng),
-              Number(m.lat),
-              Number(m.lng)
+              Number(lat),
+              Number(lng)
             );
 
             return d <= distance;
