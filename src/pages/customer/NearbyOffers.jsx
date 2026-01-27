@@ -30,7 +30,7 @@ export default function NearbyOffers() {
           const userLat = pos.coords.latitude;
           const userLng = pos.coords.longitude;
 
-          // 1️⃣ Fetch APPROVED merchants with location
+          // 1️⃣ Fetch approved merchants
           const merchantSnap = await getDocs(
             query(
               collection(db, "merchants"),
@@ -38,7 +38,7 @@ export default function NearbyOffers() {
             )
           );
 
-          const results = [];
+          const flatResults = [];
 
           for (const m of merchantSnap.docs) {
             const merchant = m.data();
@@ -64,16 +64,31 @@ export default function NearbyOffers() {
             );
 
             offerSnap.forEach((o) => {
-              results.push({
+              flatResults.push({
                 id: o.id,
-                distanceKm,
+                merchantId: m.id,
                 merchantName: merchant.shop_name || merchant.name,
+                distanceKm,
                 ...o.data(),
               });
             });
           }
 
-          setItems(results);
+          // 3️⃣ Group offers by merchant
+          const grouped = {};
+          flatResults.forEach((o) => {
+            if (!grouped[o.merchantId]) {
+              grouped[o.merchantId] = {
+                merchantId: o.merchantId,
+                merchantName: o.merchantName,
+                distanceKm: o.distanceKm,
+                offers: [],
+              };
+            }
+            grouped[o.merchantId].offers.push(o);
+          });
+
+          setItems(Object.values(grouped));
         } catch (e) {
           console.error(e);
           setError("Failed to load nearby deals");
@@ -113,21 +128,40 @@ export default function NearbyOffers() {
 
       {items.length === 0 && <p>No merchants found</p>}
 
-      {items.map((o) => (
-        <div key={o.id} style={card}>
-          <h4>{o.title}</h4>
-          <p><b>{o.merchantName}</b></p>
-          {o.description && <p>{o.description}</p>}
-          <small>{o.distanceKm.toFixed(2)} km away</small>
+      {items.map((m) => (
+        <div key={m.merchantId} style={merchantCard}>
+          <div style={{ marginBottom: 6 }}>
+            <h3 style={{ margin: 0 }}>{m.merchantName}</h3>
+            <small>{m.distanceKm.toFixed(2)} km away</small>
+          </div>
+
+          {m.offers.map((o) => (
+            <div key={o.id} style={offerCard}>
+              <strong>{o.title}</strong>
+              {o.description && o.description !== o.title && (
+                <p style={{ margin: "4px 0" }}>{o.description}</p>
+              )}
+            </div>
+          ))}
         </div>
       ))}
     </div>
   );
 }
 
-const card = {
-  border: "1px solid #ccc",
+/* ======================
+   STYLES
+====================== */
+const merchantCard = {
+  border: "1px solid #ddd",
+  borderRadius: 8,
   padding: 12,
-  marginBottom: 10,
-  borderRadius: 6,
+  marginBottom: 16,
+  background: "#fafafa",
+};
+
+const offerCard = {
+  borderTop: "1px dashed #ccc",
+  paddingTop: 8,
+  marginTop: 8,
 };
