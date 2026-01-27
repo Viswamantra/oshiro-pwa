@@ -43,13 +43,17 @@ export default function NearbyOffers() {
           for (const m of merchantSnap.docs) {
             const merchant = m.data();
 
-            if (!merchant.lat || !merchant.lng) continue;
+            // ✅ SUPPORT BOTH DATA STRUCTURES
+            const lat = merchant.lat ?? merchant.location?.lat;
+            const lng = merchant.lng ?? merchant.location?.lng;
+
+            if (!lat || !lng) continue;
 
             const distanceKm = getDistanceInKm(
               userLat,
               userLng,
-              merchant.lat,
-              merchant.lng
+              lat,
+              lng
             );
 
             if (distanceKm > radiusKm) continue;
