@@ -1,124 +1,67 @@
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
+import React, { useEffect, useState } from "react";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { db } from "../../firebase";
 
-    /* =====================
-       HELPERS
-    ===================== */
-    function isSignedIn() {
-      return request.auth != null;
-    }
+export default function MerchantOffers() {
+  const [offers, setOffers] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-    // DEV MODE ADMIN
-    function isAdmin() {
-      return isSignedIn();
-    }
+  // ⚠️ Replace with logged-in merchant ID later
+  const merchantId = localStorage.getItem("merchantId");
 
-    /* =====================
-       SCHEMA VALIDATORS
-    ===================== */
+  useEffect(() => {
+    const loadOffers = async () => {
+      try {
+        if (!merchantId) {
+          setOffers([]);
+          return;
+        }
 
-    function hasValidMerchantSchema(data) {
-      return data.keys().hasAll([
-        "mobile",
-        "shop_name",
-        "category",
-        "status",
-        "profileComplete"
-      ]);
-    }
+        const snap = await getDocs(
+          query(
+            collection(db, "offers"),
+            where("merchantId", "==", merchantId)
+          )
+        );
 
-    function hasValidOfferSchema(data) {
-      return data.keys().hasAll([
-        "merchantId",
-        "shop_name",
-        "mobile",
-        "category",
-        "title",
-        "isActive"
-      ]);
-    }
+        const list = snap.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        }));
 
-    /* =====================
-       CATEGORIES
-    ===================== */
-    match /categories/{id} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
+        setOffers(list);
+      } catch (e) {
+        console.error("Failed to load offers", e);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    /* =====================
-       MERCHANTS
-    ===================== */
-    match /merchants/{merchantId} {
+    loadOffers();
+  }, [merchantId]);
 
-      // Merchant registration
-      allow create: if
-        request.resource.data.status == "pending"
-        && hasValidMerchantSchema(request.resource.data)
-        && request.resource.data.profileComplete in [true, false];
+  if (loading) return <p>Loading offers…</p>;
 
-      // Read merchants
-      allow read: if true;
+  return (
+    <div>
+      <h2>My Offers</h2>
 
-      // Admin only
-      allow update, delete: if isAdmin();
-    }
+      {offers.length === 0 && <p>No offers created yet</p>}
 
-    /* =====================
-       OFFERS ✅ FIXED
-    ===================== */
-    match /offers/{offerId} {
-
-      // Customers & public
-      allow read: if true;
-
-      // 🔥 MERCHANT CREATE
-      allow create: if
-        hasValidOfferSchema(request.resource.data)
-        && request.resource.data.merchantId is string
-        && request.resource.data.title is string;
-
-      // 🔥 MERCHANT UPDATE (own offer only)
-      allow update: if
-        request.resource.data.merchantId == resource.data.merchantId;
-
-      // 🔥 MERCHANT DELETE (own offer only)
-      allow delete: if
-        request.resource.data.merchantId == resource.data.merchantId;
-
-      // 👑 ADMIN OVERRIDE
-      allow create, update, delete: if isAdmin();
-    }
-
-    /* =====================
-       CUSTOMER VISITS
-    ===================== */
-    match /customer_visits/{id} {
-      allow create: if true;
-      allow read, update, delete: if isAdmin();
-    }
-
-    /* =====================
-       CUSTOMERS
-    ===================== */
-    match /customers/{id} {
-      allow create, read: if true;
-      allow update, delete: if isAdmin();
-    }
-
-    /* =====================
-       NOTIFICATIONS
-    ===================== */
-    match /notifications/{id} {
-      allow read, write: if isAdmin();
-    }
-
-    /* =====================
-       SAFETY NET
-    ===================== */
-    match /{document=**} {
-      allow read, write: if false;
-    }
-  }
+      {offers.map((o) => (
+        <div key={o.id} style={card}>
+          <h4>{o.title}</h4>
+          {o.description && <p>{o.description}</p>}
+          <small>Status: {o.isActive ? "Active" : "Inactive"}</small>
+        </div>
+      ))}
+    </div>
+  );
 }
+
+const card = {
+  border: "1px solid #ddd",
+  padding: 12,
+  borderRadius: 6,
+  marginBottom: 10,
+};
