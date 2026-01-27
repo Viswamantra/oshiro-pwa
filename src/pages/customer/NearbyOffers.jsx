@@ -3,22 +3,26 @@ import {
   collection,
   getDocs,
   query,
-  where
+  where,
 } from "firebase/firestore";
 import { db } from "../../firebase";
 import { getDistanceInKm } from "../../utils/geo";
 
-/**
- * Change this dynamically from UI later
- * 0.3  = 300 meters
- * 10   = 10 km
- */
-const RADIUS_KM = 10;
+/* ======================
+   RADIUS OPTIONS
+====================== */
+const RADIUS_OPTIONS = [
+  { label: "300 m", value: 0.3 },
+  { label: "1 km", value: 1 },
+  { label: "5 km", value: 5 },
+  { label: "10 km", value: 10 },
+];
 
 export default function NearbyOffers() {
   const [offers, setOffers] = useState([]);
-  const [error, setError] = useState("");
+  const [radiusKm, setRadiusKm] = useState(10);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -33,20 +37,20 @@ export default function NearbyOffers() {
           const userLat = pos.coords.latitude;
           const userLng = pos.coords.longitude;
 
-          // ✅ 1. Fetch ALL active offers
-          const offersSnap = await getDocs(
+          // 🔥 FETCH ONLY ACTIVE OFFERS
+          const snap = await getDocs(
             query(
               collection(db, "offers"),
               where("isActive", "==", true)
             )
           );
 
-          const nearbyOffers = [];
+          const nearby = [];
 
-          offersSnap.forEach((doc) => {
+          snap.forEach((doc) => {
             const offer = doc.data();
 
-            // 🔴 MUST HAVE LOCATION
+            // ❗ Offer MUST have location
             if (!offer.location) return;
 
             const distanceKm = getDistanceInKm(
@@ -56,17 +60,16 @@ export default function NearbyOffers() {
               offer.location.lng
             );
 
-            // ✅ Distance filter (300m / 10km)
-            if (distanceKm <= RADIUS_KM) {
-              nearbyOffers.push({
+            if (distanceKm <= radiusKm) {
+              nearby.push({
                 id: doc.id,
                 distanceKm,
-                ...offer
+                ...offer,
               });
             }
           });
 
-          setOffers(nearbyOffers);
+          setOffers(nearby);
         } catch (err) {
           console.error(err);
           setError("Failed to load nearby offers");
@@ -79,27 +82,40 @@ export default function NearbyOffers() {
         setLoading(false);
       }
     );
-  }, []);
+  }, [radiusKm]);
 
-  if (loading) return <p>Loading nearby offers…</p>;
+  if (loading) return <p>Loading nearby deals…</p>;
   if (error) return <p style={{ color: "red" }}>{error}</p>;
 
   return (
     <div>
       <h2>Nearby Deals</h2>
 
-      {offers.length === 0 && (
-        <p>No nearby offers found</p>
-      )}
+      {/* 🔥 Radius Dropdown */}
+      <div style={{ marginBottom: 12 }}>
+        <label>
+          Distance:&nbsp;
+          <select
+            value={radiusKm}
+            onChange={(e) => setRadiusKm(Number(e.target.value))}
+          >
+            {RADIUS_OPTIONS.map((r) => (
+              <option key={r.value} value={r.value}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      {offers.length === 0 && <p>No nearby offers found</p>}
 
       {offers.map((o) => (
         <div key={o.id} style={card}>
           <h4>{o.title}</h4>
-          {o.description && <p>{o.description}</p>}
           {o.shop_name && <p><b>{o.shop_name}</b></p>}
-          {o.distanceKm !== undefined && (
-            <small>{o.distanceKm.toFixed(2)} km away</small>
-          )}
+          {o.description && <p>{o.description}</p>}
+          <small>{o.distanceKm.toFixed(2)} km away</small>
         </div>
       ))}
     </div>
@@ -110,5 +126,5 @@ const card = {
   border: "1px solid #ccc",
   padding: 12,
   marginBottom: 10,
-  borderRadius: 6
+  borderRadius: 6,
 };
