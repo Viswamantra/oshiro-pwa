@@ -8,7 +8,12 @@ import {
 import { db } from "../../firebase";
 import { getDistanceInKm } from "../../utils/geo";
 
-const RADIUS_KM = 5; // 🔥 change anytime
+/**
+ * Change this dynamically from UI later
+ * 0.3  = 300 meters
+ * 10   = 10 km
+ */
+const RADIUS_KM = 10;
 
 export default function NearbyOffers() {
   const [offers, setOffers] = useState([]);
@@ -28,56 +33,43 @@ export default function NearbyOffers() {
           const userLat = pos.coords.latitude;
           const userLng = pos.coords.longitude;
 
-          // 1️⃣ Get approved merchants with location
-          const merchantsSnap = await getDocs(
-            query(
-              collection(db, "merchants"),
-              where("status", "==", "approved")
-            )
-          );
-
-          const nearbyMerchantIds = [];
-
-          merchantsSnap.forEach((doc) => {
-            const m = doc.data();
-            if (!m.location) return;
-
-            const d = getDistanceInKm(
-              userLat,
-              userLng,
-              m.location.lat,
-              m.location.lng
-            );
-
-            if (d <= RADIUS_KM) {
-              nearbyMerchantIds.push(doc.id);
-            }
-          });
-
-          if (nearbyMerchantIds.length === 0) {
-            setOffers([]);
-            setLoading(false);
-            return;
-          }
-
-          // 2️⃣ Get offers for nearby merchants
+          // ✅ 1. Fetch ALL active offers
           const offersSnap = await getDocs(
             query(
               collection(db, "offers"),
-              where("merchantId", "in", nearbyMerchantIds),
               where("isActive", "==", true)
             )
           );
 
-          setOffers(
-            offersSnap.docs.map((d) => ({
-              id: d.id,
-              ...d.data()
-            }))
-          );
+          const nearbyOffers = [];
+
+          offersSnap.forEach((doc) => {
+            const offer = doc.data();
+
+            // 🔴 MUST HAVE LOCATION
+            if (!offer.location) return;
+
+            const distanceKm = getDistanceInKm(
+              userLat,
+              userLng,
+              offer.location.lat,
+              offer.location.lng
+            );
+
+            // ✅ Distance filter (300m / 10km)
+            if (distanceKm <= RADIUS_KM) {
+              nearbyOffers.push({
+                id: doc.id,
+                distanceKm,
+                ...offer
+              });
+            }
+          });
+
+          setOffers(nearbyOffers);
         } catch (err) {
           console.error(err);
-          setError("Failed to load offers");
+          setError("Failed to load nearby offers");
         } finally {
           setLoading(false);
         }
@@ -94,7 +86,7 @@ export default function NearbyOffers() {
 
   return (
     <div>
-      <h2>Nearby Offers</h2>
+      <h2>Nearby Deals</h2>
 
       {offers.length === 0 && (
         <p>No nearby offers found</p>
@@ -104,6 +96,10 @@ export default function NearbyOffers() {
         <div key={o.id} style={card}>
           <h4>{o.title}</h4>
           {o.description && <p>{o.description}</p>}
+          {o.shop_name && <p><b>{o.shop_name}</b></p>}
+          {o.distanceKm !== undefined && (
+            <small>{o.distanceKm.toFixed(2)} km away</small>
+          )}
         </div>
       ))}
     </div>
