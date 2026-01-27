@@ -1,26 +1,19 @@
 import React, { useEffect, useState } from "react";
-import {
-  collection,
-  getDocs,
-  query,
-  where,
-} from "firebase/firestore";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../../firebase";
 import { getDistanceInKm } from "../../utils/geo";
 
-/* ======================
-   RADIUS OPTIONS
-====================== */
 const RADIUS_OPTIONS = [
   { label: "300 m", value: 0.3 },
   { label: "1 km", value: 1 },
+  { label: "3 km", value: 3 },
   { label: "5 km", value: 5 },
   { label: "10 km", value: 10 },
 ];
 
 export default function NearbyOffers() {
-  const [offers, setOffers] = useState([]);
-  const [radiusKm, setRadiusKm] = useState(10);
+  const [items, setItems] = useState([]);
+  const [radiusKm, setRadiusKm] = useState(3);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -37,42 +30,53 @@ export default function NearbyOffers() {
           const userLat = pos.coords.latitude;
           const userLng = pos.coords.longitude;
 
-          // 🔥 FETCH ONLY ACTIVE OFFERS
-          const snap = await getDocs(
+          // 1️⃣ Fetch APPROVED merchants with location
+          const merchantSnap = await getDocs(
             query(
-              collection(db, "offers"),
-              where("isActive", "==", true)
+              collection(db, "merchants"),
+              where("status", "==", "approved")
             )
           );
 
-          const nearby = [];
+          const results = [];
 
-          snap.forEach((doc) => {
-            const offer = doc.data();
+          for (const m of merchantSnap.docs) {
+            const merchant = m.data();
 
-            // ❗ Offer MUST have location
-            if (!offer.location) return;
+            if (!merchant.lat || !merchant.lng) continue;
 
             const distanceKm = getDistanceInKm(
               userLat,
               userLng,
-              offer.location.lat,
-              offer.location.lng
+              merchant.lat,
+              merchant.lng
             );
 
-            if (distanceKm <= radiusKm) {
-              nearby.push({
-                id: doc.id,
-                distanceKm,
-                ...offer,
-              });
-            }
-          });
+            if (distanceKm > radiusKm) continue;
 
-          setOffers(nearby);
-        } catch (err) {
-          console.error(err);
-          setError("Failed to load nearby offers");
+            // 2️⃣ Fetch active offers for this merchant
+            const offerSnap = await getDocs(
+              query(
+                collection(db, "offers"),
+                where("merchantId", "==", m.id),
+                where("isActive", "==", true)
+              )
+            );
+
+            offerSnap.forEach((o) => {
+              results.push({
+                id: o.id,
+                distanceKm,
+                merchantName: merchant.shop_name || merchant.name,
+                ...o.data(),
+              });
+            });
+          }
+
+          setItems(results);
+        } catch (e) {
+          console.error(e);
+          setError("Failed to load nearby deals");
         } finally {
           setLoading(false);
         }
@@ -91,7 +95,6 @@ export default function NearbyOffers() {
     <div>
       <h2>Nearby Deals</h2>
 
-      {/* 🔥 Radius Dropdown */}
       <div style={{ marginBottom: 12 }}>
         <label>
           Distance:&nbsp;
@@ -108,12 +111,12 @@ export default function NearbyOffers() {
         </label>
       </div>
 
-      {offers.length === 0 && <p>No nearby offers found</p>}
+      {items.length === 0 && <p>No merchants found</p>}
 
-      {offers.map((o) => (
+      {items.map((o) => (
         <div key={o.id} style={card}>
           <h4>{o.title}</h4>
-          {o.shop_name && <p><b>{o.shop_name}</b></p>}
+          <p><b>{o.merchantName}</b></p>
           {o.description && <p>{o.description}</p>}
           <small>{o.distanceKm.toFixed(2)} km away</small>
         </div>
