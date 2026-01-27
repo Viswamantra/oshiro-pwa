@@ -12,26 +12,48 @@ import { db } from "./index.js";
  * =========================================================
  * MERCHANT AUTH & PROFILE (MERCHANT SIDE)
  * ---------------------------------------------------------
+ * ✔ Mobile normalization
+ * ✔ Location-safe (geo-ready)
+ * ✔ Admin + Customer compatible
  * ✔ Single source of truth
- * ✔ Admin-compatible schema
- * ✔ Customer-safe fields
  * =========================================================
  */
+
+/* ======================
+   HELPERS
+====================== */
+
+/**
+ * Normalize Indian mobile numbers
+ * - Accepts: 9182653234, +919182653234, 91-9182653234
+ * - Stores: +91XXXXXXXXXX
+ */
+function normalizeMobile(mobile) {
+  if (!mobile) return null;
+
+  let digits = mobile.replace(/\D/g, "");
+
+  if (digits.length > 10) {
+    digits = digits.slice(-10);
+  }
+
+  return "+91" + digits;
+}
 
 /* ======================
    GET MERCHANT BY MOBILE
    - Used during login
 ====================== */
 export async function getMerchantByMobile(mobile) {
-  if (!mobile) return null;
+  const normalizedMobile = normalizeMobile(mobile);
+  if (!normalizedMobile) return null;
 
   const q = query(
     collection(db, "merchants"),
-    where("mobile", "==", mobile)
+    where("mobile", "==", normalizedMobile)
   );
 
   const snapshot = await getDocs(q);
-
   if (snapshot.empty) return null;
 
   const doc = snapshot.docs[0];
@@ -45,7 +67,7 @@ export async function getMerchantByMobile(mobile) {
 /* ======================
    REGISTER MERCHANT
    - ALWAYS creates PENDING merchant
-   - Admin reads SAME fields
+   - Saves PRESENT LOCATION
 ====================== */
 export async function registerMerchant({
   mobile,
@@ -54,21 +76,23 @@ export async function registerMerchant({
   lat,
   lng,
 }) {
-  if (!mobile || !shopName || !category) {
+  const normalizedMobile = normalizeMobile(mobile);
+
+  if (!normalizedMobile || !shopName || !category) {
     throw new Error("Missing required merchant fields");
   }
 
   const merchantData = {
-    mobile,
-    shop_name: shopName,       // ✅ FIXED: admin-compatible
-    category: category,        // ✅ FIXED: no categoryId drift
+    mobile: normalizedMobile,
+    shop_name: shopName,
+    category,
     status: "pending",
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
 
   /* ======================
-     OPTIONAL LOCATION
+     PRESENT LOCATION (CRITICAL)
   ====================== */
   if (
     typeof lat === "number" &&
@@ -76,7 +100,10 @@ export async function registerMerchant({
     !isNaN(lat) &&
     !isNaN(lng)
   ) {
-    merchantData.location = { lat, lng };
+    merchantData.location = {
+      lat,
+      lng,
+    };
   }
 
   return await addDoc(
