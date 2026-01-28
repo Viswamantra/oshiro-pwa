@@ -24,10 +24,11 @@ body {
   line-height: 1.4;
 }
 
+/* Do NOT globally kill button background behavior */
 button {
   cursor: pointer;
   border: none;
-  background: none;
+  font-family: inherit;
 }
 
 input,
@@ -98,7 +99,7 @@ select {
 }
 
 /* =========================================================
-   MERCHANT CARD (COMPACT)
+   MERCHANT CARD
 ========================================================= */
 .merchant-card {
   background: #ffffff;
@@ -123,16 +124,7 @@ select {
 }
 
 /* =========================================================
-   ACTION ICONS
-========================================================= */
-.merchant-actions a {
-  font-size: 20px;
-  margin-left: 12px;
-  text-decoration: none;
-}
-
-/* =========================================================
-   ADMIN LAYOUT (SCOPED & SAFE)
+   ADMIN LAYOUT (HARDENED)
 ========================================================= */
 .admin-wrapper {
   display: flex;
@@ -150,6 +142,7 @@ select {
   flex-direction: column;
   justify-content: space-between;
   padding: 20px;
+  overflow-y: auto; /* 🔑 prevents logout disappearing */
 }
 
 /* LOGO */
@@ -187,14 +180,20 @@ select {
   color: #ffffff;
 }
 
-/* LOGOUT BUTTON */
+/* LOGOUT BUTTON (FORCED VISIBLE) */
 .admin-logout {
+  margin-top: 16px;
   padding: 12px;
-  background: #c62828;
+  background-color: #c62828;
   color: #ffffff;
   border-radius: 6px;
   font-weight: bold;
   cursor: pointer;
+  text-align: center;
+}
+
+.admin-logout:hover {
+  background-color: #b71c1c;
 }
 
 /* MAIN AREA */
