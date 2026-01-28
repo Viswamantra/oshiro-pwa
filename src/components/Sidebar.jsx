@@ -5,12 +5,12 @@ import oshiroLogo from "../assets/logo/oshiro-logo-icon.png";
 
 /**
  * =========================================================
- * ADMIN SIDEBAR (FINAL / FIXED)
+ * ADMIN SIDEBAR (FINAL – PRODUCTION SAFE)
  * ---------------------------------------------------------
  * ✔ Correct Firebase import
- * ✔ Sidebar now mounts properly
- * ✔ Logout works
- * ✔ Stable on Vercel
+ * ✔ Single admin session key
+ * ✔ Logout fully stable
+ * ✔ Works with ProtectedRoute
  * =========================================================
  */
 
@@ -25,8 +25,9 @@ export default function Sidebar() {
     } catch (err) {
       console.error("Admin logout error:", err);
     } finally {
-      localStorage.removeItem("admin_mobile");
-      localStorage.removeItem("admin_password");
+      // 🔑 SINGLE SOURCE OF TRUTH
+      localStorage.removeItem("admin");
+
       navigate("/admin/login", { replace: true });
     }
   };
