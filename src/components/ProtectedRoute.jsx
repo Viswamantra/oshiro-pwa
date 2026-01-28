@@ -1,17 +1,20 @@
 import { Navigate, Outlet } from "react-router-dom";
 
+/**
+ * ROLE-BASED ROUTE GUARD (RRv6 SAFE)
+ */
 export default function ProtectedRoute({
   adminOnly = false,
   merchantOnly = false,
   customerOnly = false,
 }) {
-  const admin = localStorage.getItem("admin") === "true";
-  const merchant = localStorage.getItem("merchant") === "true";
-  const customer = localStorage.getItem("customer") === "true";
+  const isAdmin = localStorage.getItem("admin") === "true";
+  const isMerchant = localStorage.getItem("merchant") === "true";
+  const isCustomer = localStorage.getItem("customer") === "true";
 
-  if (adminOnly && !admin) return <Navigate to="/admin/login" replace />;
-  if (merchantOnly && !merchant) return <Navigate to="/merchant/login" replace />;
-  if (customerOnly && !customer) return <Navigate to="/customer/login" replace />;
+  if (adminOnly && !isAdmin) return <Navigate to="/admin/login" replace />;
+  if (merchantOnly && !isMerchant) return <Navigate to="/merchant/login" replace />;
+  if (customerOnly && !isCustomer) return <Navigate to="/customer/login" replace />;
 
   return <Outlet />;
 }
