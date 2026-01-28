@@ -126,3 +126,90 @@ export default function MerchantOffers() {
             fullWidth
             sx={{ mt: 2 }}
             value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+
+          <TextField
+            label="Description"
+            fullWidth
+            multiline
+            rows={2}
+            sx={{ mt: 2 }}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+
+          <TextField
+            label="Discount / Deal"
+            fullWidth
+            sx={{ mt: 2 }}
+            value={discountText}
+            onChange={(e) => setDiscountText(e.target.value)}
+          />
+
+          <TextField
+            type="date"
+            label="Expiry Date"
+            fullWidth
+            sx={{ mt: 2 }}
+            InputLabelProps={{ shrink: true }}
+            value={expiryDate}
+            onChange={(e) => setExpiryDate(e.target.value)}
+          />
+
+          <Button
+            sx={{ mt: 3 }}
+            variant="contained"
+            onClick={createOffer}
+          >
+            Publish Offer
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Divider />
+
+      <Typography sx={{ mt: 2 }}>
+        My Offers
+      </Typography>
+
+      {!offers.length && <p>No offers created yet</p>}
+
+      {offers.map((o) => (
+        <Card key={o.id} sx={{ my: 1 }}>
+          <CardContent>
+            <Typography fontWeight="bold">
+              {o.title}
+            </Typography>
+
+            {o.description && (
+              <Typography variant="body2">
+                {o.description}
+              </Typography>
+            )}
+
+            <Typography variant="body2">
+              {o.discountText}
+            </Typography>
+
+            <Typography variant="caption">
+              Status: {o.isActive ? "Active" : "Disabled"}
+            </Typography>
+
+            <Box sx={{ mt: 1 }}>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() =>
+                  toggleOffer(o.id, o.isActive)
+                }
+              >
+                {o.isActive ? "Disable" : "Enable"}
+              </Button>
+            </Box>
+          </CardContent>
+        </Card>
+      ))}
+    </Box>
+  );
+}
