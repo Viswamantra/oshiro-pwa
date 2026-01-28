@@ -1,30 +1,22 @@
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 
-/* ======================
-   HOME
-====================== */
+/* HOME */
 import Home from "./pages/Home";
 
-/* ======================
-   AUTH PAGES
-====================== */
+/* AUTH */
 import AdminLogin from "./auth/AdminLogin";
 import CustomerLogin from "./pages/customer/CustomerLogin";
 import MerchantLogin from "./pages/merchant/MerchantLogin";
 import MerchantRegister from "./pages/merchant/MerchantRegister";
 
-/* ======================
-   LAYOUTS & ROUTE GUARDS
-====================== */
+/* LAYOUTS */
 import AdminLayout from "./components/AdminLayout";
 import CustomerLayout from "./components/CustomerLayout";
 import MerchantLayout from "./components/MerchantLayout";
 import ProtectedRoute from "./components/ProtectedRoute";
 
-/* ======================
-   ADMIN PAGES
-====================== */
+/* ADMIN */
 import Dashboard from "./pages/admin/Dashboard";
 import Customers from "./pages/admin/Customers";
 import Merchants from "./pages/admin/Merchants";
@@ -34,17 +26,13 @@ import GeoAlerts from "./pages/admin/GeoAlerts";
 import Notifications from "./pages/admin/Notifications";
 import MerchantApproval from "./pages/admin/MerchantApproval";
 
-/* ======================
-   CUSTOMER PAGES
-====================== */
+/* CUSTOMER */
 import CustomerDashboard from "./pages/customer/CustomerDashboard";
 import NearbyOffers from "./pages/customer/NearbyOffers";
 import MerchantDetails from "./pages/customer/MerchantDetails";
 import NotificationPermission from "./pages/customer/NotificationPermission";
 
-/* ======================
-   MERCHANT PAGES
-====================== */
+/* MERCHANT */
 import MerchantDashboard from "./pages/merchant/MerchantDashboard";
 import MerchantOffers from "./pages/merchant/MerchantOffers";
 import MerchantProfile from "./pages/merchant/MerchantProfile";
@@ -53,30 +41,22 @@ import MerchantLocation from "./pages/merchant/MerchantLocation";
 export default function App() {
   return (
     <Routes>
-      {/* ======================
-          HOME (PUBLIC)
-      ====================== */}
+      {/* PUBLIC */}
       <Route path="/" element={<Home />} />
 
-      {/* ======================
-          AUTH ROUTES (PUBLIC)
-      ====================== */}
+      {/* AUTH */}
       <Route path="/admin/login" element={<AdminLogin />} />
       <Route path="/customer/login" element={<CustomerLogin />} />
       <Route path="/merchant/login" element={<MerchantLogin />} />
       <Route path="/merchant/register" element={<MerchantRegister />} />
 
-      {/* ======================
-          CUSTOMER NOTIFICATION PERMISSION
-      ====================== */}
+      {/* CUSTOMER NOTIFICATIONS */}
       <Route
         path="/customer/notifications"
         element={<NotificationPermission />}
       />
 
-      {/* ======================
-          ADMIN AREA (PROTECTED)
-      ====================== */}
+      {/* ADMIN (PROTECTED) */}
       <Route
         path="/admin"
         element={
@@ -95,9 +75,7 @@ export default function App() {
         <Route path="notifications" element={<Notifications />} />
       </Route>
 
-      {/* ======================
-          CUSTOMER AREA (PROTECTED)
-      ====================== */}
+      {/* CUSTOMER (PROTECTED) */}
       <Route
         path="/customer"
         element={
@@ -107,19 +85,11 @@ export default function App() {
         }
       >
         <Route index element={<CustomerDashboard />} />
-        <Route
-          path="merchant/:merchantId"
-          element={<MerchantDetails />}
-        />
-        <Route
-          path="nearby-offers"
-          element={<NearbyOffers />}
-        />
+        <Route path="merchant/:merchantId" element={<MerchantDetails />} />
+        <Route path="nearby-offers" element={<NearbyOffers />} />
       </Route>
 
-      {/* ======================
-          MERCHANT AREA (PROTECTED)
-      ====================== */}
+      {/* MERCHANT (PROTECTED) */}
       <Route
         path="/merchant"
         element={
@@ -134,9 +104,7 @@ export default function App() {
         <Route path="location" element={<MerchantLocation />} />
       </Route>
 
-      {/* ======================
-          FALLBACK
-      ====================== */}
+      {/* FALLBACK */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
