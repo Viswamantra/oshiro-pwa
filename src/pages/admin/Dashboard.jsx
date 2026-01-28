@@ -5,7 +5,18 @@ import {
   query,
   where,
 } from "firebase/firestore";
-import { db } from "../../firebase";
+import { db } from "../../firebase/index.js";
+
+/**
+ * =========================================================
+ * ADMIN DASHBOARD
+ * ---------------------------------------------------------
+ * ✔ Safe Firebase import
+ * ✔ Does NOT break AdminLayout
+ * ✔ Clean stat cards
+ * ✔ Vercel safe
+ * =========================================================
+ */
 
 export default function Dashboard() {
   const [stats, setStats] = useState({
@@ -25,31 +36,23 @@ export default function Dashboard() {
     try {
       setLoading(true);
 
-      const customersSnap = await getCountFromServer(
-        collection(db, "customers")
-      );
-
-      const categoriesSnap = await getCountFromServer(
-        collection(db, "categories")
-      );
-
-      const offersSnap = await getCountFromServer(
-        collection(db, "offers")
-      );
-
-      const merchantsPendingSnap = await getCountFromServer(
-        query(
-          collection(db, "merchants"),
-          where("status", "==", "pending")
-        )
-      );
-
-      const merchantsApprovedSnap = await getCountFromServer(
-        query(
-          collection(db, "merchants"),
-          where("status", "==", "approved")
-        )
-      );
+      const [
+        customersSnap,
+        categoriesSnap,
+        offersSnap,
+        merchantsPendingSnap,
+        merchantsApprovedSnap,
+      ] = await Promise.all([
+        getCountFromServer(collection(db, "customers")),
+        getCountFromServer(collection(db, "categories")),
+        getCountFromServer(collection(db, "offers")),
+        getCountFromServer(
+          query(collection(db, "merchants"), where("status", "==", "pending"))
+        ),
+        getCountFromServer(
+          query(collection(db, "merchants"), where("status", "==", "approved"))
+        ),
+      ]);
 
       setStats({
         customers: customersSnap.data().count,
@@ -70,14 +73,16 @@ export default function Dashboard() {
   }, []);
 
   if (loading) {
-    return <div style={{ padding: 20 }}>Loading dashboard...</div>;
+    return <div>Loading dashboard…</div>;
   }
 
   return (
-    <div style={{ padding: 20 }}>
+    <div>
       <h2>Admin Dashboard</h2>
 
-      {/* STAT CARDS */}
+      {/* ======================
+          STAT CARDS
+      ====================== */}
       <div
         style={{
           display: "grid",
@@ -86,11 +91,7 @@ export default function Dashboard() {
           marginTop: 20,
         }}
       >
-        <StatCard
-          title="Customers"
-          value={stats.customers}
-          color="#1976d2"
-        />
+        <StatCard title="Customers" value={stats.customers} color="#1976d2" />
         <StatCard
           title="Merchants Pending"
           value={stats.merchantsPending}
@@ -101,25 +102,19 @@ export default function Dashboard() {
           value={stats.merchantsApproved}
           color="#2e7d32"
         />
-        <StatCard
-          title="Categories"
-          value={stats.categories}
-          color="#6a1b9a"
-        />
-        <StatCard
-          title="Offers"
-          value={stats.offers}
-          color="#c62828"
-        />
+        <StatCard title="Categories" value={stats.categories} color="#6a1b9a" />
+        <StatCard title="Offers" value={stats.offers} color="#c62828" />
       </div>
 
-      {/* QUICK ACTIONS */}
-      <div style={{ marginTop: 30 }}>
+      {/* ======================
+          QUICK ACTIONS
+      ====================== */}
+      <div style={{ marginTop: 32 }}>
         <h3>Quick Actions</h3>
-        <ul>
+        <ul style={{ marginTop: 8, paddingLeft: 20 }}>
           <li>Approve pending merchants</li>
           <li>Create / manage categories</li>
-          <li>Monitor Geo Alerts</li>
+          <li>Monitor Geo alerts</li>
           <li>Send notifications</li>
         </ul>
       </div>
@@ -128,16 +123,16 @@ export default function Dashboard() {
 }
 
 /* ======================
-   STAT CARD COMPONENT
+   STAT CARD
 ====================== */
 function StatCard({ title, value, color }) {
   return (
     <div
       style={{
-        border: "1px solid #ddd",
+        background: "#ffffff",
         borderRadius: 8,
         padding: 20,
-        background: "#fff",
+        border: "1px solid #e5e7eb",
       }}
     >
       <div style={{ fontSize: 14, color: "#555" }}>{title}</div>
