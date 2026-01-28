@@ -132,7 +132,7 @@ select {
 }
 
 /* =========================================================
-   ADMIN LAYOUT (SCOPED – SAFE)
+   ADMIN LAYOUT (SCOPED & SAFE)
 ========================================================= */
 .admin-wrapper {
   display: flex;
@@ -141,6 +141,7 @@ select {
   background: #f4f6f8;
 }
 
+/* SIDEBAR */
 .admin-sidebar {
   width: 240px;
   background: #1e1e2f;
@@ -151,25 +152,86 @@ select {
   padding: 20px;
 }
 
-.admin-logo {
-  text-align: center;
+/* LOGO */
+.admin-logo-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
   margin-bottom: 30px;
-  letter-spacing: 1px;
 }
 
+.admin-logo-image {
+  height: 32px;
+  width: auto;
+  display: block;
+}
+
+/* NAV ITEMS */
 .admin-nav-item {
   display: block;
-  padding: 12px 15px;
+  padding: 12px 16px;
   margin-bottom: 8px;
   border-radius: 6px;
   text-decoration: none;
   color: #d1d5db;
   font-weight: 500;
-  transition: background 0.2s ease;
+  transition: background-color 0.2s ease;
 }
 
 .admin-nav-item:hover {
   background: #2d2d44;
 }
 
-.admi
+.admin-nav-item.active {
+  background: #1976d2;
+  color: #ffffff;
+}
+
+/* LOGOUT BUTTON */
+.admin-logout {
+  padding: 12px;
+  background: #c62828;
+  color: #ffffff;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+/* MAIN AREA */
+.admin-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.admin-header {
+  height: 60px;
+  background: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+}
+
+.admin-content {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+/* =========================================================
+   DESKTOP ENHANCEMENTS
+========================================================= */
+@media (min-width: 768px) {
+  .filter-bar,
+  .merchant-list {
+    max-width: 720px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .merchant-card {
+    margin: 12px auto;
+  }
+}
