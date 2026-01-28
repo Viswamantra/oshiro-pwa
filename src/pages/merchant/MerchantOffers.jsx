@@ -17,18 +17,19 @@ import {
   updateDoc,
   doc,
   serverTimestamp,
-  Timestamp,               // ✅ ADD THIS
+  Timestamp,
 } from "firebase/firestore";
 import { db } from "../../firebase";
 
 /**
  * =========================================================
- * MERCHANT OFFERS (SESSION-DRIVEN – FINAL, FIXED)
+ * MERCHANT OFFERS (SESSION-DRIVEN – FINAL STABLE)
  * ---------------------------------------------------------
- * ✔ Correct Firestore schema
+ * ✔ Uses localStorage merchant session
+ * ✔ Firestore rules compliant
  * ✔ expiryDate stored as Timestamp
- * ✔ Customer filtering works
- * ✔ Category + distance works
+ * ✔ Customer filtering compatible
+ * ✔ Vercel / Vite safe
  * =========================================================
  */
 
@@ -63,14 +64,16 @@ export default function MerchantOffers() {
     );
 
     return onSnapshot(q, (snap) => {
-      setOffers(
-        snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-      );
+      const list = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }));
+      setOffers(list);
     });
   }, [merchant.id]);
 
   /* ======================
-     CREATE OFFER  ✅ FIXED
+     CREATE OFFER
   ====================== */
   const createOffer = async () => {
     if (!title || !discountText || !expiryDate) {
@@ -78,23 +81,24 @@ export default function MerchantOffers() {
       return;
     }
 
-    const expiry = new Date(expiryDate);
-    expiry.setHours(23, 59, 59, 999);
-
     try {
+      const expiry = new Date(expiryDate);
+      expiry.setHours(23, 59, 59, 999);
+
       await addDoc(collection(db, "offers"), {
         merchantId: merchant.id,
-        mobile: merchant.mobile,                 // ✅ rules-safe
+        mobile: merchant.mobile,              // ✅ rules-safe
         shop_name: merchant.shopName || "",
         category: merchant.category || "",
-        title,
-        description,
-        discountText,
-        expiryDate: Timestamp.fromDate(expiry),  // ✅ CRITICAL FIX
+        title: title.trim(),
+        description: description.trim(),
+        discountText: discountText.trim(),
+        expiryDate: Timestamp.fromDate(expiry), // ✅ CRITICAL
         isActive: true,
         createdAt: serverTimestamp(),
       });
 
+      // Reset form
       setTitle("");
       setDescription("");
       setDiscountText("");
@@ -107,18 +111,26 @@ export default function MerchantOffers() {
   };
 
   /* ======================
-     TOGGLE OFFER
+     TOGGLE OFFER STATUS
   ====================== */
   const toggleOffer = async (id, isActive) => {
-    await updateDoc(doc(db, "offers", id), {
-      isActive: !isActive,
-    });
+    try {
+      await updateDoc(doc(db, "offers", id), {
+        isActive: !isActive,
+      });
+    } catch (err) {
+      console.error("Toggle offer failed:", err);
+    }
   };
 
+  /* ======================
+     RENDER
+  ====================== */
   return (
     <Box sx={{ mt: 4 }}>
       <Typography variant="h6">Create New Offer</Typography>
 
+      {/* ===== CREATE FORM ===== */}
       <Card sx={{ my: 2 }}>
         <CardContent>
           <TextField
@@ -169,9 +181,8 @@ export default function MerchantOffers() {
 
       <Divider />
 
-      <Typography sx={{ mt: 2 }}>
-        My Offers
-      </Typography>
+      {/* ===== OFFER LIST ===== */}
+      <Typography sx={{ mt: 2 }}>My Offers</Typography>
 
       {!offers.length && <p>No offers created yet</p>}
 
