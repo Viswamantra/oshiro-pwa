@@ -1,16 +1,16 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
-import { auth } from "../firebase";
+import { auth } from "../firebase/index.js";
 import oshiroLogo from "../assets/logo/oshiro-logo-icon.png";
 
 /**
  * =========================================================
- * ADMIN SIDEBAR (FINAL / PRODUCTION)
+ * ADMIN SIDEBAR (FINAL / FIXED)
  * ---------------------------------------------------------
+ * ✔ Correct Firebase import
+ * ✔ Sidebar now mounts properly
+ * ✔ Logout works
  * ✔ Stable on Vercel
- * ✔ Logo + Navigation
- * ✔ Logout at bottom (persistent)
- * ✔ Clears admin session safely
  * =========================================================
  */
 
@@ -25,10 +25,8 @@ export default function Sidebar() {
     } catch (err) {
       console.error("Admin logout error:", err);
     } finally {
-      // Clear admin session
       localStorage.removeItem("admin_mobile");
       localStorage.removeItem("admin_password");
-
       navigate("/admin/login", { replace: true });
     }
   };
