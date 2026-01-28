@@ -3,27 +3,30 @@ import oshiroLogo from "../assets/logo/oshiro-logo-icon.png";
 
 /**
  * =========================================================
- * ADMIN SIDEBAR
+ * ADMIN SIDEBAR (PRODUCTION SAFE)
  * ---------------------------------------------------------
- * Left navigation for Admin panel
- * Logo replaces "OSHIRO" text
+ * ✔ Uses scoped CSS classes
+ * ✔ Stable on Vercel
+ * ✔ Active route highlighting
+ * ✔ Logo support
  * =========================================================
  */
 
 export default function Sidebar() {
   return (
-    <aside style={styles.sidebar}>
+    <aside className="admin-sidebar">
       {/* LOGO */}
-      <div style={styles.logoContainer}>
+      <div className="admin-logo-container">
         <img
           src={oshiroLogo}
           alt="Oshiro"
-          style={styles.logoImage}
+          className="admin-logo-image"
         />
       </div>
 
-      <nav style={styles.nav}>
-        <NavItem to="/admin" label="Home" end />
+      {/* NAVIGATION */}
+      <nav>
+        <NavItem to="/admin" label="Dashboard" end />
         <NavItem to="/admin/customers" label="Customers" />
         <NavItem to="/admin/merchants" label="Merchants" />
         <NavItem to="/admin/categories" label="Categories" />
@@ -36,61 +39,18 @@ export default function Sidebar() {
 }
 
 /* ======================
-   SINGLE NAV ITEM
+   NAV ITEM
 ====================== */
 function NavItem({ to, label, end = false }) {
   return (
     <NavLink
       to={to}
       end={end}
-      style={({ isActive }) => ({
-        ...styles.navItem,
-        backgroundColor: isActive ? "#1976d2" : "transparent",
-        color: isActive ? "#ffffff" : "#d0d0d0",
-      })}
+      className={({ isActive }) =>
+        `admin-nav-item ${isActive ? "active" : ""}`
+      }
     >
       {label}
     </NavLink>
   );
 }
-
-/* ======================
-   STYLES
-====================== */
-const styles = {
-  sidebar: {
-    width: 240,
-    backgroundColor: "#1e1e2f",
-    color: "#ffffff",
-    padding: 20,
-    display: "flex",
-    flexDirection: "column",
-  },
-
-  logoContainer: {
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 30,
-  },
-
-  logoImage: {
-    height: 32,
-    width: "auto",
-    display: "block",
-  },
-
-  nav: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 6,
-  },
-
-  navItem: {
-    padding: "12px 16px",
-    borderRadius: 6,
-    textDecoration: "none",
-    fontWeight: 500,
-    transition: "background-color 0.2s ease",
-  },
-};
