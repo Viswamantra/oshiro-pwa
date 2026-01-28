@@ -1,5 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+} from "firebase/firestore";
 import { db } from "../../firebase";
 import MerchantCard from "./MerchantCard";
 
@@ -48,64 +53,76 @@ export default function MerchantList({
   useEffect(() => {
     let mounted = true;
 
-    async function loadMerchants() {
+    async function loadMerchantsWithOffers() {
       try {
         setLoading(true);
 
         /* ======================
-           FETCH APPROVED MERCHANTS
+           1️⃣ GET ACTIVE OFFERS
         ====================== */
-        const q = query(
-          collection(db, "merchants"),
-          where("status", "==", "approved")
+        const offersSnap = await getDocs(
+          query(
+            collection(db, "offers"),
+            where("isActive", "==", true)
+          )
         );
 
-        const snap = await getDocs(q);
+        // Unique merchantIds that have active offers
+        const activeMerchantIds = new Set(
+          offersSnap.docs.map((d) => d.data().merchantId)
+        );
 
-        let list = snap.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
+        if (activeMerchantIds.size === 0) {
+          if (mounted) {
+            setMerchants([]);
+            setLoading(false);
+          }
+          return;
+        }
 
         /* ======================
-           CATEGORY FILTER
+           2️⃣ GET APPROVED MERCHANTS
+        ====================== */
+        const merchantsSnap = await getDocs(
+          query(
+            collection(db, "merchants"),
+            where("status", "==", "approved")
+          )
+        );
+
+        let list = merchantsSnap.docs
+          .map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          }))
+          // 🔥 ONLY merchants who have active offers
+          .filter((m) => activeMerchantIds.has(m.id));
+
+        /* ======================
+           3️⃣ CATEGORY FILTER
         ====================== */
         if (category && CATEGORY_ID_TO_NAME[category]) {
-          const categoryName =
-            CATEGORY_ID_TO_NAME[category].toLowerCase();
-
+          const categoryName = CATEGORY_ID_TO_NAME[category];
           list = list.filter(
-            (m) =>
-              typeof m.category === "string" &&
-              m.category.toLowerCase() === categoryName
+            (m) => m.category === categoryName
           );
         }
 
         /* ======================
-           DISTANCE FILTER
-           (supports old + new schemas)
+           4️⃣ DISTANCE FILTER
         ====================== */
-        if (
-          typeof userLat === "number" &&
-          typeof userLng === "number" &&
-          typeof distance === "number"
-        ) {
+        if (userLat && userLng && distance) {
           list = list.filter((m) => {
             const lat = m.lat ?? m.location?.lat;
             const lng = m.lng ?? m.location?.lng;
 
-            if (
-              typeof lat !== "number" ||
-              typeof lng !== "number"
-            ) {
-              return false;
-            }
+            if (!lat || !lng) return false;
 
             const d = getDistance(
-              userLat,
-              userLng,
-              lat,
-              lng
+              Number(userLat),
+              Number(userLng),
+              Number(lat),
+              Number(lng)
             );
 
             return d <= distance;
@@ -122,7 +139,7 @@ export default function MerchantList({
       }
     }
 
-    loadMerchants();
+    loadMerchantsWithOffers();
     return () => {
       mounted = false;
     };
@@ -132,8 +149,8 @@ export default function MerchantList({
      UI STATES
   ====================== */
   if (loading) return <p>Loading merchants…</p>;
-  if (merchants.length === 0)
-    return <p>No merchants found</p>;
+  if (!merchants.length)
+    return <p>No nearby merchants with active offers</p>;
 
   /* ======================
      RENDER
