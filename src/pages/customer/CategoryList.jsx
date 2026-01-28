@@ -1,71 +1,88 @@
-import React, { useEffect, useState } from "react";
-import { collection, getDocs, query, where } from "firebase/firestore";
-import { db } from "../../firebase/index.js";
+import React from "react";
 
 /**
  * =========================================================
- * CATEGORY LIST (CUSTOMER SIDE)
+ * CATEGORY LIST (CUSTOMER)
  * ---------------------------------------------------------
- * ✔ Fetches ACTIVE categories only
- * ✔ Displays category NAME in UI
- * ✔ Sends categoryId (doc.id) on select
- * ✔ Fixes Food / No merchants found issue
+ * ✔ Horizontal scroll
+ * ✔ Single-select
+ * ✔ Controlled by parent
+ * ✔ Firestore-ready (dummy data now)
  * =========================================================
  */
 
-export default function CategoryList({ onSelect }) {
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
+// 🔹 TEMP DUMMY DATA (replace with Firestore later)
+const CATEGORIES = [
+  { id: "all", name: "All" },
+  { id: "grocery", name: "Grocery" },
+  { id: "restaurant", name: "Restaurant" },
+  { id: "pharmacy", name: "Pharmacy" },
+  { id: "fashion", name: "Fashion" },
+  { id: "electronics", name: "Electronics" },
+];
 
-  useEffect(() => {
-    async function loadCategories() {
-      try {
-        const q = query(
-          collection(db, "categories"),
-          where("status", "==", "active")
-        );
-
-        const snapshot = await getDocs(q);
-
-        const list = snapshot.docs.map((doc) => ({
-          id: doc.id,            // ✅ IMPORTANT: categoryId
-          name: doc.data().name // UI label only
-        }));
-
-        setCategories(list);
-      } catch (err) {
-        console.error("Failed to load categories", err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadCategories();
-  }, []);
-
+export default function CategoryList({
+  selectedCategory,
+  onSelect,
+}) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <label htmlFor="category-select">Category</label>
+    <div>
+      <h4 style={styles.heading}>Categories</h4>
 
-      <select
-        id="category-select"
-        disabled={loading}
-        defaultValue=""
-        onChange={(e) => onSelect(e.target.value)}   // ✅ sends ID
-        style={{
-          padding: 6,
-          minWidth: 160,
-          cursor: loading ? "not-allowed" : "pointer",
-        }}
-      >
-        <option value="">All</option>
+      <div style={styles.list}>
+        {CATEGORIES.map((cat) => {
+          const isActive =
+            selectedCategory === cat.id ||
+            (!selectedCategory && cat.id === "all");
 
-        {categories.map((cat) => (
-          <option key={cat.id} value={cat.id}>
-            {cat.name}
-          </option>
-        ))}
-      </select>
+          return (
+            <div
+              key={cat.id}
+              onClick={() =>
+                onSelect(cat.id === "all" ? null : cat.id)
+              }
+              style={{
+                ...styles.chip,
+                ...(isActive ? styles.active : {}),
+              }}
+            >
+              {cat.name}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
+
+/* ======================
+   STYLES
+====================== */
+const styles = {
+  heading: {
+    fontSize: 14,
+    fontWeight: 600,
+    marginBottom: 8,
+  },
+  list: {
+    display: "flex",
+    gap: 10,
+    overflowX: "auto",
+    paddingBottom: 4,
+  },
+  chip: {
+    padding: "8px 14px",
+    borderRadius: 20,
+    background: "#f1f5f9",
+    color: "#0f172a",
+    fontSize: 14,
+    fontWeight: 500,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+    userSelect: "none",
+  },
+  active: {
+    background: "#2563eb",
+    color: "#ffffff",
+  },
+};
