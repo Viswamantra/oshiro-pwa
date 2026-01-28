@@ -1,67 +1,46 @@
-import React, { useEffect, useState } from "react";
-import { collection, getDocs, query, where } from "firebase/firestore";
-import { db } from "../../firebase";
+import React from "react";
+import MerchantOffersComponent from "../../components/merchant/MerchantOffers";
 
-export default function MerchantOffers() {
-  const [offers, setOffers] = useState([]);
-  const [loading, setLoading] = useState(true);
+/**
+ * =========================================================
+ * MERCHANT OFFERS PAGE (SESSION-AWARE)
+ * ---------------------------------------------------------
+ * ✔ Loads merchant from localStorage
+ * ✔ Blocks access if not logged in
+ * ✔ Passes merchant correctly to Offer component
+ * ✔ Fixes: New merchant cannot create offers
+ * =========================================================
+ */
 
-  // ⚠️ Replace with logged-in merchant ID later
-  const merchantId = localStorage.getItem("merchantId");
+export default function MerchantOffersPage() {
+  const merchantRaw = localStorage.getItem("merchant");
 
-  useEffect(() => {
-    const loadOffers = async () => {
-      try {
-        if (!merchantId) {
-          setOffers([]);
-          return;
-        }
+  if (!merchantRaw) {
+    return (
+      <p style={{ padding: 20, color: "red" }}>
+        Merchant not logged in
+      </p>
+    );
+  }
 
-        const snap = await getDocs(
-          query(
-            collection(db, "offers"),
-            where("merchantId", "==", merchantId)
-          )
-        );
+  let merchant;
+  try {
+    merchant = JSON.parse(merchantRaw);
+  } catch {
+    return (
+      <p style={{ padding: 20, color: "red" }}>
+        Invalid merchant session
+      </p>
+    );
+  }
 
-        const list = snap.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-        }));
+  if (!merchant.id) {
+    return (
+      <p style={{ padding: 20, color: "red" }}>
+        Merchant session missing ID
+      </p>
+    );
+  }
 
-        setOffers(list);
-      } catch (e) {
-        console.error("Failed to load offers", e);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadOffers();
-  }, [merchantId]);
-
-  if (loading) return <p>Loading offers…</p>;
-
-  return (
-    <div>
-      <h2>My Offers</h2>
-
-      {offers.length === 0 && <p>No offers created yet</p>}
-
-      {offers.map((o) => (
-        <div key={o.id} style={card}>
-          <h4>{o.title}</h4>
-          {o.description && <p>{o.description}</p>}
-          <small>Status: {o.isActive ? "Active" : "Inactive"}</small>
-        </div>
-      ))}
-    </div>
-  );
+  return <MerchantOffersComponent merchant={merchant} />;
 }
-
-const card = {
-  border: "1px solid #ddd",
-  padding: 12,
-  borderRadius: 6,
-  marginBottom: 10,
-};
