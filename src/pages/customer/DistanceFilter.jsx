@@ -2,33 +2,68 @@ import React from "react";
 
 /**
  * =========================================================
- * DISTANCE FILTER (CUSTOMER SIDE)
+ * DISTANCE FILTER (CUSTOMER)
  * ---------------------------------------------------------
- * ✔ Simple distance selector
- * ✔ Returns distance in meters
- * ✔ Mobile-friendly
+ * ✔ Simple radius selector
+ * ✔ Controlled by parent
+ * ✔ Mobile-first UX
  * =========================================================
  */
 
-export default function DistanceFilter({
-  value = 10000,
-  onSelect,
-}) {
-  return (
-    <div style={{ marginBottom: 10 }}>
-      <label style={{ marginRight: 6 }}>Distance</label>
+const DISTANCES = [1, 3, 5, 10]; // in KM
 
-      <select
-        value={value}
-        onChange={(e) => onSelect(Number(e.target.value))}
-        style={{ padding: 6 }}
-      >
-        <option value={300}>300 m</option>
-        <option value={1000}>1 km</option>
-        <option value={3000}>3 km</option>
-        <option value={5000}>5 km</option>
-        <option value={10000}>10 km</option>
-      </select>
+export default function DistanceFilter({ value, onChange }) {
+  return (
+    <div>
+      <h4 style={styles.heading}>Distance</h4>
+
+      <div style={styles.list}>
+        {DISTANCES.map((km) => {
+          const isActive = value === km;
+
+          return (
+            <div
+              key={km}
+              onClick={() => onChange(km)}
+              style={{
+                ...styles.chip,
+                ...(isActive ? styles.active : {}),
+              }}
+            >
+              {km} km
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
+
+/* ======================
+   STYLES
+====================== */
+const styles = {
+  heading: {
+    fontSize: 14,
+    fontWeight: 600,
+    marginBottom: 8,
+  },
+  list: {
+    display: "flex",
+    gap: 10,
+  },
+  chip: {
+    padding: "8px 14px",
+    borderRadius: 20,
+    background: "#f1f5f9",
+    color: "#0f172a",
+    fontSize: 14,
+    fontWeight: 500,
+    cursor: "pointer",
+    userSelect: "none",
+  },
+  active: {
+    background: "#16a34a",
+    color: "#ffffff",
+  },
+};
