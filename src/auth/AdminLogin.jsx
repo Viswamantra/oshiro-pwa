@@ -3,17 +3,17 @@ import { useNavigate } from "react-router-dom";
 
 /**
  * =========================================================
- * ADMIN LOGIN (DEV MODE | MOBILE-FIRST)
+ * ADMIN LOGIN (FINAL – PRODUCTION SAFE)
  * ---------------------------------------------------------
  * ✔ +91 locked mobile input
- * ✔ Fixed admin credentials
- * ✔ Admin session via localStorage
- * ✔ UI consistent with Customer & Merchant login
- * ✔ Oshiro logo added (PUBLIC ASSET)
+ * ✔ Fixed admin credentials (dev mode)
+ * ✔ Single admin session key
+ * ✔ Clears other role sessions
+ * ✔ Matches ProtectedRoute logic
  * =========================================================
  */
 
-const ADMIN_MOBILE = "7386361725"; // stored WITHOUT +91
+const ADMIN_MOBILE = "7386361725"; // without +91
 const ADMIN_PASSWORD = "45#67";
 
 export default function AdminLogin() {
@@ -59,7 +59,13 @@ export default function AdminLogin() {
       plainMobile === ADMIN_MOBILE &&
       password === ADMIN_PASSWORD
     ) {
+      // 🔑 CLEAR OTHER ROLES (VERY IMPORTANT)
+      localStorage.removeItem("merchant");
+      localStorage.removeItem("customer");
+
+      // 🔐 SET ADMIN SESSION
       localStorage.setItem("admin", "true");
+
       navigate("/admin", { replace: true });
     } else {
       setError("Invalid admin credentials");
@@ -68,7 +74,6 @@ export default function AdminLogin() {
 
   return (
     <div style={styles.page}>
-      {/* LOGIN CARD */}
       <div style={styles.card}>
         {/* LOGO */}
         <img
