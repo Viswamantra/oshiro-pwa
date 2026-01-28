@@ -23,12 +23,12 @@ import { db } from "../../firebase";
 
 /**
  * =========================================================
- * MERCHANT OFFERS (SESSION-DRIVEN – FINAL, BUILD-SAFE)
+ * MERCHANT OFFERS – FINAL STABLE VERSION
  * ---------------------------------------------------------
- * ✔ NO component self-imports
+ * ✔ No circular imports
  * ✔ Uses localStorage merchant session
- * ✔ expiryDate stored as Firestore Timestamp
- * ✔ Vite / Vercel safe
+ * ✔ Firestore rules compliant
+ * ✔ Vercel + Vite safe
  * =========================================================
  */
 
@@ -47,9 +47,9 @@ export default function MerchantOffers() {
 
   if (!merchant?.id) {
     return (
-      <p style={{ padding: 20, color: "red" }}>
+      <Typography sx={{ p: 3 }} color="error">
         Merchant not logged in
-      </p>
+      </Typography>
     );
   }
 
@@ -63,12 +63,11 @@ export default function MerchantOffers() {
     );
 
     return onSnapshot(q, (snap) => {
-      setOffers(
-        snap.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-        }))
-      );
+      const list = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }));
+      setOffers(list);
     });
   }, [merchant.id]);
 
@@ -87,7 +86,7 @@ export default function MerchantOffers() {
 
       await addDoc(collection(db, "offers"), {
         merchantId: merchant.id,
-        mobile: merchant.mobile || "",
+        mobile: merchant.mobile,
         shop_name: merchant.shopName || "",
         category: merchant.category || "",
         title: title.trim(),
@@ -121,6 +120,9 @@ export default function MerchantOffers() {
     }
   };
 
+  /* ======================
+     RENDER
+  ====================== */
   return (
     <Box sx={{ mt: 4 }}>
       <Typography variant="h6">Create New Offer</Typography>
@@ -163,11 +165,7 @@ export default function MerchantOffers() {
             onChange={(e) => setExpiryDate(e.target.value)}
           />
 
-          <Button
-            sx={{ mt: 3 }}
-            variant="contained"
-            onClick={createOffer}
-          >
+          <Button sx={{ mt: 3 }} variant="contained" onClick={createOffer}>
             Publish Offer
           </Button>
         </CardContent>
@@ -182,19 +180,13 @@ export default function MerchantOffers() {
       {offers.map((o) => (
         <Card key={o.id} sx={{ my: 1 }}>
           <CardContent>
-            <Typography fontWeight="bold">
-              {o.title}
-            </Typography>
+            <Typography fontWeight="bold">{o.title}</Typography>
 
             {o.description && (
-              <Typography variant="body2">
-                {o.description}
-              </Typography>
+              <Typography variant="body2">{o.description}</Typography>
             )}
 
-            <Typography variant="body2">
-              {o.discountText}
-            </Typography>
+            <Typography variant="body2">{o.discountText}</Typography>
 
             <Typography variant="caption">
               Status: {o.isActive ? "Active" : "Disabled"}
