@@ -1,30 +1,17 @@
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 
-/* ======================
-   HOME
-====================== */
 import Home from "./pages/Home";
-
-/* ======================
-   AUTH
-====================== */
 import AdminLogin from "./pages/auth/AdminLogin";
 import CustomerLogin from "./pages/customer/CustomerLogin";
 import MerchantLogin from "./pages/merchant/MerchantLogin";
 import MerchantRegister from "./pages/merchant/MerchantRegister";
 
-/* ======================
-   LAYOUTS
-====================== */
 import AdminLayout from "./components/AdminLayout";
 import CustomerLayout from "./components/CustomerLayout";
 import MerchantLayout from "./components/MerchantLayout";
 import ProtectedRoute from "./components/ProtectedRoute";
 
-/* ======================
-   ADMIN PAGES
-====================== */
 import Dashboard from "./pages/admin/Dashboard";
 import Customers from "./pages/admin/Customers";
 import Merchants from "./pages/admin/Merchants";
@@ -34,41 +21,25 @@ import GeoAlerts from "./pages/admin/GeoAlerts";
 import Notifications from "./pages/admin/Notifications";
 import MerchantApproval from "./pages/admin/MerchantApproval";
 
-/* ======================
-   CUSTOMER PAGES
-====================== */
 import CustomerDashboard from "./pages/customer/CustomerDashboard";
 import NearbyOffers from "./pages/customer/NearbyOffers";
 import MerchantDetails from "./pages/customer/MerchantDetails";
-import NotificationPermission from "./pages/customer/NotificationPermission";
 
-/* ======================
-   MERCHANT PAGES
-====================== */
 import MerchantDashboard from "./pages/merchant/MerchantDashboard";
 import MerchantOffers from "./pages/merchant/MerchantOffers";
 import MerchantProfile from "./pages/merchant/MerchantProfile";
-import MerchantLocation from "./pages/merchant/MerchantLocation";
 
 export default function App() {
   return (
     <Routes>
-      {/* ======================
-          PUBLIC
-      ====================== */}
+      {/* PUBLIC */}
       <Route path="/" element={<Home />} />
-
-      {/* ======================
-          AUTH
-      ====================== */}
       <Route path="/admin/login" element={<AdminLogin />} />
       <Route path="/customer/login" element={<CustomerLogin />} />
       <Route path="/merchant/login" element={<MerchantLogin />} />
       <Route path="/merchant/register" element={<MerchantRegister />} />
 
-      {/* ======================
-          ADMIN (PROTECTED + LAYOUT)
-      ====================== */}
+      {/* ADMIN */}
       <Route element={<ProtectedRoute adminOnly />}>
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<Dashboard />} />
@@ -82,36 +53,24 @@ export default function App() {
         </Route>
       </Route>
 
-      {/* ======================
-          CUSTOMER (PROTECTED + LAYOUT)
-      ====================== */}
+      {/* CUSTOMER */}
       <Route element={<ProtectedRoute customerOnly />}>
         <Route path="/customer" element={<CustomerLayout />}>
           <Route index element={<CustomerDashboard />} />
           <Route path="merchant/:merchantId" element={<MerchantDetails />} />
           <Route path="nearby-offers" element={<NearbyOffers />} />
-          <Route
-            path="notifications"
-            element={<NotificationPermission />}
-          />
         </Route>
       </Route>
 
-      {/* ======================
-          MERCHANT (PROTECTED + LAYOUT)
-      ====================== */}
+      {/* MERCHANT */}
       <Route element={<ProtectedRoute merchantOnly />}>
         <Route path="/merchant" element={<MerchantLayout />}>
           <Route index element={<MerchantDashboard />} />
           <Route path="offers" element={<MerchantOffers />} />
           <Route path="profile" element={<MerchantProfile />} />
-          <Route path="location" element={<MerchantLocation />} />
         </Route>
       </Route>
 
-      {/* ======================
-          FALLBACK
-      ====================== */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
