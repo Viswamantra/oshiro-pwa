@@ -96,8 +96,7 @@ export default function MerchantList({
             ...doc.data(),
           }))
           // 🔥 ONLY merchants who have active offers
-          .filter((m) => activeMerchantIds.has(m.id));
-
+         
         /* ======================
            3️⃣ CATEGORY FILTER
         ====================== */
