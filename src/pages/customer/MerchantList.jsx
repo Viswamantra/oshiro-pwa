@@ -52,7 +52,9 @@ export default function MerchantList({
       try {
         setLoading(true);
 
-        // ✅ Only approved merchants
+        /* ======================
+           FETCH APPROVED MERCHANTS
+        ====================== */
         const q = query(
           collection(db, "merchants"),
           where("status", "==", "approved")
@@ -65,27 +67,45 @@ export default function MerchantList({
           ...doc.data(),
         }));
 
-        // ✅ Category filter (ID → Name)
+        /* ======================
+           CATEGORY FILTER
+        ====================== */
         if (category && CATEGORY_ID_TO_NAME[category]) {
-          const categoryName = CATEGORY_ID_TO_NAME[category];
+          const categoryName =
+            CATEGORY_ID_TO_NAME[category].toLowerCase();
+
           list = list.filter(
-            (m) => m.category === categoryName
+            (m) =>
+              typeof m.category === "string" &&
+              m.category.toLowerCase() === categoryName
           );
         }
 
-        // ✅ Distance filter (SUPPORT BOTH lat/lng & location.lat/lng)
-        if (userLat && userLng && distance) {
+        /* ======================
+           DISTANCE FILTER
+           (supports old + new schemas)
+        ====================== */
+        if (
+          typeof userLat === "number" &&
+          typeof userLng === "number" &&
+          typeof distance === "number"
+        ) {
           list = list.filter((m) => {
             const lat = m.lat ?? m.location?.lat;
             const lng = m.lng ?? m.location?.lng;
 
-            if (!lat || !lng) return false;
+            if (
+              typeof lat !== "number" ||
+              typeof lng !== "number"
+            ) {
+              return false;
+            }
 
             const d = getDistance(
-              Number(userLat),
-              Number(userLng),
-              Number(lat),
-              Number(lng)
+              userLat,
+              userLng,
+              lat,
+              lng
             );
 
             return d <= distance;
@@ -112,7 +132,8 @@ export default function MerchantList({
      UI STATES
   ====================== */
   if (loading) return <p>Loading merchants…</p>;
-  if (!merchants.length) return <p>No merchants found</p>;
+  if (merchants.length === 0)
+    return <p>No merchants found</p>;
 
   /* ======================
      RENDER
