@@ -5,12 +5,11 @@
  * ✔ Requests notification permission
  * ✔ Gets & stores FCM token
  * ✔ Handles foreground messages
- * ✔ Handles token refresh
- * ✔ Safe for unsupported browsers
+ * ✔ Safe when messaging is unavailable
  * =========================================================
  */
 
-import { messaging, db } from "./index";
+import { db, messaging } from "./index";
 import { getToken, onMessage } from "firebase/messaging";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 
@@ -19,18 +18,21 @@ import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 ====================== */
 
 // 🔑 Firebase Console → Cloud Messaging → Web Push Certificates
-const VAPID_KEY = "BLQz2BIY-XXDRG0euqFN0YSxRv0v_flyYEPsZUFQc3AxOz693IuHUrdz48A7z6EPTyffkr42ND3gB0mDUm4XroM";
+const VAPID_KEY =
+  "BLQz2BIY-XXDRG0euqFN0YSxRv0v_flyYEPsZUFQc3AxOz693IuHUrdz48A7z6EPTyffkr42ND3gB0mDUm4XroM";
 
 /* ======================
    ENABLE PUSH (MERCHANT)
 ====================== */
 export async function enablePushNotifications(merchantId) {
   try {
-    if (!("Notification" in window)) {
-      console.warn("Browser does not support notifications");
+    // ✅ Browser support check
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      console.warn("Notifications not supported in this environment");
       return;
     }
 
+    // ✅ Messaging may be null (SSR / unsupported browser)
     if (!messaging) {
       console.warn("Firebase messaging not initialized");
       return;
@@ -70,7 +72,7 @@ export async function enablePushNotifications(merchantId) {
    FOREGROUND LISTENER
 ====================== */
 export function listenToForegroundMessages() {
-  if (!messaging) return;
+  if (!messaging || typeof window === "undefined") return;
 
   onMessage(messaging, (payload) => {
     console.log("🔔 Foreground notification:", payload);
