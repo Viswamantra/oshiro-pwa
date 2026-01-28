@@ -1,16 +1,16 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { getMerchantByMobile } from "../../firebase/barrel"; // ✅ FIXED (IMPORTANT)
+import { getMerchantByMobile } from "../../firebase/barrel";
 
 /**
  * =========================================================
- * MERCHANT LOGIN – FINAL PRODUCTION VERSION
+ * MERCHANT LOGIN – FINAL FIXED VERSION
  * ---------------------------------------------------------
  * ✔ Approved merchants can login
- * ✔ profileComplete enforced via redirect
- * ✔ Mobile normalization fixed
- * ✔ Reload / ProtectedRoute safe
- * ✔ Rollup / Vercel safe
+ * ✔ profileComplete enforced
+ * ✔ merchantId stored correctly (🔥 FIX)
+ * ✔ Works for NEW merchants
+ * ✔ Vercel / Reload safe
  * =========================================================
  */
 
@@ -28,10 +28,9 @@ export default function MerchantLogin() {
     let value = e.target.value;
 
     if (!value.startsWith("+91")) value = "+91";
-
     value = "+91" + value.slice(3).replace(/\D/g, "");
-    if (value.length > 13) value = value.slice(0, 13);
 
+    if (value.length > 13) value = value.slice(0, 13);
     setMobile(value);
   };
 
@@ -46,7 +45,7 @@ export default function MerchantLogin() {
       return;
     }
 
-    const plainMobile = mobile.slice(3); // digits only
+    const plainMobile = mobile.slice(3); // remove +91
 
     try {
       setLoading(true);
@@ -74,7 +73,7 @@ export default function MerchantLogin() {
       }
 
       /* ======================
-         STORE SESSION
+         STORE SESSION (🔥 FIX)
       ====================== */
       localStorage.setItem(
         "merchant",
@@ -87,6 +86,9 @@ export default function MerchantLogin() {
           role: "merchant",
         })
       );
+
+      // 🔥 THIS LINE FIXES OFFER CREATION FOR NEW MERCHANTS
+      localStorage.setItem("merchantId", merchant.id);
 
       /* ======================
          FORCE PROFILE SETUP
