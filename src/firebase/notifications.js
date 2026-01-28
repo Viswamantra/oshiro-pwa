@@ -1,15 +1,15 @@
 /**
  * =========================================================
- * FIREBASE PUSH NOTIFICATIONS (WEB / VITE SAFE)
+ * FIREBASE PUSH NOTIFICATIONS (VITE + SSR SAFE)
  * ---------------------------------------------------------
- * ✔ Requests notification permission
- * ✔ Gets & stores FCM token
- * ✔ Handles foreground messages
- * ✔ Safe when messaging is unavailable
+ * ✔ Lazy messaging initialization
+ * ✔ Safe for unsupported browsers
+ * ✔ No build-time crashes
+ * ✔ Uses getFirebaseMessaging()
  * =========================================================
  */
 
-import { db, messaging } from "./index";
+import { db, getFirebaseMessaging } from "./index";
 import { getToken, onMessage } from "firebase/messaging";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 
@@ -26,20 +26,18 @@ const VAPID_KEY =
 ====================== */
 export async function enablePushNotifications(merchantId) {
   try {
-    // ✅ Browser support check
     if (typeof window === "undefined" || !("Notification" in window)) {
-      console.warn("Notifications not supported in this environment");
+      console.warn("Notifications not supported");
       return;
     }
 
-    // ✅ Messaging may be null (SSR / unsupported browser)
+    const messaging = await getFirebaseMessaging();
     if (!messaging) {
-      console.warn("Firebase messaging not initialized");
+      console.warn("Firebase messaging unavailable");
       return;
     }
 
     const permission = await Notification.requestPermission();
-
     if (permission !== "granted") {
       console.warn("Notification permission denied");
       return;
@@ -54,7 +52,7 @@ export async function enablePushNotifications(merchantId) {
       return;
     }
 
-    // 🔥 Save token to Firestore (merchant document)
+    // 🔥 Save token to Firestore
     await updateDoc(doc(db, "merchants", merchantId), {
       fcmToken: token,
       notificationsEnabled: true,
@@ -71,8 +69,11 @@ export async function enablePushNotifications(merchantId) {
 /* ======================
    FOREGROUND LISTENER
 ====================== */
-export function listenToForegroundMessages() {
-  if (!messaging || typeof window === "undefined") return;
+export async function listenToForegroundMessages() {
+  if (typeof window === "undefined") return;
+
+  const messaging = await getFirebaseMessaging();
+  if (!messaging) return;
 
   onMessage(messaging, (payload) => {
     console.log("🔔 Foreground notification:", payload);
@@ -83,7 +84,6 @@ export function listenToForegroundMessages() {
       payload.notification?.body ||
       "You have a new notification";
 
-    // Simple UI feedback (replace with toast/snackbar later)
     alert(`${title}\n\n${body}`);
   });
 }
