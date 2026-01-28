@@ -1,39 +1,65 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
+import { signOut } from "firebase/auth";
+import { auth } from "../firebase";
 import oshiroLogo from "../assets/logo/oshiro-logo-icon.png";
 
 /**
  * =========================================================
- * ADMIN SIDEBAR (PRODUCTION SAFE)
+ * ADMIN SIDEBAR (FINAL / PRODUCTION)
  * ---------------------------------------------------------
- * ✔ Uses scoped CSS classes
  * ✔ Stable on Vercel
- * ✔ Active route highlighting
- * ✔ Logo support
+ * ✔ Logo + Navigation
+ * ✔ Logout at bottom (persistent)
+ * ✔ Clears admin session safely
  * =========================================================
  */
 
 export default function Sidebar() {
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    try {
+      if (auth?.currentUser) {
+        await signOut(auth);
+      }
+    } catch (err) {
+      console.error("Admin logout error:", err);
+    } finally {
+      // Clear admin session
+      localStorage.removeItem("admin_mobile");
+      localStorage.removeItem("admin_password");
+
+      navigate("/admin/login", { replace: true });
+    }
+  };
+
   return (
     <aside className="admin-sidebar">
-      {/* LOGO */}
-      <div className="admin-logo-container">
-        <img
-          src={oshiroLogo}
-          alt="Oshiro"
-          className="admin-logo-image"
-        />
+      {/* TOP: LOGO + NAV */}
+      <div>
+        <div className="admin-logo-container">
+          <img
+            src={oshiroLogo}
+            alt="Oshiro"
+            className="admin-logo-image"
+          />
+        </div>
+
+        <nav>
+          <NavItem to="/admin" label="Dashboard" end />
+          <NavItem to="/admin/customers" label="Customers" />
+          <NavItem to="/admin/merchants" label="Merchants" />
+          <NavItem to="/admin/categories" label="Categories" />
+          <NavItem to="/admin/offers" label="Offers" />
+          <NavItem to="/admin/geo-alerts" label="Geo Alerts" />
+          <NavItem to="/admin/notifications" label="Notifications" />
+        </nav>
       </div>
 
-      {/* NAVIGATION */}
-      <nav>
-        <NavItem to="/admin" label="Dashboard" end />
-        <NavItem to="/admin/customers" label="Customers" />
-        <NavItem to="/admin/merchants" label="Merchants" />
-        <NavItem to="/admin/categories" label="Categories" />
-        <NavItem to="/admin/offers" label="Offers" />
-        <NavItem to="/admin/geo-alerts" label="Geo Alerts" />
-        <NavItem to="/admin/notifications" label="Notifications" />
-      </nav>
+      {/* BOTTOM: LOGOUT */}
+      <button className="admin-logout" onClick={handleLogout}>
+        Logout
+      </button>
     </aside>
   );
 }
