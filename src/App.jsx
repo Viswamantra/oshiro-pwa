@@ -15,7 +15,7 @@ import MerchantLogin from "./pages/merchant/MerchantLogin";
 import MerchantRegister from "./pages/merchant/MerchantRegister";
 
 /* ======================
-   LAYOUTS & GUARDS
+   LAYOUTS
 ====================== */
 import AdminLayout from "./components/AdminLayout";
 import CustomerLayout from "./components/CustomerLayout";
@@ -67,61 +67,46 @@ export default function App() {
       <Route path="/merchant/register" element={<MerchantRegister />} />
 
       {/* ======================
-          ADMIN (PROTECTED)
+          ADMIN (PROTECTED + LAYOUT)
       ====================== */}
-      <Route
-        path="/admin"
-        element={
-          <ProtectedRoute adminOnly>
-            <AdminLayout />
-          </ProtectedRoute>
-        }
-      >
-        <Route index element={<Dashboard />} />
-        <Route path="customers" element={<Customers />} />
-        <Route path="merchants" element={<Merchants />} />
-        <Route path="merchant-approval" element={<MerchantApproval />} />
-        <Route path="categories" element={<Categories />} />
-        <Route path="offers" element={<Offers />} />
-        <Route path="geo-alerts" element={<GeoAlerts />} />
-        <Route path="notifications" element={<Notifications />} />
+      <Route element={<ProtectedRoute adminOnly />}>
+        <Route path="/admin" element={<AdminLayout />}>
+          <Route index element={<Dashboard />} />
+          <Route path="customers" element={<Customers />} />
+          <Route path="merchants" element={<Merchants />} />
+          <Route path="merchant-approval" element={<MerchantApproval />} />
+          <Route path="categories" element={<Categories />} />
+          <Route path="offers" element={<Offers />} />
+          <Route path="geo-alerts" element={<GeoAlerts />} />
+          <Route path="notifications" element={<Notifications />} />
+        </Route>
       </Route>
 
       {/* ======================
-          CUSTOMER (PROTECTED)
+          CUSTOMER (PROTECTED + LAYOUT)
       ====================== */}
-      <Route
-        path="/customer"
-        element={
-          <ProtectedRoute customerOnly>
-            <CustomerLayout />
-          </ProtectedRoute>
-        }
-      >
-        <Route index element={<CustomerDashboard />} />
-        <Route path="merchant/:merchantId" element={<MerchantDetails />} />
-        <Route path="nearby-offers" element={<NearbyOffers />} />
-        <Route
-          path="notifications"
-          element={<NotificationPermission />}
-        />
+      <Route element={<ProtectedRoute customerOnly />}>
+        <Route path="/customer" element={<CustomerLayout />}>
+          <Route index element={<CustomerDashboard />} />
+          <Route path="merchant/:merchantId" element={<MerchantDetails />} />
+          <Route path="nearby-offers" element={<NearbyOffers />} />
+          <Route
+            path="notifications"
+            element={<NotificationPermission />}
+          />
+        </Route>
       </Route>
 
       {/* ======================
-          MERCHANT (PROTECTED)
+          MERCHANT (PROTECTED + LAYOUT)
       ====================== */}
-      <Route
-        path="/merchant"
-        element={
-          <ProtectedRoute merchantOnly>
-            <MerchantLayout />
-          </ProtectedRoute>
-        }
-      >
-        <Route index element={<MerchantDashboard />} />
-        <Route path="offers" element={<MerchantOffers />} />
-        <Route path="profile" element={<MerchantProfile />} />
-        <Route path="location" element={<MerchantLocation />} />
+      <Route element={<ProtectedRoute merchantOnly />}>
+        <Route path="/merchant" element={<MerchantLayout />}>
+          <Route index element={<MerchantDashboard />} />
+          <Route path="offers" element={<MerchantOffers />} />
+          <Route path="profile" element={<MerchantProfile />} />
+          <Route path="location" element={<MerchantLocation />} />
+        </Route>
       </Route>
 
       {/* ======================
