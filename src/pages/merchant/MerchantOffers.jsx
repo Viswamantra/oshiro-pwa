@@ -23,13 +23,12 @@ import { db } from "../../firebase";
 
 /**
  * =========================================================
- * MERCHANT OFFERS (SESSION-DRIVEN – FINAL STABLE)
+ * MERCHANT OFFERS (SESSION-DRIVEN – FINAL, BUILD-SAFE)
  * ---------------------------------------------------------
+ * ✔ NO component self-imports
  * ✔ Uses localStorage merchant session
- * ✔ Firestore rules compliant
- * ✔ expiryDate stored as Timestamp
- * ✔ Customer filtering compatible
- * ✔ Vercel / Vite safe
+ * ✔ expiryDate stored as Firestore Timestamp
+ * ✔ Vite / Vercel safe
  * =========================================================
  */
 
@@ -64,11 +63,12 @@ export default function MerchantOffers() {
     );
 
     return onSnapshot(q, (snap) => {
-      const list = snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
-      setOffers(list);
+      setOffers(
+        snap.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        }))
+      );
     });
   }, [merchant.id]);
 
@@ -87,23 +87,21 @@ export default function MerchantOffers() {
 
       await addDoc(collection(db, "offers"), {
         merchantId: merchant.id,
-        mobile: merchant.mobile,              // ✅ rules-safe
+        mobile: merchant.mobile || "",
         shop_name: merchant.shopName || "",
         category: merchant.category || "",
         title: title.trim(),
         description: description.trim(),
         discountText: discountText.trim(),
-        expiryDate: Timestamp.fromDate(expiry), // ✅ CRITICAL
+        expiryDate: Timestamp.fromDate(expiry),
         isActive: true,
         createdAt: serverTimestamp(),
       });
 
-      // Reset form
       setTitle("");
       setDescription("");
       setDiscountText("");
       setExpiryDate("");
-
     } catch (err) {
       console.error("Create offer failed:", err);
       alert("Failed to create offer");
@@ -123,14 +121,10 @@ export default function MerchantOffers() {
     }
   };
 
-  /* ======================
-     RENDER
-  ====================== */
   return (
     <Box sx={{ mt: 4 }}>
       <Typography variant="h6">Create New Offer</Typography>
 
-      {/* ===== CREATE FORM ===== */}
       <Card sx={{ my: 2 }}>
         <CardContent>
           <TextField
@@ -181,7 +175,6 @@ export default function MerchantOffers() {
 
       <Divider />
 
-      {/* ===== OFFER LIST ===== */}
       <Typography sx={{ mt: 2 }}>My Offers</Typography>
 
       {!offers.length && <p>No offers created yet</p>}
