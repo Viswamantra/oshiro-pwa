@@ -9,7 +9,7 @@ import Home from "./pages/Home";
 /* ======================
    AUTH
 ====================== */
-import AdminLogin from "./auth/AdminLogin";
+import AdminLogin from "./pages/auth/AdminLogin";
 import CustomerLogin from "./pages/customer/CustomerLogin";
 import MerchantLogin from "./pages/merchant/MerchantLogin";
 import MerchantRegister from "./pages/merchant/MerchantRegister";
@@ -67,14 +67,6 @@ export default function App() {
       <Route path="/merchant/register" element={<MerchantRegister />} />
 
       {/* ======================
-          CUSTOMER NOTIFICATIONS
-      ====================== */}
-      <Route
-        path="/customer/notifications"
-        element={<NotificationPermission />}
-      />
-
-      {/* ======================
           ADMIN (PROTECTED)
       ====================== */}
       <Route
@@ -109,6 +101,10 @@ export default function App() {
         <Route index element={<CustomerDashboard />} />
         <Route path="merchant/:merchantId" element={<MerchantDetails />} />
         <Route path="nearby-offers" element={<NearbyOffers />} />
+        <Route
+          path="notifications"
+          element={<NotificationPermission />}
+        />
       </Route>
 
       {/* ======================
