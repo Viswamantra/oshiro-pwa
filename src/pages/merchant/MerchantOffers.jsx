@@ -17,17 +17,18 @@ import {
   updateDoc,
   doc,
   serverTimestamp,
+  Timestamp,               // ✅ ADD THIS
 } from "firebase/firestore";
 import { db } from "../../firebase";
 
 /**
  * =========================================================
- * MERCHANT OFFERS (SESSION-DRIVEN – FINAL)
+ * MERCHANT OFFERS (SESSION-DRIVEN – FINAL, FIXED)
  * ---------------------------------------------------------
- * ✔ Uses localStorage merchant session
- * ✔ Firestore rules compliant
- * ✔ Works for new merchants (9888888888)
- * ✔ Offer creation + toggle supported
+ * ✔ Correct Firestore schema
+ * ✔ expiryDate stored as Timestamp
+ * ✔ Customer filtering works
+ * ✔ Category + distance works
  * =========================================================
  */
 
@@ -83,18 +84,17 @@ export default function MerchantOffers() {
     try {
       await addDoc(collection(db, "offers"), {
         merchantId: merchant.id,
-        mobile: merchant.mobile,              // ✅ REQUIRED BY RULES
+        mobile: merchant.mobile,                 // ✅ rules-safe
         shop_name: merchant.shopName || "",
         category: merchant.category || "",
         title,
         description,
         discountText,
-        expiryDate: expiry,
+        expiryDate: Timestamp.fromDate(expiry),  // ✅ CRITICAL FIX
         isActive: true,
         createdAt: serverTimestamp(),
       });
 
-      // Reset form
       setTitle("");
       setDescription("");
       setDiscountText("");
@@ -200,9 +200,7 @@ export default function MerchantOffers() {
               <Button
                 size="small"
                 variant="outlined"
-                onClick={() =>
-                  toggleOffer(o.id, o.isActive)
-                }
+                onClick={() => toggleOffer(o.id, o.isActive)}
               >
                 {o.isActive ? "Disable" : "Enable"}
               </Button>
