@@ -1,0 +1,236 @@
+/* =========================================================
+   GLOBAL RESET (SAFE)
+========================================================= */
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* =========================================================
+   BASE APP STYLES
+========================================================= */
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, Arial, Helvetica, sans-serif;
+  background-color: #f4f6f8;
+  color: #222;
+  line-height: 1.4;
+}
+
+/* Do NOT globally kill button background behavior */
+button {
+  cursor: pointer;
+  border: none;
+  font-family: inherit;
+}
+
+input,
+textarea,
+select {
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 14px;
+}
+
+/* =========================================================
+   CUSTOMER HEADER (MOBILE FIRST)
+========================================================= */
+.customer-header {
+  position: sticky;
+  top: 0;
+  height: 52px;
+  background-color: #0d6efd;
+  color: #ffffff;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 100;
+}
+
+.customer-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.customer-header button {
+  background: #ffffff;
+  color: #0d6efd;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* =========================================================
+   FILTER BAR
+========================================================= */
+.filter-bar {
+  position: sticky;
+  top: 52px;
+  background: #ffffff;
+  padding: 8px;
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid #ddd;
+  z-index: 90;
+}
+
+.filter-bar select {
+  flex: 1;
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+/* =========================================================
+   MERCHANT LIST
+========================================================= */
+.merchant-list {
+  padding-bottom: 80px;
+}
+
+/* =========================================================
+   MERCHANT CARD
+========================================================= */
+.merchant-card {
+  background: #ffffff;
+  margin: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.merchant-info h4 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.merchant-info span {
+  font-size: 12px;
+  color: #666;
+}
+
+/* =========================================================
+   ADMIN LAYOUT (HARDENED)
+========================================================= */
+.admin-wrapper {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  background: #f4f6f8;
+}
+
+/* SIDEBAR */
+.admin-sidebar {
+  width: 240px;
+  background: #1e1e2f;
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 20px;
+  overflow-y: auto; /* 🔑 prevents logout disappearing */
+}
+
+/* LOGO */
+.admin-logo-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.admin-logo-image {
+  height: 32px;
+  width: auto;
+  display: block;
+}
+
+/* NAV ITEMS */
+.admin-nav-item {
+  display: block;
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #d1d5db;
+  font-weight: 500;
+  transition: background-color 0.2s ease;
+}
+
+.admin-nav-item:hover {
+  background: #2d2d44;
+}
+
+.admin-nav-item.active {
+  background: #1976d2;
+  color: #ffffff;
+}
+
+/* LOGOUT BUTTON (FORCED VISIBLE) */
+.admin-logout {
+  margin-top: 16px;
+  padding: 12px;
+  background-color: #c62828;
+  color: #ffffff;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+  text-align: center;
+}
+
+.admin-logout:hover {
+  background-color: #b71c1c;
+}
+
+/* MAIN AREA */
+.admin-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.admin-header {
+  height: 60px;
+  background: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+}
+
+.admin-content {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+/* =========================================================
+   DESKTOP ENHANCEMENTS
+========================================================= */
+@media (min-width: 768px) {
+  .filter-bar,
+  .merchant-list {
+    max-width: 720px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .merchant-card {
+    margin: 12px auto;
+  }
+}

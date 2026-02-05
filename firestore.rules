@@ -1,0 +1,93 @@
+// 🔒 LOCKED AFTER PHASE 2.6
+// Stable security rules for Admin & Merchant
+// DO NOT MODIFY until Phase 2.7 (Row 3) is completed
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* =====================
+       HELPERS
+    ===================== */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    /* =====================
+       ADMINS
+    ===================== */
+    match /admins/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    /* =====================
+       CATEGORIES
+       (Single Source of Truth)
+    ===================== */
+    match /categories/{id} {
+      allow read: if isSignedIn();     // customer + merchant
+      allow write: if isAdmin();       // admin only
+    }
+
+    /* =====================
+       CUSTOMERS
+    ===================== */
+    match /customers/{mobile} {
+      allow read, write: if isSignedIn();
+    }
+
+    /* =====================
+       MERCHANTS
+    ===================== */
+    match /merchants/{merchantId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    /* =====================
+       OFFERS
+    ===================== */
+    match /offers/{offerId} {
+      allow read: if isSignedIn();     // customers read
+      allow create, update, delete: if isSignedIn(); // merchants/admin
+    }
+
+    /* =====================
+       GEO EVENTS / LEADS
+       (Customer enters merchant radius)
+    ===================== */
+    match /geo_events/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    /* =====================
+       INSTANT OFFERS
+       (Merchant → Customer)
+    ===================== */
+    match /instant_offers/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    /* =====================
+       FCM TOKENS
+       (Customer device tokens)
+    ===================== */
+    match /fcm_tokens/{mobile} {
+      allow read, write: if isSignedIn();
+    }
+
+    /* =====================
+       SAFETY NET (MUST BE LAST)
+    ===================== */
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
