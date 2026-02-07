@@ -15,9 +15,7 @@ export default function CustomerLogin() {
   const [nameError, setNameError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  /* =========================
-     NAME VALIDATION
-  ========================= */
+  /* ================= NAME VALIDATION ================= */
   const handleNameChange = (e) => {
     const value = e.target.value;
 
@@ -35,20 +33,14 @@ export default function CustomerLogin() {
     setName(value);
   };
 
-  /* =========================
-     MOBILE VALIDATION
-  ========================= */
+  /* ================= MOBILE VALIDATION ================= */
   const handleMobileChange = (e) => {
     const value = e.target.value.replace(/\D/g, "");
     if (value.length <= 10) setMobile(value);
   };
 
-  /* =========================
-     ⭐ PRODUCTION SAFE LOCATION FUNCTION
-     High accuracy → fallback → network location
-  ========================= */
+  /* ================= SAFE LOCATION ================= */
   const getLocationSafe = () => {
-
     return new Promise((resolve, reject) => {
 
       if (!navigator.geolocation) {
@@ -56,57 +48,31 @@ export default function CustomerLogin() {
         return;
       }
 
-      // FIRST TRY HIGH ACCURACY
       navigator.geolocation.getCurrentPosition(
-
         (pos) => {
           resolve({
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
           });
         },
-
-        (err) => {
-
-          console.warn("High accuracy failed → fallback to normal accuracy");
-
-          // FALLBACK NORMAL ACCURACY
+        () => {
           navigator.geolocation.getCurrentPosition(
-
             (pos2) => {
               resolve({
                 lat: pos2.coords.latitude,
                 lng: pos2.coords.longitude,
               });
             },
-
             reject,
-
-            {
-              enableHighAccuracy: false,
-              timeout: 20000,
-              maximumAge: 60000,
-            }
-
+            { enableHighAccuracy: false, timeout: 20000 }
           );
-
         },
-
-        {
-          enableHighAccuracy: true,
-          timeout: 8000,
-          maximumAge: 0,
-        }
-
+        { enableHighAccuracy: true, timeout: 8000 }
       );
-
     });
-
   };
 
-  /* =========================
-     ⭐ FINAL LOGIN FLOW
-  ========================= */
+  /* ================= FINAL LOGIN ================= */
   const handleSubmit = async () => {
 
     if (!name || mobile.length !== 10) {
@@ -119,9 +85,7 @@ export default function CustomerLogin() {
       setLoading(true);
       console.log("🔥 Login starting...");
 
-      /* ======================
-         1️⃣ CREATE BASE DOC
-      ====================== */
+      /* 1️⃣ BASE DOC */
       await setDoc(
         doc(db, "customers", mobile),
         {
@@ -133,64 +97,33 @@ export default function CustomerLogin() {
         { merge: true }
       );
 
-      console.log("✅ Base customer saved");
+      /* 2️⃣ LOCATION (NON BLOCKING SAFE) */
+      getLocationSafe()
+        .then((loc) => {
+          return setDoc(
+            doc(db, "customers", mobile),
+            {
+              lat: loc.lat,
+              lng: loc.lng,
+              selectedDistanceKm: 3,
+              lastLocationUpdate: serverTimestamp(),
+            },
+            { merge: true }
+          );
+        })
+        .catch((e) => console.warn("Location skipped:", e));
 
-      /* ======================
-         2️⃣ GET + SAVE LOCATION
-      ====================== */
-      try {
+      /* 3️⃣ TOKEN (🔥 NON BLOCKING — MOST IMPORTANT FIX) */
+      generateAndSaveToken(mobile)
+        .then(() => console.log("Token saved"))
+        .catch((e) => console.warn("Token skipped:", e));
 
-        console.log("📍 Getting GPS location...");
-
-        const loc = await getLocationSafe();
-
-        console.log("✅ Location received:", loc);
-
-        await setDoc(
-          doc(db, "customers", mobile),
-          {
-            lat: loc.lat,
-            lng: loc.lng,
-            selectedDistanceKm: 3,
-            lastLocationUpdate: serverTimestamp(),
-          },
-          { merge: true }
-        );
-
-        console.log("✅ Location saved to Firestore");
-
-      } catch (locErr) {
-
-        console.warn("⚠ Location failed:", locErr);
-
-      }
-
-      /* ======================
-         3️⃣ GENERATE TOKEN
-      ====================== */
-      try {
-
-        console.log("🔔 Generating FCM token...");
-        await generateAndSaveToken(mobile);
-
-        console.log("✅ Token saved");
-
-      } catch (tokenErr) {
-
-        console.warn("⚠ Token generation failed:", tokenErr);
-
-      }
-
-      /* ======================
-         4️⃣ SESSION
-      ====================== */
+      /* 4️⃣ SESSION */
       localStorage.setItem("mobile", mobile);
       localStorage.setItem("name", name);
       setActiveRole("customer");
 
-      /* ======================
-         5️⃣ NAVIGATE
-      ====================== */
+      /* 5️⃣ NAVIGATE IMMEDIATELY */
       navigate("/customer", { replace: true });
 
     } catch (err) {
@@ -203,7 +136,6 @@ export default function CustomerLogin() {
       setLoading(false);
 
     }
-
   };
 
   const isFormValid =
@@ -211,7 +143,6 @@ export default function CustomerLogin() {
 
   return (
     <div style={styles.page}>
-
       <div onClick={() => navigate("/")} style={styles.homeBtn}>
         ← Home
       </div>
@@ -260,12 +191,11 @@ export default function CustomerLogin() {
         </button>
 
       </div>
-
     </div>
   );
 }
 
-/* ====================== STYLES ====================== */
+/* ================= STYLES ================= */
 
 const styles = {
   page: {
