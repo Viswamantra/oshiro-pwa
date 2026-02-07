@@ -1,11 +1,13 @@
 /**
  * =========================================================
- * FIREBASE INITIALIZATION (VITE + ROLLUP SAFE)
+ * FIREBASE INITIALIZATION (PRODUCTION SAFE FINAL)
  * ---------------------------------------------------------
  * ✔ Single app instance (HMR safe)
- * ✔ No top-level async side effects
- * ✔ Messaging loaded ONLY when needed
- * ✔ DEV + PROD + Vercel safe
+ * ✔ Lazy Messaging Init
+ * ✔ Push System Ready
+ * ✔ Vite / Rollup / Vercel Safe
+ * ✔ SSR Safe
+ * ✔ Race Condition Safe
  * =========================================================
  */
 
@@ -40,33 +42,69 @@ export const db = getFirestore(app);
 export const auth = getAuth(app);
 
 /* =========================================================
-   LAZY MESSAGING INIT (NO TOP-LEVEL IMPORT)
+   LAZY MESSAGING INIT (PRODUCTION SAFE)
 ========================================================= */
+
 let _messaging = null;
+let _messagingInitPromise = null;
 
 export async function getFirebaseMessaging() {
+
+  /* ---------- SSR SAFE ---------- */
   if (typeof window === "undefined") return null;
-  if (!("serviceWorker" in navigator)) return null;
-  if (!("Notification" in window)) return null;
 
-  if (_messaging) return _messaging;
-
-  try {
-    const { getMessaging, isSupported } = await import(
-      "firebase/messaging"
-    );
-
-    const supported = await isSupported();
-    if (!supported) {
-      console.warn("❌ Firebase Messaging not supported");
-      return null;
-    }
-
-    _messaging = getMessaging(app);
-    console.log("🔥 Firebase Messaging initialized");
-    return _messaging;
-  } catch (err) {
-    console.error("❌ Messaging init failed:", err);
+  /* ---------- Browser Feature Checks ---------- */
+  if (!("serviceWorker" in navigator)) {
+    console.warn("❌ No service worker support");
     return null;
   }
+
+  if (!("Notification" in window)) {
+    console.warn("❌ Notifications not supported");
+    return null;
+  }
+
+  /* ---------- Already Initialized ---------- */
+  if (_messaging) return _messaging;
+
+  /* ---------- Prevent Parallel Init ---------- */
+  if (_messagingInitPromise) return _messagingInitPromise;
+
+  _messagingInitPromise = (async () => {
+
+    try {
+
+      console.log("🔥 Initializing Firebase Messaging...");
+
+      const { getMessaging, isSupported } = await import(
+        "firebase/messaging"
+      );
+
+      const supported = await isSupported();
+
+      if (!supported) {
+        console.warn("❌ Firebase Messaging not supported in this browser");
+        return null;
+      }
+
+      _messaging = getMessaging(app);
+
+      console.log("✅ Firebase Messaging Ready");
+
+      return _messaging;
+
+    } catch (err) {
+
+      console.error("❌ Messaging init failed:", err);
+      return null;
+
+    } finally {
+
+      _messagingInitPromise = null;
+
+    }
+
+  })();
+
+  return _messagingInitPromise;
 }

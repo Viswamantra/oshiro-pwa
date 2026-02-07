@@ -1,9 +1,13 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { upsertCustomer } from "../../firebase/barrel";
 import { setActiveRole } from "../../utils/activeRole";
+import { generateAndSaveToken } from "../../services/fcmToken";
+
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "../../firebase";
 
 export default function CustomerLogin() {
+
   const navigate = useNavigate();
 
   const [mobile, setMobile] = useState("");
@@ -40,35 +44,166 @@ export default function CustomerLogin() {
   };
 
   /* =========================
-     SUBMIT (LOGIN)
+     ⭐ PRODUCTION SAFE LOCATION FUNCTION
+     High accuracy → fallback → network location
+  ========================= */
+  const getLocationSafe = () => {
+
+    return new Promise((resolve, reject) => {
+
+      if (!navigator.geolocation) {
+        reject("Geolocation not supported");
+        return;
+      }
+
+      // FIRST TRY HIGH ACCURACY
+      navigator.geolocation.getCurrentPosition(
+
+        (pos) => {
+          resolve({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+          });
+        },
+
+        (err) => {
+
+          console.warn("High accuracy failed → fallback to normal accuracy");
+
+          // FALLBACK NORMAL ACCURACY
+          navigator.geolocation.getCurrentPosition(
+
+            (pos2) => {
+              resolve({
+                lat: pos2.coords.latitude,
+                lng: pos2.coords.longitude,
+              });
+            },
+
+            reject,
+
+            {
+              enableHighAccuracy: false,
+              timeout: 20000,
+              maximumAge: 60000,
+            }
+
+          );
+
+        },
+
+        {
+          enableHighAccuracy: true,
+          timeout: 8000,
+          maximumAge: 0,
+        }
+
+      );
+
+    });
+
+  };
+
+  /* =========================
+     ⭐ FINAL LOGIN FLOW
   ========================= */
   const handleSubmit = async () => {
+
     if (!name || mobile.length !== 10) {
       setNameError("Valid name and mobile required");
       return;
     }
 
     try {
+
       setLoading(true);
+      console.log("🔥 Login starting...");
 
-      // 🔥 Save / update customer in Firestore
-      await upsertCustomer({
-        mobile,
-        name,
-      });
+      /* ======================
+         1️⃣ CREATE BASE DOC
+      ====================== */
+      await setDoc(
+        doc(db, "customers", mobile),
+        {
+          mobile,
+          name,
+          role: "customer",
+          lastLoginAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
 
-      // 🔐 SESSION (SINGLE SOURCE OF TRUTH)
+      console.log("✅ Base customer saved");
+
+      /* ======================
+         2️⃣ GET + SAVE LOCATION
+      ====================== */
+      try {
+
+        console.log("📍 Getting GPS location...");
+
+        const loc = await getLocationSafe();
+
+        console.log("✅ Location received:", loc);
+
+        await setDoc(
+          doc(db, "customers", mobile),
+          {
+            lat: loc.lat,
+            lng: loc.lng,
+            selectedDistanceKm: 3,
+            lastLocationUpdate: serverTimestamp(),
+          },
+          { merge: true }
+        );
+
+        console.log("✅ Location saved to Firestore");
+
+      } catch (locErr) {
+
+        console.warn("⚠ Location failed:", locErr);
+
+      }
+
+      /* ======================
+         3️⃣ GENERATE TOKEN
+      ====================== */
+      try {
+
+        console.log("🔔 Generating FCM token...");
+        await generateAndSaveToken(mobile);
+
+        console.log("✅ Token saved");
+
+      } catch (tokenErr) {
+
+        console.warn("⚠ Token generation failed:", tokenErr);
+
+      }
+
+      /* ======================
+         4️⃣ SESSION
+      ====================== */
       localStorage.setItem("mobile", mobile);
       localStorage.setItem("name", name);
       setActiveRole("customer");
 
+      /* ======================
+         5️⃣ NAVIGATE
+      ====================== */
       navigate("/customer", { replace: true });
+
     } catch (err) {
-      console.error("Customer login failed:", err);
+
+      console.error("Login failed:", err);
       setNameError("Something went wrong. Please try again.");
+
     } finally {
+
       setLoading(false);
+
     }
+
   };
 
   const isFormValid =
@@ -76,12 +211,13 @@ export default function CustomerLogin() {
 
   return (
     <div style={styles.page}>
-      {/* HOME */}
+
       <div onClick={() => navigate("/")} style={styles.homeBtn}>
         ← Home
       </div>
 
       <div style={styles.card}>
+
         <img
           src="/logo/oshiro-logo-compact-3.png"
           alt="OshirO"
@@ -89,11 +225,11 @@ export default function CustomerLogin() {
         />
 
         <h2 style={styles.title}>Welcome to OshirO 👋</h2>
+
         <p style={styles.subtitle}>
           Where every corner has a discount
         </p>
 
-        {/* MOBILE */}
         <input
           type="tel"
           value={mobile}
@@ -102,7 +238,6 @@ export default function CustomerLogin() {
           style={styles.input}
         />
 
-        {/* NAME */}
         <input
           type="text"
           value={name}
@@ -113,7 +248,6 @@ export default function CustomerLogin() {
 
         {nameError && <div style={styles.error}>{nameError}</div>}
 
-        {/* CTA */}
         <button
           onClick={handleSubmit}
           disabled={!isFormValid}
@@ -124,14 +258,15 @@ export default function CustomerLogin() {
         >
           {loading ? "Please wait..." : "Continue →"}
         </button>
+
       </div>
+
     </div>
   );
 }
 
-/* ======================
-   STYLES
-====================== */
+/* ====================== STYLES ====================== */
+
 const styles = {
   page: {
     minHeight: "100vh",

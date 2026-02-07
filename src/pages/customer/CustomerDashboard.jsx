@@ -5,16 +5,13 @@ import {
   fetchOffersByMerchantIds,
 } from "../../firebase/barrel";
 
-/**
- * =========================================================
- * CUSTOMER DASHBOARD – FINAL FIX
- * ---------------------------------------------------------
- * ✔ Call / WhatsApp / Maps WORK
- * ✔ Card navigation isolated
- * ✔ No event swallowing
- * ✔ Mobile + desktop safe
- * =========================================================
- */
+import { hybridUpdateCustomerLocation } from "../../services/locationHybrid";
+import { doc, updateDoc } from "firebase/firestore";
+import { db } from "../../firebase";
+
+/* =========================================================
+   CUSTOMER DASHBOARD – FINAL PRODUCTION FIX
+========================================================= */
 
 const DISTANCES = [
   { label: "300 m", value: 300 },
@@ -26,14 +23,63 @@ const DISTANCES = [
 
 export default function CustomerDashboard() {
   const navigate = useNavigate();
-  const customerName =
-    localStorage.getItem("name") || "Customer";
+
+  const customerName = localStorage.getItem("name") || "Customer";
+
+  // ⭐ FIX — Use mobile as ID
+  const customerId = localStorage.getItem("mobile");
 
   const [category, setCategory] = useState("");
   const [distance, setDistance] = useState(3000);
   const [shops, setShops] = useState([]);
   const [offersMap, setOffersMap] = useState({});
   const [loading, setLoading] = useState(true);
+  const [customerLocation, setCustomerLocation] = useState(null);
+
+  /* ======================================================
+     HYBRID LOCATION UPDATE
+  ====================================================== */
+  useEffect(() => {
+    if (!customerId) return;
+
+    async function updateLocation() {
+      try {
+        const finalLocation = await hybridUpdateCustomerLocation(
+          customerId,
+          null
+        );
+
+        setCustomerLocation(finalLocation);
+
+        console.log("📍 Customer Location Updated:", finalLocation);
+      } catch (err) {
+        console.log("Location update skipped", err);
+      }
+    }
+
+    updateLocation();
+  }, [customerId]);
+
+  /* ======================================================
+     SAVE SELECTED DISTANCE
+  ====================================================== */
+  useEffect(() => {
+    if (!customerId) return;
+
+    async function saveDistance() {
+      try {
+        await updateDoc(doc(db, "customers", customerId), {
+          selectedDistanceKm: distance / 1000,
+        });
+
+        console.log("📏 Distance saved:", distance / 1000, "km");
+      } catch (err) {
+        console.log("Distance save skipped", err);
+      }
+    }
+
+    saveDistance();
+  }, [distance, customerId]);
 
   /* ======================
      LOAD SHOPS + OFFERS
@@ -54,11 +100,9 @@ export default function CustomerDashboard() {
 
         setShops(merchants || []);
 
-        const merchantIds =
-          (merchants || []).map((m) => m.id);
+        const merchantIds = (merchants || []).map((m) => m.id);
 
-        const offers =
-          await fetchOffersByMerchantIds(merchantIds);
+        const offers = await fetchOffersByMerchantIds(merchantIds);
 
         mounted && setOffersMap(offers || {});
       } catch (err) {
@@ -75,19 +119,12 @@ export default function CustomerDashboard() {
 
   return (
     <div style={styles.page}>
-      {/* HERO */}
       <section style={styles.hero}>
-        <h2 style={styles.greeting}>
-          Hi {customerName} 👋
-        </h2>
-        <p style={styles.subText}>
-          Find nearby shops & local offers
-        </p>
+        <h2 style={styles.greeting}>Hi {customerName} 👋</h2>
+        <p style={styles.subText}>Find nearby shops & local offers</p>
       </section>
 
-      {/* FILTERS */}
       <section style={styles.stickyFilters}>
-        {/* CATEGORY */}
         <div style={styles.filterBlock}>
           <label style={styles.label}>📂 Category</label>
           <select
@@ -98,19 +135,14 @@ export default function CustomerDashboard() {
             <option value="">All</option>
             <option value="Food">Food</option>
             <option value="Beauty & Spa">Beauty & Spa</option>
-            <option value="Fashions & Apparels">
-              Fashions & Apparels
-            </option>
+            <option value="Fashions & Apparels">Fashions & Apparels</option>
             <option value="Pharmacy">Pharmacy</option>
             <option value="Hospitals">Hospitals</option>
             <option value="Education">Education</option>
-            <option value="Other Services">
-              Other Services
-            </option>
+            <option value="Other Services">Other Services</option>
           </select>
         </div>
 
-        {/* DISTANCE */}
         <div style={styles.filterBlock}>
           <label style={styles.label}>📍 Distance</label>
           <div style={styles.distanceRow}>
@@ -120,9 +152,7 @@ export default function CustomerDashboard() {
                 onClick={() => setDistance(d.value)}
                 style={{
                   ...styles.distanceBtn,
-                  ...(distance === d.value
-                    ? styles.distanceActive
-                    : {}),
+                  ...(distance === d.value ? styles.distanceActive : {}),
                 }}
               >
                 {d.label}
@@ -132,28 +162,18 @@ export default function CustomerDashboard() {
         </div>
       </section>
 
-      {/* LIST */}
       <section style={styles.list}>
-        <h3 style={styles.sectionTitle}>
-          Nearby Shops
-        </h3>
+        <h3 style={styles.sectionTitle}>Nearby Shops</h3>
 
-        {loading && (
-          <p style={styles.helper}>
-            Finding shops near you…
-          </p>
-        )}
+        {loading && <p style={styles.helper}>Finding shops near you…</p>}
 
         {!loading && shops.length === 0 && (
-          <p style={styles.helper}>
-            No shops found.
-          </p>
+          <p style={styles.helper}>No shops found.</p>
         )}
 
         {!loading &&
           shops.map((shop) => {
-            const offerCount =
-              offersMap[shop.id]?.length || 0;
+            const offerCount = offersMap[shop.id]?.length || 0;
 
             const cleanMobile = shop.mobile
               ? shop.mobile.toString().replace(/\D/g, "").slice(-10)
@@ -164,11 +184,9 @@ export default function CustomerDashboard() {
                 key={shop.id}
                 style={styles.card}
                 onClick={() =>
-                  offerCount > 0 &&
-                  navigate(`/customer/offers/${shop.id}`)
+                  offerCount > 0 && navigate(`/customer/offers/${shop.id}`)
                 }
               >
-                {/* TOP */}
                 <div style={styles.cardTop}>
                   <div>
                     <div style={styles.shopName}>
@@ -176,22 +194,16 @@ export default function CustomerDashboard() {
                     </div>
 
                     <span style={styles.offerBadge}>
-                      🎁 {offerCount} OFFER
-                      {offerCount !== 1 ? "S" : ""}
+                      🎁 {offerCount} OFFER{offerCount !== 1 ? "S" : ""}
                     </span>
                   </div>
 
-                  <span style={styles.status}>
-                    OPEN
-                  </span>
+                  <span style={styles.status}>OPEN</span>
                 </div>
 
-                {/* ACTIONS – FIXED */}
                 <div style={styles.actionsRow}>
-                  {/* CALL */}
                   {cleanMobile && (
                     <button
-                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         window.location.href = `tel:${cleanMobile}`;
@@ -202,16 +214,11 @@ export default function CustomerDashboard() {
                     </button>
                   )}
 
-                  {/* WHATSAPP */}
                   {cleanMobile && (
                     <button
-                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        window.open(
-                          `https://wa.me/91${cleanMobile}`,
-                          "_blank"
-                        );
+                        window.open(`https://wa.me/91${cleanMobile}`, "_blank");
                       }}
                       style={styles.actionBtn}
                     >
@@ -219,10 +226,8 @@ export default function CustomerDashboard() {
                     </button>
                   )}
 
-                  {/* MAP */}
                   {shop.location && (
                     <button
-                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         window.open(
@@ -244,15 +249,10 @@ export default function CustomerDashboard() {
   );
 }
 
-/* ======================
-   STYLES
-====================== */
+/* ====================== STYLES ====================== */
 
 const styles = {
-  page: {
-    background: "#f8fafc",
-    minHeight: "100vh",
-  },
+  page: { background: "#f8fafc", minHeight: "100vh" },
   hero: { padding: 16 },
   greeting: { fontSize: 22, fontWeight: 700 },
   subText: { fontSize: 14, color: "#6b7280" },
@@ -292,7 +292,6 @@ const styles = {
 
   list: { padding: 16, maxWidth: 720, margin: "0 auto" },
   sectionTitle: { fontSize: 16, fontWeight: 600 },
-
   helper: { fontSize: 14, color: "#6b7280" },
 
   card: {
@@ -304,11 +303,7 @@ const styles = {
     cursor: "pointer",
   },
 
-  cardTop: {
-    display: "flex",
-    justifyContent: "space-between",
-  },
-
+  cardTop: { display: "flex", justifyContent: "space-between" },
   shopName: { fontSize: 16, fontWeight: 600 },
 
   offerBadge: {

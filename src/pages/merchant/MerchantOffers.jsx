@@ -8,31 +8,30 @@ import {
   CardContent,
   Divider,
 } from "@mui/material";
+
 import {
   collection,
-  addDoc,
   query,
   where,
   onSnapshot,
   updateDoc,
   doc,
-  serverTimestamp,
   Timestamp,
 } from "firebase/firestore";
+
 import { db } from "../../firebase";
+
+/* ⭐ NEW — GEO SAFE OFFER CREATE */
+import { createOfferWithGeo } from "../../firebase/offers";
 
 /**
  * =========================================================
- * MERCHANT OFFERS – FINAL STABLE VERSION
- * ---------------------------------------------------------
- * ✔ No circular imports
- * ✔ Uses localStorage merchant session
- * ✔ Firestore rules compliant
- * ✔ Vercel + Vite safe
+ * MERCHANT OFFERS – GEO PUSH READY VERSION
  * =========================================================
  */
 
 export default function MerchantOffers() {
+
   /* ======================
      LOAD MERCHANT SESSION
   ====================== */
@@ -72,19 +71,21 @@ export default function MerchantOffers() {
   }, [merchant.id]);
 
   /* ======================
-     CREATE OFFER
+     ⭐ CREATE OFFER (WITH GEO)
   ====================== */
   const createOffer = async () => {
+
     if (!title || !discountText || !expiryDate) {
       alert("Title, discount & expiry are required");
       return;
     }
 
     try {
+
       const expiry = new Date(expiryDate);
       expiry.setHours(23, 59, 59, 999);
 
-      await addDoc(collection(db, "offers"), {
+      await createOfferWithGeo({
         merchantId: merchant.id,
         mobile: merchant.mobile,
         shop_name: merchant.shopName || "",
@@ -93,17 +94,19 @@ export default function MerchantOffers() {
         description: description.trim(),
         discountText: discountText.trim(),
         expiryDate: Timestamp.fromDate(expiry),
-        isActive: true,
-        createdAt: serverTimestamp(),
       });
 
+      /* RESET FORM */
       setTitle("");
       setDescription("");
       setDiscountText("");
       setExpiryDate("");
+
+      alert("Offer published successfully 🚀");
+
     } catch (err) {
       console.error("Create offer failed:", err);
-      alert("Failed to create offer");
+      alert(err.message || "Failed to create offer");
     }
   };
 
@@ -121,14 +124,16 @@ export default function MerchantOffers() {
   };
 
   /* ======================
-     RENDER
+     UI
   ====================== */
   return (
     <Box sx={{ mt: 4 }}>
+
       <Typography variant="h6">Create New Offer</Typography>
 
       <Card sx={{ my: 2 }}>
         <CardContent>
+
           <TextField
             label="Offer Title"
             fullWidth
@@ -165,9 +170,14 @@ export default function MerchantOffers() {
             onChange={(e) => setExpiryDate(e.target.value)}
           />
 
-          <Button sx={{ mt: 3 }} variant="contained" onClick={createOffer}>
+          <Button
+            sx={{ mt: 3 }}
+            variant="contained"
+            onClick={createOffer}
+          >
             Publish Offer
           </Button>
+
         </CardContent>
       </Card>
 
@@ -180,6 +190,7 @@ export default function MerchantOffers() {
       {offers.map((o) => (
         <Card key={o.id} sx={{ my: 1 }}>
           <CardContent>
+
             <Typography fontWeight="bold">{o.title}</Typography>
 
             {o.description && (
@@ -201,9 +212,11 @@ export default function MerchantOffers() {
                 {o.isActive ? "Disable" : "Enable"}
               </Button>
             </Box>
+
           </CardContent>
         </Card>
       ))}
+
     </Box>
   );
 }
