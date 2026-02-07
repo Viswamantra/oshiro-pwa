@@ -1,31 +1,26 @@
 import React, { useEffect, useState } from "react";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../firebase";
 
 /**
- * =========================================================
- * MERCHANT LOCATION
- * ---------------------------------------------------------
- * ✔ Geo capture
- * ✔ Address input
- * ✔ profileComplete enforcement
- * ✔ Firestore rules aligned
- * ✔ Runtime & Rollup safe
- * =========================================================
+ * PRODUCTION SAFE LOCATION FILE
  */
 
 export default function MerchantLocation() {
-  /* ======================
-     GET MERCHANT SESSION
-  ====================== */
-  let merchantId = null;
+  let merchant = null;
 
   try {
-    const stored = JSON.parse(localStorage.getItem("merchant"));
-    merchantId = stored?.id || null;
+    merchant = JSON.parse(localStorage.getItem("merchant"));
   } catch {
-    merchantId = null;
+    merchant = null;
   }
+
+  const merchantId =
+    merchant?.id ||
+    merchant?.uid ||
+    merchant?.docId ||
+    merchant?.merchantId ||
+    null;
 
   const [lat, setLat] = useState(null);
   const [lng, setLng] = useState(null);
@@ -33,9 +28,6 @@ export default function MerchantLocation() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
 
-  /* ======================
-     GET CURRENT LOCATION
-  ====================== */
   useEffect(() => {
     if (!navigator.geolocation) {
       setMsg("Geolocation not supported");
@@ -51,9 +43,6 @@ export default function MerchantLocation() {
     );
   }, []);
 
-  /* ======================
-     SAVE LOCATION
-  ====================== */
   const saveLocation = async () => {
     if (!merchantId) {
       setMsg("Merchant not logged in");
@@ -61,32 +50,32 @@ export default function MerchantLocation() {
     }
 
     if (typeof lat !== "number" || typeof lng !== "number") {
-      setMsg("Location not selected");
+      setMsg("Location not available");
       return;
     }
 
     try {
       setLoading(true);
 
-      await updateDoc(doc(db, "merchants", merchantId), {
-        location: {
-          lat,
-          lng,
-          address: address || "",
+      await setDoc(
+        doc(db, "merchants", merchantId),
+        {
+          location: {
+            lat,
+            lng,
+            address: address || "",
+          },
+          profileComplete: true,
+          updatedAt: serverTimestamp(),
+          locationUpdatedAt: serverTimestamp(),
         },
+        { merge: true }
+      );
 
-        // 🔐 REQUIRED FOR CUSTOMER VISIBILITY
-        profileComplete: true,
-
-        updatedAt: serverTimestamp(),
-        locationUpdatedAt: serverTimestamp(),
-      });
-
-      setMsg("Location saved successfully");
-
+      setMsg("✅ Location saved successfully");
     } catch (err) {
-      console.error("Save location failed:", err);
-      setMsg("Failed to save location");
+      console.error(err);
+      setMsg(err.message || "Failed to save location");
     } finally {
       setLoading(false);
     }
@@ -96,7 +85,7 @@ export default function MerchantLocation() {
     <div style={{ padding: 20 }}>
       <h2>Set Shop Location</h2>
 
-      {typeof lat === "number" && typeof lng === "number" ? (
+      {typeof lat === "number" ? (
         <iframe
           title="map"
           width="100%"
@@ -116,7 +105,7 @@ export default function MerchantLocation() {
         style={{ width: "100%", padding: 10, marginTop: 10 }}
       />
 
-      {msg && <p>{msg}</p>}
+      {msg && <p style={{ marginTop: 10 }}>{msg}</p>}
 
       <button
         onClick={saveLocation}

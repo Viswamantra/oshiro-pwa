@@ -1,23 +1,17 @@
 import React, { useState } from "react";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "../../firebase.js";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "../../firebase";
 
 /**
- * =========================================================
- * MERCHANT PROFILE – GPS LOCATION
- * ---------------------------------------------------------
- * ✔ Button-based GPS fetch
- * ✔ Browser permission popup
- * ✔ Read-only coordinates
- * ✔ Save to Firestore
- * =========================================================
+ * PRODUCTION SAFE VERSION
+ * ✔ Handles missing merchant id
+ * ✔ Handles doc not existing
+ * ✔ Firestore merge safe
  */
 
 export default function MerchantProfile() {
-  /* ======================
-     SAFE MERCHANT LOAD
-  ====================== */
   let merchant = null;
+
   try {
     merchant = JSON.parse(localStorage.getItem("merchant"));
   } catch {
@@ -32,19 +26,24 @@ export default function MerchantProfile() {
     );
   }
 
+  // 🔥 SAFE ID PICKER
+  const merchantId =
+    merchant?.id ||
+    merchant?.uid ||
+    merchant?.docId ||
+    merchant?.merchantId ||
+    null;
+
   const [lat, setLat] = useState(null);
   const [lng, setLng] = useState(null);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
 
-  /* ======================
-     GET GPS LOCATION
-  ====================== */
   const getLocation = () => {
     setMsg("");
 
     if (!navigator.geolocation) {
-      setMsg("Geolocation not supported by this browser");
+      setMsg("Geolocation not supported");
       return;
     }
 
@@ -64,12 +63,14 @@ export default function MerchantProfile() {
     );
   };
 
-  /* ======================
-     SAVE LOCATION
-  ====================== */
   const saveLocation = async () => {
+    if (!merchantId) {
+      setMsg("Merchant session missing. Login again.");
+      return;
+    }
+
     if (typeof lat !== "number" || typeof lng !== "number") {
-      setMsg("Please fetch GPS location first");
+      setMsg("Please fetch GPS first");
       return;
     }
 
@@ -77,15 +78,20 @@ export default function MerchantProfile() {
       setLoading(true);
       setMsg("");
 
-      await updateDoc(doc(db, "merchants", merchant.id), {
-        location: { lat, lng },
-        locationUpdatedAt: serverTimestamp(),
-      });
+      await setDoc(
+        doc(db, "merchants", merchantId),
+        {
+          location: { lat, lng },
+          profileComplete: true,
+          locationUpdatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
 
-      setMsg("✅ GPS location saved successfully");
+      setMsg("✅ Location saved successfully");
     } catch (err) {
-      console.error("Save location error:", err);
-      setMsg("❌ Failed to save location");
+      console.error("Save error:", err);
+      setMsg(err.message || "❌ Failed to save location");
     } finally {
       setLoading(false);
     }
@@ -95,47 +101,23 @@ export default function MerchantProfile() {
     <div style={{ padding: 20 }}>
       <h3>Shop Profile</h3>
 
-      {/* ======================
-          GPS BUTTON
-      ====================== */}
-      <button
-        onClick={getLocation}
-        disabled={loading}
-        style={{ padding: 10 }}
-      >
+      <button onClick={getLocation} disabled={loading} style={{ padding: 10 }}>
         📍 Get GPS Location
       </button>
 
-      {/* ======================
-          LOCATION DISPLAY
-      ====================== */}
       {typeof lat === "number" && typeof lng === "number" && (
         <div style={{ marginTop: 15 }}>
-          <input
-            value={`Latitude: ${lat}`}
-            readOnly
-            style={styles.input}
-          />
-          <input
-            value={`Longitude: ${lng}`}
-            readOnly
-            style={styles.input}
-          />
+          <input value={`Latitude: ${lat}`} readOnly style={styles.input} />
+          <input value={`Longitude: ${lng}`} readOnly style={styles.input} />
         </div>
       )}
 
-      {/* ======================
-          MESSAGE
-      ====================== */}
       {msg && (
-        <p style={{ marginTop: 10, color: msg.startsWith("✅") ? "green" : "red" }}>
+        <p style={{ marginTop: 10, color: msg.includes("✅") ? "green" : "red" }}>
           {msg}
         </p>
       )}
 
-      {/* ======================
-          SAVE BUTTON
-      ====================== */}
       <button
         onClick={saveLocation}
         disabled={loading}

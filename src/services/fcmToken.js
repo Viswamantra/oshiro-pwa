@@ -1,11 +1,30 @@
+/**
+ * =========================================================
+ * FCM TOKEN SERVICE – FINAL PRODUCTION SAFE
+ * ---------------------------------------------------------
+ * ✔ Direct firebase/index import (Vite safe)
+ * ✔ Service Worker ready wait
+ * ✔ Permission safe
+ * ✔ Messaging support safe
+ * ✔ Token merge safe
+ * ✔ Foreground listener safe
+ * =========================================================
+ */
+
 import { getToken, onMessage } from "firebase/messaging";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { db, getFirebaseMessaging } from "../firebase";
+
+// 🔥 IMPORTANT → Direct import from index (Fixes build error)
+import { db, getFirebaseMessaging } from "../firebase/index";
 
 /* =========================================================
-   WAIT FOR SERVICE WORKER READY (CRITICAL FIX)
+   WAIT FOR SERVICE WORKER READY
 ========================================================= */
 async function waitForServiceWorkerReady() {
+
+  if (typeof window === "undefined") {
+    throw new Error("Window not available (SSR)");
+  }
 
   if (!("serviceWorker" in navigator)) {
     throw new Error("Service Worker not supported");
@@ -21,7 +40,7 @@ async function waitForServiceWorkerReady() {
 }
 
 /* =========================================================
-   GENERATE + SAVE TOKEN (PRODUCTION SAFE)
+   GENERATE + SAVE TOKEN
 ========================================================= */
 export async function generateAndSaveToken(customerId) {
 
@@ -33,8 +52,13 @@ export async function generateAndSaveToken(customerId) {
     }
 
     /* -------------------------
-       REQUEST NOTIFICATION PERMISSION
+       NOTIFICATION PERMISSION
     ------------------------- */
+    if (!("Notification" in window)) {
+      console.log("❌ Notifications not supported");
+      return;
+    }
+
     console.log("🔔 Requesting notification permission...");
 
     const permission = await Notification.requestPermission();
@@ -47,7 +71,7 @@ export async function generateAndSaveToken(customerId) {
     console.log("✅ Notification permission granted");
 
     /* -------------------------
-       GET FIREBASE MESSAGING SAFE (LAZY INIT)
+       GET FIREBASE MESSAGING
     ------------------------- */
     const messaging = await getFirebaseMessaging();
 
@@ -57,7 +81,7 @@ export async function generateAndSaveToken(customerId) {
     }
 
     /* -------------------------
-       WAIT FOR SERVICE WORKER READY
+       WAIT FOR SERVICE WORKER
     ------------------------- */
     const registration = await waitForServiceWorkerReady();
 

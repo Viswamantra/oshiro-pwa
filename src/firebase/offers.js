@@ -93,4 +93,28 @@ export async function fetchOffersByMerchantIds(merchantIds = []) {
       const merchantId = data.merchantId;
 
       if (!offersByMerchant[merchantId]) {
-        offersByMer
+        offersByMerchant[merchantId] = [];
+      }
+
+      offersByMerchant[merchantId].push({
+        id: docSnap.id,
+        ...data,
+      });
+    });
+  }
+
+  return offersByMerchant;
+}
+
+/* =========================================================
+   OPTIONAL COUNT HELPER
+========================================================= */
+export function getOfferCountMap(offersByMerchant = {}) {
+  const countMap = {};
+
+  Object.keys(offersByMerchant).forEach((merchantId) => {
+    countMap[merchantId] = offersByMerchant[merchantId].length;
+  });
+
+  return countMap;
+}

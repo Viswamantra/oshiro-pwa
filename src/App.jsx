@@ -4,40 +4,40 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { APP_CONFIG } from "./config/appConfig";
 
 /* ========= HOME ========= */
-import Home from "./pages/Home";
+import Home from "./pages/Home.jsx";
 
 /* ========= AUTH (PUBLIC) ========= */
-import AdminLogin from "./pages/auth/AdminLogin";
-import CustomerLogin from "./pages/customer/CustomerLogin";
-import MerchantLogin from "./pages/merchant/MerchantLogin";
-import MerchantRegister from "./pages/merchant/MerchantRegister";
+import AdminLogin from "./pages/auth/AdminLogin.jsx";
+import CustomerLogin from "./pages/customer/CustomerLogin.jsx";
+import MerchantLogin from "./pages/merchant/MerchantLogin.jsx";
+import MerchantRegister from "./pages/merchant/MerchantRegister.jsx";
 
 /* ========= ROUTE GUARD ========= */
-import RouteGuard from "./guards/RouteGuard";
+import RouteGuard from "./guards/RouteGuard.jsx";
 
 /* ========= ADMIN ========= */
-import AdminLayout from "./components/AdminLayout";
-import Dashboard from "./pages/admin/Dashboard";
-import Customers from "./pages/admin/Customers";
-import Merchants from "./pages/admin/Merchants";
-import Categories from "./pages/admin/Categories";
-import Offers from "./pages/admin/Offers";
-import GeoAlerts from "./pages/admin/GeoAlerts";
-import Notifications from "./pages/admin/Notifications";
+import AdminLayout from "./components/AdminLayout.jsx";
+import Dashboard from "./pages/admin/Dashboard.jsx";
+import Customers from "./pages/admin/Customers.jsx";
+import Merchants from "./pages/admin/Merchants.jsx";
+import Categories from "./pages/admin/Categories.jsx";
+import Offers from "./pages/admin/Offers.jsx";
+import GeoAlerts from "./pages/admin/GeoAlerts.jsx";
+import Notifications from "./pages/admin/Notifications.jsx";
 
 /* ========= CUSTOMER ========= */
-import CustomerLayout from "./components/CustomerLayout";
-import CustomerDashboard from "./pages/customer/CustomerDashboard";
-import OfferDetails from "./pages/customer/OfferDetails";
-import CustomerLocked from "./pages/customer/CustomerLocked";
+import CustomerLayout from "./components/CustomerLayout.jsx";
+import CustomerDashboard from "./pages/customer/CustomerDashboard.jsx";
+import OfferDetails from "./pages/customer/OfferDetails.jsx";
+import CustomerLocked from "./pages/customer/CustomerLocked.jsx";
 
 /* ========= MERCHANT ========= */
-import MerchantLayout from "./components/MerchantLayout";
-import MerchantDashboard from "./pages/merchant/MerchantDashboard";
-import MerchantOffers from "./pages/merchant/MerchantOffers";
-import MerchantProfile from "./pages/merchant/MerchantProfile";
-import MerchantLeads from "./pages/merchant/MerchantLeads";
-import MerchantLocation from "./pages/merchant/MerchantLocation";
+import MerchantLayout from "./components/MerchantLayout.jsx";
+import MerchantDashboard from "./pages/merchant/MerchantDashboard.jsx";
+import MerchantOffers from "./pages/merchant/MerchantOffers.jsx";
+import MerchantProfile from "./pages/merchant/MerchantProfile.jsx";
+import MerchantLeads from "./pages/merchant/MerchantLeads.jsx";
+import MerchantLocation from "./pages/merchant/MerchantLocation.jsx";
 
 export default function App() {
   return (
@@ -69,7 +69,7 @@ export default function App() {
         <Route path="notifications" element={<Notifications />} />
       </Route>
 
-      {/* ================= CUSTOMER (LOCKED) ================= */}
+      {/* ================= CUSTOMER ================= */}
       <Route
         path="/customer/*"
         element={
@@ -82,12 +82,8 @@ export default function App() {
           )
         }
       >
-        {/* These routes will only work when CUSTOMER_ENABLED = true */}
         <Route index element={<CustomerDashboard />} />
-        <Route
-          path="offers/:merchantId"
-          element={<OfferDetails />}
-        />
+        <Route path="offers/:merchantId" element={<OfferDetails />} />
       </Route>
 
       {/* ================= MERCHANT ================= */}

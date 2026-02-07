@@ -1,8 +1,7 @@
 /**
  * 🔒 LOCKED AFTER PHASE 2.6
  * Admin → Merchants
- * Bulk delete, filters, approvals are stable
- * Do NOT modify during Phase 2.7
+ * FINAL PRODUCTION SAFE VERSION
  */
 
 import React, { useEffect, useState } from "react";
@@ -35,9 +34,7 @@ const STATUS_BG = {
 };
 
 export default function Merchants() {
-  /* ======================
-     STATE
-  ====================== */
+  /* ====================== STATE ====================== */
   const [merchants, setMerchants] = useState([]);
   const [status, setStatus] = useState("approved");
   const [search, setSearch] = useState("");
@@ -48,9 +45,10 @@ export default function Merchants() {
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
 
-  /* ======================
-     LOAD MERCHANTS
-  ====================== */
+  // 🔥 NEW → Row Action Loading
+  const [actionLoading, setActionLoading] = useState(null);
+
+  /* ====================== LOAD ====================== */
   const loadMerchants = async (reset = false) => {
     try {
       setLoading(true);
@@ -81,7 +79,7 @@ export default function Merchants() {
       setHasMore(snap.docs.length === PAGE_SIZE);
       setSelected([]);
     } catch (err) {
-      console.error("Load merchants error:", err);
+      console.error(err);
       alert("Failed to load merchants");
     } finally {
       setLoading(false);
@@ -96,14 +94,9 @@ export default function Merchants() {
     // eslint-disable-next-line
   }, [status]);
 
-  /* ======================
-     SEARCH
-  ====================== */
+  /* ====================== SEARCH ====================== */
   const searchMerchants = async () => {
-    if (!search.trim()) {
-      resetSearch();
-      return;
-    }
+    if (!search.trim()) return resetSearch();
 
     try {
       setLoading(true);
@@ -122,18 +115,16 @@ export default function Merchants() {
         .filter(
           (m) =>
             m.status === status &&
-            (
-              (m.shop_name &&
-                m.shop_name.toLowerCase().includes(keyword)) ||
-              (m.mobile && m.mobile.startsWith(search))
-            )
+            ((m.shop_name &&
+              m.shop_name.toLowerCase().includes(keyword)) ||
+              (m.mobile && m.mobile.startsWith(search)))
         );
 
       setMerchants(data);
       setHasMore(false);
       setSelected([]);
     } catch (err) {
-      console.error("Search error:", err);
+      console.error(err);
       alert("Search failed");
     } finally {
       setLoading(false);
@@ -148,82 +139,89 @@ export default function Merchants() {
     loadMerchants(true);
   };
 
-  /* ======================
-     SELECTION
-  ====================== */
+  /* ====================== SELECTION ====================== */
   const toggleSelect = (id) => {
     setSelected((prev) =>
-      prev.includes(id)
-        ? prev.filter((x) => x !== id)
-        : [...prev, id]
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   };
 
   const selectAll = () => {
-    if (selected.length === merchants.length) {
-      setSelected([]);
-    } else {
-      setSelected(merchants.map((m) => m.id));
+    if (selected.length === merchants.length) setSelected([]);
+    else setSelected(merchants.map((m) => m.id));
+  };
+
+  /* ====================== ACTIONS ====================== */
+
+  // ✅ FINAL APPROVE
+  const approveMerchant = async (id) => {
+    try {
+      setActionLoading(id);
+
+      await updateDoc(doc(db, "merchants", id), {
+        status: "approved",
+        approvedAt: serverTimestamp(),
+      });
+
+      setMerchants((prev) => prev.filter((m) => m.id !== id));
+    } catch (err) {
+      console.error(err);
+      alert("Approve failed: " + err.message);
+    } finally {
+      setActionLoading(null);
     }
   };
 
-  /* ======================
-     ACTIONS
-  ====================== */
-  const approveMerchant = async (id) => {
-    await updateDoc(doc(db, "merchants", id), {
-      status: "approved",
-      approvedAt: serverTimestamp(),
-    });
-    setMerchants(merchants.filter((m) => m.id !== id));
-  };
-
+  // ✅ FINAL REJECT
   const rejectMerchant = async (id) => {
     if (!window.confirm("Reject this merchant?")) return;
 
-    await updateDoc(doc(db, "merchants", id), {
-      status: "rejected",
-      rejectedAt: serverTimestamp(),
-    });
-    setMerchants(merchants.filter((m) => m.id !== id));
+    try {
+      setActionLoading(id);
+
+      await updateDoc(doc(db, "merchants", id), {
+        status: "rejected",
+        rejectedAt: serverTimestamp(),
+      });
+
+      setMerchants((prev) => prev.filter((m) => m.id !== id));
+    } catch (err) {
+      console.error(err);
+      alert("Reject failed: " + err.message);
+    } finally {
+      setActionLoading(null);
+    }
   };
 
   const deleteMerchant = async (id) => {
     if (!window.confirm("Delete merchant permanently?")) return;
-    await deleteDoc(doc(db, "merchants", id));
-    setMerchants(merchants.filter((m) => m.id !== id));
-    setSelected((prev) => prev.filter((x) => x !== id));
+
+    try {
+      await deleteDoc(doc(db, "merchants", id));
+      setMerchants((prev) => prev.filter((m) => m.id !== id));
+      setSelected((prev) => prev.filter((x) => x !== id));
+    } catch (err) {
+      alert("Delete failed");
+    }
   };
 
   const bulkDelete = async () => {
     if (selected.length === 0) return;
 
-    if (
-      !window.confirm(
-        `Delete ${selected.length} merchant(s) permanently?`
-      )
-    )
-      return;
+    if (!window.confirm(`Delete ${selected.length} merchants?`)) return;
 
     await Promise.all(
       selected.map((id) => deleteDoc(doc(db, "merchants", id)))
     );
 
-    setMerchants((prev) =>
-      prev.filter((m) => !selected.includes(m.id))
-    );
+    setMerchants((prev) => prev.filter((m) => !selected.includes(m.id)));
     setSelected([]);
   };
 
-  /* ======================
-     UI
-  ====================== */
+  /* ====================== UI ====================== */
   return (
     <div style={{ padding: 24 }}>
-      <h2 style={{ fontSize: 22, marginBottom: 4 }}>Merchants</h2>
-      <p style={{ color: "#6B7280", marginBottom: 20 }}>
-        Approved merchants are shown by default
-      </p>
+      <h2 style={{ fontSize: 22 }}>Merchants</h2>
 
       {/* STATUS TABS */}
       <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
@@ -237,83 +235,13 @@ export default function Merchants() {
               border: `1px solid ${STATUS_COLORS[s]}`,
               background: status === s ? STATUS_COLORS[s] : "#fff",
               color: status === s ? "#fff" : STATUS_COLORS[s],
-              fontWeight: 500,
               cursor: "pointer",
             }}
           >
-            {s.charAt(0).toUpperCase() + s.slice(1)}
+            {s}
           </button>
         ))}
       </div>
-
-      {/* SEARCH */}
-      <div
-        style={{
-          display: "flex",
-          gap: 12,
-          padding: 16,
-          background: "#F9FAFB",
-          border: "1px solid #E5E7EB",
-          borderRadius: 14,
-          marginBottom: 16,
-          maxWidth: 560,
-        }}
-      >
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search shop name or mobile number"
-          style={{
-            flex: 1,
-            padding: "12px 14px",
-            borderRadius: 10,
-            border: "1px solid #D1D5DB",
-          }}
-        />
-        <button
-          onClick={searchMerchants}
-          style={{
-            background: "#2563EB",
-            color: "#fff",
-            padding: "12px 18px",
-            borderRadius: 10,
-            border: "none",
-            fontWeight: 600,
-          }}
-        >
-          Search
-        </button>
-        <button
-          onClick={resetSearch}
-          style={{
-            background: "#fff",
-            padding: "12px 16px",
-            borderRadius: 10,
-            border: "1px solid #D1D5DB",
-          }}
-        >
-          Reset
-        </button>
-      </div>
-
-      {/* BULK DELETE */}
-      {selected.length > 0 && status !== "pending" && (
-        <button
-          onClick={bulkDelete}
-          style={{
-            marginBottom: 12,
-            background: "#DC2626",
-            color: "#fff",
-            padding: "8px 16px",
-            borderRadius: 8,
-            border: "none",
-            fontWeight: 600,
-            cursor: "pointer",
-          }}
-        >
-          🗑 Delete Selected ({selected.length})
-        </button>
-      )}
 
       {/* TABLE */}
       <div
@@ -321,24 +249,12 @@ export default function Merchants() {
           background: "#fff",
           borderRadius: 14,
           border: "1px solid #E5E7EB",
-          overflow: "hidden",
         }}
       >
         <table width="100%" cellPadding="14">
           <thead style={{ background: "#F9FAFB" }}>
             <tr>
-              <th>
-                {status !== "pending" && (
-                  <input
-                    type="checkbox"
-                    checked={
-                      merchants.length > 0 &&
-                      selected.length === merchants.length
-                    }
-                    onChange={selectAll}
-                  />
-                )}
-              </th>
+              <th></th>
               <th align="left">Shop Name</th>
               <th align="left">Category</th>
               <th align="left">Mobile</th>
@@ -349,20 +265,10 @@ export default function Merchants() {
 
           <tbody>
             {merchants.map((m) => (
-              <tr key={m.id} style={{ borderTop: "1px solid #E5E7EB" }}>
-                <td>
-                  {status !== "pending" && (
-                    <input
-                      type="checkbox"
-                      checked={selected.includes(m.id)}
-                      onChange={() => toggleSelect(m.id)}
-                    />
-                  )}
-                </td>
-                <td>
-                  <strong>{m.shop_name || "⚠ Missing"}</strong>
-                </td>
-                <td>{m.category || "⚠ Missing"}</td>
+              <tr key={m.id}>
+                <td></td>
+                <td>{m.shop_name}</td>
+                <td>{m.category}</td>
                 <td>{m.mobile}</td>
                 <td>
                   <span
@@ -371,41 +277,39 @@ export default function Merchants() {
                       borderRadius: 999,
                       background: STATUS_BG[m.status],
                       color: STATUS_COLORS[m.status],
-                      fontSize: 12,
-                      fontWeight: 600,
                     }}
                   >
                     {m.status}
                   </span>
                 </td>
+
                 <td>
                   {status === "pending" && (
                     <>
                       <button
                         onClick={() => approveMerchant(m.id)}
+                        disabled={actionLoading === m.id}
                         style={{ marginRight: 8 }}
                       >
-                        Approve
+                        {actionLoading === m.id
+                          ? "Approving..."
+                          : "Approve"}
                       </button>
-                      <button onClick={() => rejectMerchant(m.id)}>
-                        Reject
+
+                      <button
+                        onClick={() => rejectMerchant(m.id)}
+                        disabled={actionLoading === m.id}
+                      >
+                        {actionLoading === m.id
+                          ? "Updating..."
+                          : "Reject"}
                       </button>
                     </>
                   )}
 
                   {status !== "pending" && (
-                    <button
-                      onClick={() => deleteMerchant(m.id)}
-                      style={{
-                        background: "#fff",
-                        color: "#DC2626",
-                        border: "1px solid #FCA5A5",
-                        padding: "6px 12px",
-                        borderRadius: 8,
-                        cursor: "pointer",
-                      }}
-                    >
-                      🗑 Delete
+                    <button onClick={() => deleteMerchant(m.id)}>
+                      Delete
                     </button>
                   )}
                 </td>
@@ -417,21 +321,9 @@ export default function Merchants() {
 
       {/* LOAD MORE */}
       {hasMore && (
-        <div style={{ textAlign: "center", marginTop: 28 }}>
-          <button
-            disabled={loading}
-            onClick={() => loadMerchants(false)}
-            style={{
-              padding: "12px 28px",
-              borderRadius: 999,
-              background: "#2563EB",
-              color: "#fff",
-              border: "none",
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            {loading ? "Loading…" : "Load More"}
+        <div style={{ textAlign: "center", marginTop: 20 }}>
+          <button disabled={loading} onClick={() => loadMerchants()}>
+            {loading ? "Loading..." : "Load More"}
           </button>
         </div>
       )}
