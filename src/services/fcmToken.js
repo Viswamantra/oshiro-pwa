@@ -2,12 +2,13 @@
  * =========================================================
  * FCM TOKEN SERVICE – FINAL UNIVERSAL (CUSTOMER + MERCHANT)
  * ---------------------------------------------------------
- * ✔ Works for Customer
- * ✔ Works for Merchant
- * ✔ Array token support (merchant)
- * ✔ Safe permission
- * ✔ Service worker ready wait
+ * ✔ Customer token save
+ * ✔ Merchant multi-token array support
+ * ✔ Duplicate token safe
+ * ✔ Service worker safe
+ * ✔ Permission safe
  * ✔ Foreground listener safe
+ * ✔ Production logging
  * =========================================================
  */
 
@@ -15,7 +16,6 @@ import { getToken, onMessage } from "firebase/messaging";
 import {
   doc,
   setDoc,
-  updateDoc,
   serverTimestamp,
   arrayUnion,
 } from "firebase/firestore";
@@ -42,13 +42,14 @@ async function waitForServiceWorkerReady() {
 }
 
 /* =========================================================
-   UNIVERSAL TOKEN SAVE
-   role = "customer" OR "merchant"
+   MAIN TOKEN FUNCTION
+   role = "customer" | "merchant"
 ========================================================= */
 export async function generateAndSaveToken(id, role = "customer") {
   try {
+
     if (!id) {
-      console.log("❌ No id → Cannot save token");
+      console.log("❌ No id provided");
       return;
     }
 
@@ -57,6 +58,7 @@ export async function generateAndSaveToken(id, role = "customer") {
       return;
     }
 
+    /* ================= PERMISSION ================= */
     console.log("🔔 Requesting notification permission...");
     const permission = await Notification.requestPermission();
 
@@ -98,19 +100,20 @@ export async function generateAndSaveToken(id, role = "customer") {
     ================================================= */
 
     if (role === "merchant") {
-      // ⭐ MERCHANT → ARRAY TOKENS
+
       await setDoc(
         doc(db, "merchants", id),
         {
-          fcmTokens: arrayUnion(token),
+          fcmTokens: arrayUnion(token),   // prevents duplicates automatically
           tokenUpdatedAt: serverTimestamp(),
         },
         { merge: true }
       );
 
       console.log("✅ Merchant token saved");
+
     } else {
-      // ⭐ CUSTOMER → SINGLE TOKEN
+
       await setDoc(
         doc(db, "customers", id),
         {
@@ -125,8 +128,9 @@ export async function generateAndSaveToken(id, role = "customer") {
 
     /* ================= FOREGROUND LISTENER ================= */
     onMessage(messaging, (payload) => {
-      console.log("📩 Foreground Push:", payload);
+      console.log("📩 Foreground Push Received:", payload);
     });
+
   } catch (err) {
     console.error("❌ FCM Token Error:", err);
   }
