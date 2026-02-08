@@ -39,12 +39,12 @@ export default function CustomerLogin() {
     if (value.length <= 10) setMobile(value);
   };
 
-  /* ================= SAFE LOCATION ================= */
+  /* ================= SAFE LOCATION (BACKGROUND ONLY) ================= */
   const getLocationSafe = () => {
     return new Promise((resolve, reject) => {
 
       if (!navigator.geolocation) {
-        reject("Geolocation not supported");
+        reject("No GPS");
         return;
       }
 
@@ -64,10 +64,10 @@ export default function CustomerLogin() {
               });
             },
             reject,
-            { enableHighAccuracy: false, timeout: 20000 }
+            { enableHighAccuracy: false, timeout: 15000 }
           );
         },
-        { enableHighAccuracy: true, timeout: 8000 }
+        { enableHighAccuracy: true, timeout: 7000 }
       );
     });
   };
@@ -83,9 +83,11 @@ export default function CustomerLogin() {
     try {
 
       setLoading(true);
-      console.log("🔥 Login starting...");
+      console.log("🔥 Customer login start");
 
-      /* 1️⃣ BASE DOC */
+      /* ======================
+         1️⃣ CREATE BASE CUSTOMER DOC
+      ====================== */
       await setDoc(
         doc(db, "customers", mobile),
         {
@@ -97,34 +99,47 @@ export default function CustomerLogin() {
         { merge: true }
       );
 
-      /* 2️⃣ LOCATION (NON BLOCKING SAFE) */
-      getLocationSafe()
-        .then((loc) => {
-          return setDoc(
-            doc(db, "customers", mobile),
-            {
-              lat: loc.lat,
-              lng: loc.lng,
-              selectedDistanceKm: 3,
-              lastLocationUpdate: serverTimestamp(),
-            },
-            { merge: true }
-          );
-        })
-        .catch((e) => console.warn("Location skipped:", e));
+      console.log("✅ Customer base saved");
 
-      /* 3️⃣ TOKEN (🔥 NON BLOCKING — MOST IMPORTANT FIX) */
-      generateAndSaveToken(mobile)
-        .then(() => console.log("Token saved"))
-        .catch((e) => console.warn("Token skipped:", e));
-
-      /* 4️⃣ SESSION */
+      /* ======================
+         2️⃣ SESSION FIRST (CRITICAL)
+      ====================== */
       localStorage.setItem("mobile", mobile);
       localStorage.setItem("name", name);
       setActiveRole("customer");
 
-      /* 5️⃣ NAVIGATE IMMEDIATELY */
+      /* ======================
+         3️⃣ NAVIGATE IMMEDIATELY (MOST IMPORTANT)
+      ====================== */
       navigate("/customer", { replace: true });
+
+      /* ======================
+         4️⃣ BACKGROUND TASKS (NON BLOCKING)
+      ====================== */
+
+      // Small delay prevents UI race
+      setTimeout(() => {
+
+        /* LOCATION */
+        getLocationSafe()
+          .then((loc) => {
+            return setDoc(
+              doc(db, "customers", mobile),
+              {
+                lat: loc.lat,
+                lng: loc.lng,
+                selectedDistanceKm: 3,
+                lastLocationUpdate: serverTimestamp(),
+              },
+              { merge: true }
+            );
+          })
+          .catch(() => {});
+
+        /* FCM TOKEN */
+        generateAndSaveToken(mobile).catch(() => {});
+
+      }, 800);
 
     } catch (err) {
 
@@ -143,6 +158,7 @@ export default function CustomerLogin() {
 
   return (
     <div style={styles.page}>
+
       <div onClick={() => navigate("/")} style={styles.homeBtn}>
         ← Home
       </div>
