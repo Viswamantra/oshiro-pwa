@@ -2,18 +2,7 @@ import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { getMerchantByMobile } from "../../firebase/barrel";
 import { setActiveRole } from "../../utils/activeRole";
-
-/**
- * =========================================================
- * MERCHANT LOGIN – FINAL (ROLE-GUARD SAFE)
- * ---------------------------------------------------------
- * ✔ Approved merchants only
- * ✔ profileComplete enforced
- * ✔ Single session source of truth
- * ✔ No OTP
- * ✔ Works with RouteGuard
- * =========================================================
- */
+import { generateAndSaveToken } from "../../services/fcmToken";
 
 export default function MerchantLogin() {
   const navigate = useNavigate();
@@ -22,9 +11,7 @@ export default function MerchantLogin() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  /* ======================
-     MOBILE HANDLER
-  ====================== */
+  /* ================= MOBILE ================= */
   const handleMobileChange = (e) => {
     let value = e.target.value;
 
@@ -35,9 +22,7 @@ export default function MerchantLogin() {
     setMobile(value);
   };
 
-  /* ======================
-     LOGIN HANDLER
-  ====================== */
+  /* ================= LOGIN ================= */
   const login = async () => {
     setError("");
 
@@ -46,7 +31,7 @@ export default function MerchantLogin() {
       return;
     }
 
-    const plainMobile = mobile.slice(3); // remove +91
+    const plainMobile = mobile.slice(3);
 
     try {
       setLoading(true);
@@ -73,15 +58,10 @@ export default function MerchantLogin() {
         return;
       }
 
-      /* ======================
-         🔐 SESSION (CRITICAL)
-      ====================== */
+      /* ================= SESSION ================= */
       localStorage.setItem("mobile", plainMobile);
       setActiveRole("merchant");
 
-      /* ======================
-         MERCHANT DATA (UI USE)
-      ====================== */
       localStorage.setItem(
         "merchant",
         JSON.stringify({
@@ -93,18 +73,19 @@ export default function MerchantLogin() {
         })
       );
 
-      /* ======================
-         FORCE PROFILE SETUP
-      ====================== */
+      /* ================= ⭐ SAVE MERCHANT TOKEN ================= */
+      generateAndSaveToken(merchant.id, "merchant")
+        .then(() => console.log("✅ Merchant FCM token saved"))
+        .catch((e) => console.warn("⚠ FCM token skipped:", e));
+
+      /* ================= NAVIGATION ================= */
       if (merchant.profileComplete !== true) {
         navigate("/merchant/location", { replace: true });
         return;
       }
 
-      /* ======================
-         FULL ACCESS
-      ====================== */
       navigate("/merchant", { replace: true });
+
     } catch (err) {
       console.error("Merchant login error:", err);
       setError("Login failed. Please try again.");
@@ -157,9 +138,7 @@ export default function MerchantLogin() {
   );
 }
 
-/* ======================
-   STYLES
-====================== */
+/* ================= STYLES ================= */
 const styles = {
   page: {
     minHeight: "100vh",

@@ -1,29 +1,33 @@
 /**
  * =========================================================
- * FCM TOKEN SERVICE – FINAL PRODUCTION SAFE
+ * FCM TOKEN SERVICE – FINAL UNIVERSAL (CUSTOMER + MERCHANT)
  * ---------------------------------------------------------
- * ✔ Direct firebase/index import (Vite safe)
- * ✔ Service Worker ready wait
- * ✔ Permission safe
- * ✔ Messaging support safe
- * ✔ Token merge safe
+ * ✔ Works for Customer
+ * ✔ Works for Merchant
+ * ✔ Array token support (merchant)
+ * ✔ Safe permission
+ * ✔ Service worker ready wait
  * ✔ Foreground listener safe
  * =========================================================
  */
 
 import { getToken, onMessage } from "firebase/messaging";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import {
+  doc,
+  setDoc,
+  updateDoc,
+  serverTimestamp,
+  arrayUnion,
+} from "firebase/firestore";
 
-// 🔥 IMPORTANT → Direct import from index (Fixes build error)
 import { db, getFirebaseMessaging } from "../firebase/index";
 
 /* =========================================================
    WAIT FOR SERVICE WORKER READY
 ========================================================= */
 async function waitForServiceWorkerReady() {
-
   if (typeof window === "undefined") {
-    throw new Error("Window not available (SSR)");
+    throw new Error("Window not available");
   }
 
   if (!("serviceWorker" in navigator)) {
@@ -31,36 +35,29 @@ async function waitForServiceWorkerReady() {
   }
 
   console.log("⏳ Waiting for Service Worker ready...");
-
   const registration = await navigator.serviceWorker.ready;
-
   console.log("✅ Service Worker ready");
 
   return registration;
 }
 
 /* =========================================================
-   GENERATE + SAVE TOKEN
+   UNIVERSAL TOKEN SAVE
+   role = "customer" OR "merchant"
 ========================================================= */
-export async function generateAndSaveToken(customerId) {
-
+export async function generateAndSaveToken(id, role = "customer") {
   try {
-
-    if (!customerId) {
-      console.log("❌ No customerId → Cannot save token");
+    if (!id) {
+      console.log("❌ No id → Cannot save token");
       return;
     }
 
-    /* -------------------------
-       NOTIFICATION PERMISSION
-    ------------------------- */
     if (!("Notification" in window)) {
       console.log("❌ Notifications not supported");
       return;
     }
 
     console.log("🔔 Requesting notification permission...");
-
     const permission = await Notification.requestPermission();
 
     if (permission !== "granted") {
@@ -70,24 +67,17 @@ export async function generateAndSaveToken(customerId) {
 
     console.log("✅ Notification permission granted");
 
-    /* -------------------------
-       GET FIREBASE MESSAGING
-    ------------------------- */
+    /* ================= GET MESSAGING ================= */
     const messaging = await getFirebaseMessaging();
-
     if (!messaging) {
-      console.log("❌ Firebase Messaging not supported on this device");
+      console.log("❌ Messaging not supported");
       return;
     }
 
-    /* -------------------------
-       WAIT FOR SERVICE WORKER
-    ------------------------- */
+    /* ================= WAIT SW ================= */
     const registration = await waitForServiceWorkerReady();
 
-    /* -------------------------
-       GET TOKEN
-    ------------------------- */
+    /* ================= GET TOKEN ================= */
     console.log("📡 Requesting FCM token...");
 
     const token = await getToken(messaging, {
@@ -97,36 +87,47 @@ export async function generateAndSaveToken(customerId) {
     });
 
     if (!token) {
-      console.log("❌ No FCM token received");
+      console.log("❌ No token received");
       return;
     }
 
     console.log("✅ FCM TOKEN:", token);
 
-    /* -------------------------
-       SAVE TOKEN (MERGE SAFE)
-    ------------------------- */
-    await setDoc(
-      doc(db, "customers", customerId),
-      {
-        fcmToken: token,
-        tokenUpdatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
+    /* =================================================
+       SAVE BASED ON ROLE
+    ================================================= */
 
-    console.log("✅ Token saved to Firestore");
+    if (role === "merchant") {
+      // ⭐ MERCHANT → ARRAY TOKENS
+      await setDoc(
+        doc(db, "merchants", id),
+        {
+          fcmTokens: arrayUnion(token),
+          tokenUpdatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
 
-    /* -------------------------
-       FOREGROUND PUSH LISTENER
-    ------------------------- */
+      console.log("✅ Merchant token saved");
+    } else {
+      // ⭐ CUSTOMER → SINGLE TOKEN
+      await setDoc(
+        doc(db, "customers", id),
+        {
+          fcmToken: token,
+          tokenUpdatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      console.log("✅ Customer token saved");
+    }
+
+    /* ================= FOREGROUND LISTENER ================= */
     onMessage(messaging, (payload) => {
-      console.log("📩 Foreground Push Received:", payload);
+      console.log("📩 Foreground Push:", payload);
     });
-
   } catch (err) {
-
     console.error("❌ FCM Token Error:", err);
-
   }
 }
