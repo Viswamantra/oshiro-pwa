@@ -1,5 +1,9 @@
 {
   "projects": {
-    "default": "oshiro-app"
-  }
+    "default": "oshiro-app",
+    " oshiro-app": "oshiro-app",
+    "oshiro-app": "oshiro-app"
+  },
+  "targets": {},
+  "etags": {}
 }

@@ -1,4 +1,12 @@
 import { Routes, Route, Navigate } from "react-router-dom";
+import { useEffect } from "react";
+
+/* ========= FIREBASE MESSAGING ========= */
+import {
+  initMessaging,
+  listenForegroundMessages,
+  updateFCMToken,
+} from "./firebase";
 
 /* ========= CONFIG ========= */
 import { APP_CONFIG } from "./config/appConfig";
@@ -40,8 +48,94 @@ import MerchantLeads from "./pages/merchant/MerchantLeads.jsx";
 import MerchantLocation from "./pages/merchant/MerchantLocation.jsx";
 
 export default function App() {
+
+  /* ================= APP START FCM INIT + TOKEN REFRESH ================= */
+  useEffect(() => {
+
+    const startMessaging = async () => {
+
+      try {
+
+        console.log("🚀 App Start → Init Messaging");
+
+        /* INIT MESSAGING */
+        await initMessaging();
+
+        /* FOREGROUND LISTENER */
+        listenForegroundMessages();
+
+        console.log("✅ Messaging Initialized");
+
+        /* ================= TOKEN REFRESH ON APP START ================= */
+
+        const role = localStorage.getItem("activeRole");
+
+        if (!role) {
+          console.log("ℹ No active role found");
+          return;
+        }
+
+        console.log("👤 Active Role:", role);
+
+        /* CUSTOMER TOKEN REFRESH */
+        if (role === "customer") {
+
+          const mobile = localStorage.getItem("mobile");
+
+          if (mobile) {
+
+            console.log("📲 Refreshing Customer Token");
+
+            await updateFCMToken({
+              userId: mobile,
+              role: "customers",
+            });
+
+            console.log("✅ Customer Token Synced");
+
+          }
+
+        }
+
+        /* MERCHANT TOKEN REFRESH */
+        if (role === "merchant") {
+
+          const merchantStr = localStorage.getItem("merchant");
+
+          if (merchantStr) {
+
+            const merchant = JSON.parse(merchantStr);
+
+            console.log("📲 Refreshing Merchant Token");
+
+            await updateFCMToken({
+              userId: merchant.id,
+              role: "merchants",
+            });
+
+            console.log("✅ Merchant Token Synced");
+
+          }
+
+        }
+
+        console.log("🎉 App Start Messaging Flow Complete");
+
+      } catch (err) {
+
+        console.log("⚠ App Start Messaging Error:", err);
+
+      }
+
+    };
+
+    startMessaging();
+
+  }, []);
+
   return (
     <Routes>
+
       {/* ================= PUBLIC ================= */}
       <Route path="/" element={<Home />} />
 
@@ -105,6 +199,7 @@ export default function App() {
 
       {/* ================= FALLBACK ================= */}
       <Route path="*" element={<Navigate to="/" replace />} />
+
     </Routes>
   );
 }

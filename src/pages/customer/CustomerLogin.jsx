@@ -1,10 +1,14 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { setActiveRole } from "../../utils/activeRole";
-import { generateAndSaveToken } from "../../services/fcmToken";
 
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../firebase";
+
+import {
+  initMessaging,
+  updateFCMToken,
+} from "../../firebase";
 
 export default function CustomerLogin() {
 
@@ -39,7 +43,7 @@ export default function CustomerLogin() {
     if (value.length <= 10) setMobile(value);
   };
 
-  /* ================= SAFE LOCATION (BACKGROUND ONLY) ================= */
+  /* ================= SAFE LOCATION ================= */
   const getLocationSafe = () => {
     return new Promise((resolve, reject) => {
 
@@ -72,7 +76,7 @@ export default function CustomerLogin() {
     });
   };
 
-  /* ================= FINAL LOGIN ================= */
+  /* ================= LOGIN ================= */
   const handleSubmit = async () => {
 
     if (!name || mobile.length !== 10) {
@@ -85,9 +89,7 @@ export default function CustomerLogin() {
       setLoading(true);
       console.log("🔥 Customer login start");
 
-      /* ======================
-         1️⃣ CREATE BASE CUSTOMER DOC
-      ====================== */
+      /* ================= SAVE CUSTOMER ================= */
       await setDoc(
         doc(db, "customers", mobile),
         {
@@ -101,29 +103,47 @@ export default function CustomerLogin() {
 
       console.log("✅ Customer base saved");
 
-      /* ======================
-         2️⃣ SESSION FIRST (CRITICAL)
-      ====================== */
+      /* ================= SESSION ================= */
       localStorage.setItem("mobile", mobile);
       localStorage.setItem("name", name);
       setActiveRole("customer");
 
-      /* ======================
-         3️⃣ NAVIGATE IMMEDIATELY (MOST IMPORTANT)
-      ====================== */
+      /* ================= FCM TOKEN (CRITICAL — DO BEFORE NAV) ================= */
+      try {
+
+        console.log("📲 Initializing Messaging...");
+
+        await initMessaging();
+
+        console.log("📲 Updating FCM Token...");
+
+        await updateFCMToken({
+          userId: mobile,
+          role: "customers",
+        });
+
+        console.log("✅ Customer token saved");
+
+      } catch (e) {
+        console.log("⚠ Token setup failed (non-blocking)", e);
+      }
+
+      /* ================= NAVIGATE ================= */
       navigate("/customer", { replace: true });
 
-      /* ======================
-         4️⃣ BACKGROUND TASKS (NON BLOCKING)
-      ====================== */
+      /* ================= BACKGROUND JOBS ================= */
+      setTimeout(async () => {
 
-      // Small delay prevents UI race
-      setTimeout(() => {
+        try {
 
-        /* LOCATION */
-        getLocationSafe()
-          .then((loc) => {
-            return setDoc(
+          console.log("🌍 Background jobs start");
+
+          /* LOCATION SAVE */
+          try {
+
+            const loc = await getLocationSafe();
+
+            await setDoc(
               doc(db, "customers", mobile),
               {
                 lat: loc.lat,
@@ -133,13 +153,18 @@ export default function CustomerLogin() {
               },
               { merge: true }
             );
-          })
-          .catch(() => {});
 
-        /* FCM TOKEN */
-        generateAndSaveToken(mobile).catch(() => {});
+            console.log("✅ Location saved");
 
-      }, 800);
+          } catch (e) {
+            console.log("⚠ Location skipped", e);
+          }
+
+        } catch (err) {
+          console.log("Background job error", err);
+        }
+
+      }, 1500);
 
     } catch (err) {
 

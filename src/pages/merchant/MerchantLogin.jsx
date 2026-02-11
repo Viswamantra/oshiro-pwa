@@ -2,9 +2,14 @@ import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { getMerchantByMobile } from "../../firebase/barrel";
 import { setActiveRole } from "../../utils/activeRole";
-import { generateAndSaveToken } from "../../services/fcmToken";
+
+import {
+  initMessaging,
+  updateFCMToken,
+} from "../../firebase";
 
 export default function MerchantLogin() {
+
   const navigate = useNavigate();
 
   const [mobile, setMobile] = useState("+91");
@@ -24,6 +29,7 @@ export default function MerchantLogin() {
 
   /* ================= LOGIN ================= */
   const login = async () => {
+
     setError("");
 
     if (mobile.length !== 13) {
@@ -34,7 +40,10 @@ export default function MerchantLogin() {
     const plainMobile = mobile.slice(3);
 
     try {
+
       setLoading(true);
+
+      console.log("🔍 Checking merchant for:", plainMobile);
 
       const merchant = await getMerchantByMobile(plainMobile);
 
@@ -59,6 +68,7 @@ export default function MerchantLogin() {
       }
 
       /* ================= SESSION ================= */
+
       localStorage.setItem("mobile", plainMobile);
       setActiveRole("merchant");
 
@@ -73,12 +83,34 @@ export default function MerchantLogin() {
         })
       );
 
-      /* ================= ⭐ SAVE MERCHANT TOKEN ================= */
-      generateAndSaveToken(merchant.id, "merchant")
-        .then(() => console.log("✅ Merchant FCM token saved"))
-        .catch((e) => console.warn("⚠ FCM token skipped:", e));
+      /* ================= 🔥 FCM TOKEN SAVE (CRITICAL) ================= */
+
+      try {
+
+        console.log("📲 Initializing Messaging...");
+
+        await initMessaging();
+
+        console.log("📲 Updating Merchant FCM Token...");
+
+        await updateFCMToken({
+          userId: merchant.id,
+          role: "merchants",
+        });
+
+        console.log("✅ Merchant token saved");
+
+      } catch (tokenErr) {
+
+        console.warn(
+          "⚠ FCM failed but allowing login:",
+          tokenErr
+        );
+
+      }
 
       /* ================= NAVIGATION ================= */
+
       if (merchant.profileComplete !== true) {
         navigate("/merchant/location", { replace: true });
         return;
@@ -87,20 +119,26 @@ export default function MerchantLogin() {
       navigate("/merchant", { replace: true });
 
     } catch (err) {
-      console.error("Merchant login error:", err);
+
+      console.error("❌ Merchant login error:", err);
       setError("Login failed. Please try again.");
+
     } finally {
+
       setLoading(false);
+
     }
   };
 
   return (
     <div style={styles.page}>
+
       <div onClick={() => navigate("/")} style={styles.homeBtn}>
         ← Home
       </div>
 
       <div style={styles.card}>
+
         <img
           src="/logo/oshiro-logo-compact-3.png"
           alt="OshirO"
@@ -123,7 +161,11 @@ export default function MerchantLogin() {
 
         {error && <div style={styles.error}>{error}</div>}
 
-        <button onClick={login} disabled={loading} style={styles.button}>
+        <button
+          onClick={login}
+          disabled={loading}
+          style={styles.button}
+        >
           {loading ? "Checking..." : "Login"}
         </button>
 
@@ -133,12 +175,14 @@ export default function MerchantLogin() {
             Register
           </Link>
         </p>
+
       </div>
     </div>
   );
 }
 
 /* ================= STYLES ================= */
+
 const styles = {
   page: {
     minHeight: "100vh",

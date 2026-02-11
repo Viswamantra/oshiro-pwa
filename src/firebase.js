@@ -1,28 +1,32 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import {
   getAuth,
   signInAnonymously,
   onAuthStateChanged,
 } from "firebase/auth";
-import { getMessaging, isSupported } from "firebase/messaging";
+
+import {
+  getMessaging,
+  getToken,
+  isSupported,
+  onMessage,
+} from "firebase/messaging";
 
 /* ======================
    FIREBASE CONFIG
-   (VITE + VERCEL SAFE)
 ====================== */
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId:
-    import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
 /* ======================
-   SAFE INIT (VITE + HMR)
+   SAFE INIT (VITE SAFE)
 ====================== */
 const app =
   getApps().length === 0
@@ -35,24 +39,86 @@ const app =
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 
-/**
- * Messaging is NOT supported on all browsers
- * (e.g., Safari iOS)
- */
 export let messaging = null;
+export let messagingSupported = false;
 
-isSupported()
-  .then((supported) => {
-    if (supported) {
-      messaging = getMessaging(app);
-      console.log("✅ Firebase Messaging supported");
-    } else {
-      console.warn(
-        "⚠️ Firebase Messaging not supported on this browser"
-      );
+/* ======================
+   INIT MESSAGING SAFE
+====================== */
+export const initMessaging = async () => {
+  try {
+    messagingSupported = await isSupported();
+
+    if (!messagingSupported) {
+      console.warn("⚠️ FCM not supported in this browser");
+      return null;
     }
-  })
-  .catch(console.error);
+
+    messaging = getMessaging(app);
+    console.log("✅ Firebase Messaging Ready");
+
+    return messaging;
+  } catch (err) {
+    console.error("❌ Messaging init failed:", err);
+    return null;
+  }
+};
+
+/* ======================
+   GET & SAVE FCM TOKEN
+====================== */
+export const updateFCMToken = async ({
+  userId,
+  role, // "customers" OR "merchants"
+}) => {
+  try {
+    if (!messaging) {
+      console.warn("⚠️ Messaging not ready");
+      return null;
+    }
+
+    if (!userId || !role) {
+      console.warn("⚠️ Missing userId or role");
+      return null;
+    }
+
+    const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
+
+    const token = await getToken(messaging, { vapidKey });
+
+    if (!token) {
+      console.warn("⚠️ No FCM token received");
+      return null;
+    }
+
+    console.log("🔥 FCM TOKEN:", token);
+
+    await updateDoc(doc(db, role, userId), {
+      fcmToken: token,
+      tokenUpdatedAt: serverTimestamp(),
+    });
+
+    console.log("✅ Token saved to Firestore");
+
+    return token;
+  } catch (err) {
+    console.error("❌ Token update error:", err);
+    return null;
+  }
+};
+
+/* ======================
+   FOREGROUND MESSAGE LISTENER
+====================== */
+export const listenForegroundMessages = () => {
+  if (!messaging) return;
+
+  onMessage(messaging, (payload) => {
+    console.log("📩 Foreground Push Received:", payload);
+
+    // Optional: show toast / UI notification
+  });
+};
 
 /* ======================
    DEV AUTO AUTH
