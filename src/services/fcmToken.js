@@ -1,14 +1,16 @@
 /**
  * =========================================================
- * FCM TOKEN SERVICE – FINAL UNIVERSAL (CUSTOMER + MERCHANT)
+ * OSHIRO FCM TOKEN SERVICE — ENTERPRISE PRODUCTION VERSION
  * ---------------------------------------------------------
- * ✔ Customer token save
- * ✔ Merchant multi-token array support
- * ✔ Duplicate token safe
- * ✔ Service worker safe
+ * ✔ Merchant + Customer + Admin unified
+ * ✔ Multi-device merchant token array (deduplicated)
+ * ✔ Token refresh safe
+ * ✔ Single foreground listener attach
+ * ✔ Service Worker verified
  * ✔ Permission safe
- * ✔ Foreground listener safe
- * ✔ Production logging
+ * ✔ Mobile browser safe
+ * ✔ Silent data push ready
+ * ✔ Production logging structured
  * =========================================================
  */
 
@@ -18,69 +20,179 @@ import {
   setDoc,
   serverTimestamp,
   arrayUnion,
+  getDoc,
 } from "firebase/firestore";
 
 import { db, getFirebaseMessaging } from "../firebase/index";
 
 /* =========================================================
+   INTERNAL FLAGS
+========================================================= */
+let _foregroundListenerAttached = false;
+
+/* =========================================================
    WAIT FOR SERVICE WORKER READY
 ========================================================= */
 async function waitForServiceWorkerReady() {
-  if (typeof window === "undefined") {
-    throw new Error("Window not available");
+  try {
+    if (!("serviceWorker" in navigator)) {
+      console.log("[FCM] ❌ Service Worker not supported");
+      return null;
+    }
+
+    const registration = await navigator.serviceWorker.ready;
+
+    if (!registration) {
+      console.log("[FCM] ❌ SW ready returned null");
+      return null;
+    }
+
+    console.log("[FCM] ✅ SW READY:", registration.scope);
+    return registration;
+
+  } catch (err) {
+    console.error("[FCM] ❌ SW READY ERROR:", err);
+    return null;
   }
+}
 
-  if (!("serviceWorker" in navigator)) {
-    throw new Error("Service Worker not supported");
+/* =========================================================
+   SAVE TOKEN SAFELY (DEDUPLICATE FOR MERCHANT)
+========================================================= */
+async function saveTokenToFirestore(id, role, token) {
+
+  const collectionMap = {
+    merchant: "merchants",
+    customer: "customers",
+    admin: "admins",
+  };
+
+  const collectionName = collectionMap[role] || "customers";
+
+  const ref = doc(db, collectionName, id);
+  const snap = await getDoc(ref);
+
+  const basePayload = {
+    fcmToken: token,
+    tokenUpdatedAt: serverTimestamp(),
+  };
+
+  /* ---------- MERCHANT MULTI DEVICE SAFE ---------- */
+
+  if (role === "merchant") {
+
+    let tokens = [];
+
+    if (snap.exists()) {
+      tokens = snap.data()?.fcmTokens || [];
+    }
+
+    if (!tokens.includes(token)) {
+      basePayload.fcmTokens = arrayUnion(token);
+    }
+
+    await setDoc(ref, basePayload, { merge: true });
+
+    console.log("[FCM] ✅ Merchant token saved (dedup)");
+
+  } else {
+
+    await setDoc(ref, basePayload, { merge: true });
+
+    console.log(`[FCM] ✅ ${role} token saved`);
   }
+}
 
-  console.log("⏳ Waiting for Service Worker ready...");
-  const registration = await navigator.serviceWorker.ready;
-  console.log("✅ Service Worker ready");
+/* =========================================================
+   FOREGROUND LISTENER
+========================================================= */
+function attachForegroundListener(messaging) {
 
-  return registration;
+  if (_foregroundListenerAttached) return;
+
+  _foregroundListenerAttached = true;
+
+  onMessage(messaging, (payload) => {
+
+    console.log("[FCM] 📩 Foreground Push:", payload);
+
+    /* ---------- OPTIONAL GLOBAL EVENT ---------- */
+
+    window.dispatchEvent(
+      new CustomEvent("oshiro:push", { detail: payload })
+    );
+
+    /* ---------- FALLBACK ALERT ---------- */
+
+    if (payload?.notification?.title) {
+      console.log(
+        `[FCM] Notification → ${payload.notification.title}`
+      );
+    }
+  });
+
+  console.log("[FCM] ✅ Foreground listener attached");
 }
 
 /* =========================================================
    MAIN TOKEN FUNCTION
-   role = "customer" | "merchant"
+   role = merchant | customer | admin
 ========================================================= */
-export async function generateAndSaveToken(id, role = "customer") {
+export async function generateAndSaveToken(
+  id,
+  role = "customer"
+) {
+
+  console.log("[FCM] 🚀 TOKEN FLOW START", { id, role });
+
   try {
 
+    /* ================= BASIC GUARDS ================= */
+
     if (!id) {
-      console.log("❌ No id provided");
-      return;
+      console.log("[FCM] ❌ Missing ID");
+      return null;
     }
 
     if (!("Notification" in window)) {
-      console.log("❌ Notifications not supported");
-      return;
+      console.log("[FCM] ❌ Notification API not available");
+      return null;
     }
 
     /* ================= PERMISSION ================= */
-    console.log("🔔 Requesting notification permission...");
-    const permission = await Notification.requestPermission();
+
+    let permission = Notification.permission;
 
     if (permission !== "granted") {
-      console.log("❌ Notification permission denied");
-      return;
+      console.log("[FCM] 🔔 Requesting permission...");
+      permission = await Notification.requestPermission();
     }
 
-    console.log("✅ Notification permission granted");
+    if (permission !== "granted") {
+      console.log("[FCM] ❌ Permission denied");
+      return null;
+    }
 
-    /* ================= GET MESSAGING ================= */
+    console.log("[FCM] ✅ Permission granted");
+
+    /* ================= MESSAGING ================= */
+
     const messaging = await getFirebaseMessaging();
+
     if (!messaging) {
-      console.log("❌ Messaging not supported");
-      return;
+      console.log("[FCM] ❌ Messaging not available");
+      return null;
     }
 
-    /* ================= WAIT SW ================= */
+    /* ================= SERVICE WORKER ================= */
+
     const registration = await waitForServiceWorkerReady();
 
-    /* ================= GET TOKEN ================= */
-    console.log("📡 Requesting FCM token...");
+    if (!registration) return null;
+
+    /* ================= TOKEN ================= */
+
+    console.log("[FCM] 📡 Requesting token...");
 
     const token = await getToken(messaging, {
       vapidKey:
@@ -89,49 +201,27 @@ export async function generateAndSaveToken(id, role = "customer") {
     });
 
     if (!token) {
-      console.log("❌ No token received");
-      return;
+      console.log("[FCM] ❌ Token null");
+      return null;
     }
 
-    console.log("✅ FCM TOKEN:", token);
+    console.log("[FCM] 📦 TOKEN:", token);
 
-    /* =================================================
-       SAVE BASED ON ROLE
-    ================================================= */
+    /* ================= SAVE ================= */
 
-    if (role === "merchant") {
-
-      await setDoc(
-        doc(db, "merchants", id),
-        {
-          fcmTokens: arrayUnion(token),   // prevents duplicates automatically
-          tokenUpdatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
-
-      console.log("✅ Merchant token saved");
-
-    } else {
-
-      await setDoc(
-        doc(db, "customers", id),
-        {
-          fcmToken: token,
-          tokenUpdatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
-
-      console.log("✅ Customer token saved");
-    }
+    await saveTokenToFirestore(id, role, token);
 
     /* ================= FOREGROUND LISTENER ================= */
-    onMessage(messaging, (payload) => {
-      console.log("📩 Foreground Push Received:", payload);
-    });
+
+    attachForegroundListener(messaging);
+
+    console.log("[FCM] 🎉 TOKEN FLOW COMPLETE");
+
+    return token;
 
   } catch (err) {
-    console.error("❌ FCM Token Error:", err);
+
+    console.error("[FCM] ❌ TOKEN FLOW CRASH:", err);
+    return null;
   }
 }
