@@ -6,34 +6,23 @@ import {
   query,
   where,
   orderBy,
+  limit,
   Timestamp,
 } from "firebase/firestore";
 import { db } from "./index";
 
-/**
- * =========================================================
- * 🔒 LEAD TYPES (STABLE CONTRACT)
- * ---------------------------------------------------------
- * Used across Client + Functions + Admin
- * DO NOT RENAME once Phase 2.7 is complete
- * =========================================================
- */
+/* =========================================================
+   LEAD TYPES
+========================================================= */
 export const LEAD_TYPES = {
-  OFFER_VIEW: "offer_view", // Phase 2.7 – Row 1
-  GEO_ENTER: "geo_enter",   // Phase 2.7 – Row 1
-  REDEEM: "redeem",         // Future
+  OFFER_VIEW: "offer_view",
+  GEO_ENTER: "geo_enter",
+  REDEEM: "redeem",
 };
 
-/**
- * =========================================================
- * CREATE LEAD (PHASE 2.7 – ROW 1)
- * ---------------------------------------------------------
- * ✔ Triggered on GEO ENTER or OFFER VIEW
- * ✔ Soft dedupe (15 min) – client side
- * ✔ Merchant-scoped
- * ✔ Safe for notifications & analytics
- * =========================================================
- */
+/* =========================================================
+   CREATE LEAD (PRODUCTION SAFE)
+========================================================= */
 export async function createLead({
   merchantId,
   customerMobile,
@@ -42,57 +31,58 @@ export async function createLead({
   offerId = null,
   type = LEAD_TYPES.OFFER_VIEW,
   distance = null,
-  source = "customer", // customer | system | admin
+  source = "customer",
 }) {
-  /* ======================
-     BASIC VALIDATION
-  ====================== */
-  if (!merchantId || !customerMobile) {
-    console.error(
-      "❌ createLead: missing merchantId or customerMobile"
-    );
-    return { created: false };
-  }
 
-  if (!Object.values(LEAD_TYPES).includes(type)) {
-    console.error("❌ Invalid lead type:", type);
+  if (!merchantId || !customerMobile) {
+    console.error("❌ createLead: missing merchantId or customerMobile");
     return { created: false };
   }
 
   try {
     /* ======================
-       SOFT DEDUP (15 mins)
-       ⚠ Will move to backend in Row 2/3
+       SAFE DEDUPE (NO TIME FILTER QUERY)
+       Avoids composite index chaos
     ====================== */
+
     const dedupeKey = `${merchantId}_${customerMobile}_${type}`;
 
-    const fifteenMinutesAgo = Timestamp.fromMillis(
-      Date.now() - 15 * 60 * 1000
-    );
+    try {
+      const dedupeQuery = query(
+        collection(db, "leads"),
+        where("dedupeKey", "==", dedupeKey),
+        orderBy("createdAt", "desc"),
+        limit(1)
+      );
 
-    const dedupeQuery = query(
-      collection(db, "leads"),
-      where("dedupeKey", "==", dedupeKey),
-      where("createdAt", ">", fifteenMinutesAgo)
-    );
+      const existing = await getDocs(dedupeQuery);
 
-    const existing = await getDocs(dedupeQuery);
+      if (!existing.empty) {
+        const lastLead = existing.docs[0].data();
 
-    if (!existing.empty) {
-      console.log("⏭️ Lead deduplicated:", dedupeKey);
-      return { created: false, reason: "DUPLICATE" };
+        if (lastLead.createdAt) {
+          const lastTime = lastLead.createdAt.toMillis();
+          const now = Date.now();
+
+          if (now - lastTime < 15 * 60 * 1000) {
+            console.log("⏭️ Lead deduplicated (15min window)");
+            return { created: false, reason: "DUPLICATE" };
+          }
+        }
+      }
+    } catch (dedupeErr) {
+      console.warn("⚠ Dedupe skipped (safe fallback):", dedupeErr);
     }
 
     /* ======================
        CREATE LEAD
     ====================== */
+
     const docRef = await addDoc(collection(db, "leads"), {
       merchantId,
-
       customerMobile,
       customerId,
       customerName,
-
       offerId,
       type,
       distance,
@@ -100,31 +90,31 @@ export async function createLead({
 
       createdAt: serverTimestamp(),
 
-      // notification pipeline (Row 3)
       notified: false,
       notifiedAt: null,
 
-      // helpers
       dedupeKey,
     });
 
     console.log("✅ Lead created:", docRef.id);
-    return { created: true, id: docRef.id };
+
+    return {
+      created: true,
+      id: docRef.id,
+    };
+
   } catch (err) {
     console.error("🔥 createLead failed:", err);
-    return { created: false, error: err };
+    return {
+      created: false,
+      error: err.message || err,
+    };
   }
 }
 
-/**
- * =========================================================
- * FETCH LEADS FOR MERCHANT (MERCHANT PANEL)
- * ---------------------------------------------------------
- * ✔ Latest first
- * ✔ All lead types
- * ✔ Used by MerchantLeads.jsx (LOCKED)
- * =========================================================
- */
+/* =========================================================
+   FETCH MERCHANT LEADS
+========================================================= */
 export async function fetchLeadsByMerchant(merchantId) {
   if (!merchantId) return [];
 
@@ -137,10 +127,11 @@ export async function fetchLeadsByMerchant(merchantId) {
 
     const snapshot = await getDocs(q);
 
-    return snapshot.docs.map((doc) => ({
+    return snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
     }));
+
   } catch (err) {
     console.error("Fetch merchant leads failed:", err);
     return [];

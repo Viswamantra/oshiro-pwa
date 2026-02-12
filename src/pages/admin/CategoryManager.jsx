@@ -10,6 +10,7 @@ import {
   MenuItem,
   IconButton,
 } from "@mui/material";
+
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 
@@ -25,11 +26,16 @@ import {
   where,
   getDocs,
 } from "firebase/firestore";
+
 import { db } from "../../firebase";
 
 /* =========================
    ADMIN CATEGORY MANAGER
+   ✔ Icon Support
+   ✔ Sort Order Support
+   ✔ Backward Compatible
 ========================= */
+
 export default function CategoryManager() {
   const [categories, setCategories] = useState([]);
   const [editingId, setEditingId] = useState(null);
@@ -38,31 +44,44 @@ export default function CategoryManager() {
     name: "",
     description: "",
     status: "active",
+    icon: "category",
+    sortOrder: 999,
   });
 
   const [msg, setMsg] = useState("");
 
   /* =========================
-     LOAD CATEGORIES
+     LOAD CATEGORIES LIVE
   ========================= */
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "categories"), async (snap) => {
       const list = [];
 
       for (const d of snap.docs) {
-        // count merchants per category
+        const data = d.data();
+
+        // Merchant count (Backward compatible using category NAME)
         const mq = query(
           collection(db, "merchants"),
-          where("category", "==", d.data().name)
+          where("category", "==", data.name)
         );
+
         const merchantSnap = await getDocs(mq);
 
         list.push({
           id: d.id,
-          ...d.data(),
+          name: data.name || "",
+          description: data.description || "",
+          status: data.status || "active",
+          icon: data.icon || "category",
+          sortOrder: data.sortOrder || 999,
           merchantCount: merchantSnap.size,
+          ...data,
         });
       }
+
+      // Sort by sortOrder
+      list.sort((a, b) => (a.sortOrder || 999) - (b.sortOrder || 999));
 
       setCategories(list);
     });
@@ -71,7 +90,7 @@ export default function CategoryManager() {
   }, []);
 
   /* =========================
-     SUBMIT (ADD / UPDATE)
+     ADD / UPDATE CATEGORY
   ========================= */
   async function handleSubmit(e) {
     e.preventDefault();
@@ -82,21 +101,37 @@ export default function CategoryManager() {
     }
 
     try {
+      const payload = {
+        name: form.name.trim(),
+        description: form.description || "",
+        status: form.status || "active",
+        icon: form.icon || "category",
+        sortOrder: Number(form.sortOrder) || 999,
+      };
+
       if (editingId) {
         await updateDoc(doc(db, "categories", editingId), {
-          ...form,
+          ...payload,
           updatedAt: serverTimestamp(),
         });
-        setMsg("Category updated");
+        setMsg("Category updated successfully");
       } else {
         await addDoc(collection(db, "categories"), {
-          ...form,
+          ...payload,
           createdAt: serverTimestamp(),
         });
-        setMsg("Category added");
+        setMsg("Category added successfully");
       }
 
-      setForm({ name: "", description: "", status: "active" });
+      // Reset form
+      setForm({
+        name: "",
+        description: "",
+        status: "active",
+        icon: "category",
+        sortOrder: 999,
+      });
+
       setEditingId(null);
     } catch (err) {
       console.error(err);
@@ -105,26 +140,30 @@ export default function CategoryManager() {
   }
 
   /* =========================
-     EDIT
+     EDIT CATEGORY
   ========================= */
   function handleEdit(cat) {
     setEditingId(cat.id);
     setForm({
-      name: cat.name,
+      name: cat.name || "",
       description: cat.description || "",
-      status: cat.status,
+      status: cat.status || "active",
+      icon: cat.icon || "category",
+      sortOrder: cat.sortOrder || 999,
     });
   }
 
   /* =========================
-     DELETE (HARD)
-     👉 you can change to soft delete if needed
+     DELETE CATEGORY
   ========================= */
   async function handleDelete(id) {
     if (!window.confirm("Delete this category?")) return;
     await deleteDoc(doc(db, "categories", id));
   }
 
+  /* =========================
+     UI
+  ========================= */
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h5" gutterBottom>
@@ -140,7 +179,7 @@ export default function CategoryManager() {
 
           <form onSubmit={handleSubmit}>
             <Grid container spacing={2} sx={{ mt: 1 }}>
-              <Grid item xs={12} sm={4}>
+              <Grid item xs={12} sm={3}>
                 <TextField
                   label="Category Name"
                   value={form.name}
@@ -152,7 +191,7 @@ export default function CategoryManager() {
                 />
               </Grid>
 
-              <Grid item xs={12} sm={4}>
+              <Grid item xs={12} sm={3}>
                 <TextField
                   label="Description"
                   value={form.description}
@@ -164,6 +203,33 @@ export default function CategoryManager() {
               </Grid>
 
               <Grid item xs={12} sm={2}>
+                <TextField
+                  label="Material Icon Name"
+                  value={form.icon}
+                  onChange={(e) =>
+                    setForm({ ...form, icon: e.target.value })
+                  }
+                  helperText="Example: restaurant, spa, shopping_bag"
+                  fullWidth
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={2}>
+                <TextField
+                  label="Sort Order"
+                  type="number"
+                  value={form.sortOrder}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      sortOrder: Number(e.target.value),
+                    })
+                  }
+                  fullWidth
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={1.5}>
                 <TextField
                   select
                   label="Status"
@@ -178,7 +244,7 @@ export default function CategoryManager() {
                 </TextField>
               </Grid>
 
-              <Grid item xs={12} sm={2}>
+              <Grid item xs={12} sm={0.5}>
                 <Button type="submit" variant="contained" fullWidth>
                   {editingId ? "Update" : "Add"}
                 </Button>
@@ -208,11 +274,14 @@ export default function CategoryManager() {
               <Typography variant="subtitle1">
                 {cat.name} ({cat.status})
               </Typography>
+
               <Typography variant="body2">
                 {cat.description || "No description"}
               </Typography>
+
               <Typography variant="caption">
-                Merchants: {cat.merchantCount}
+                Merchants: {cat.merchantCount} | Icon: {cat.icon} | Order:{" "}
+                {cat.sortOrder}
               </Typography>
             </Box>
 
@@ -220,6 +289,7 @@ export default function CategoryManager() {
               <IconButton onClick={() => handleEdit(cat)}>
                 <EditIcon />
               </IconButton>
+
               <IconButton onClick={() => handleDelete(cat.id)}>
                 <DeleteIcon />
               </IconButton>

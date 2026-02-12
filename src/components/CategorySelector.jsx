@@ -1,26 +1,72 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { fetchActiveCategories } from "../firebase/categories";
 
-export default function CategorySelector({ value, onChange }) {
+/**
+ * =====================================================
+ * GLOBAL CATEGORY SELECTOR
+ * -----------------------------------------------------
+ * ✔ Live Firestore Categories
+ * ✔ Active Only
+ * ✔ Sort Order Support
+ * ✔ Future Icon Ready
+ * ✔ Backward Safe
+ * =====================================================
+ */
+
+export default function CategorySelector({
+  value,
+  onChange,
+  includeAll = true,
+}) {
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  /* =========================
+     LOAD CATEGORIES
+  ========================= */
+  useEffect(() => {
+    async function load() {
+      try {
+        const list = await fetchActiveCategories();
+        setCategories(list || []);
+      } catch (err) {
+        console.error("Category load failed", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    load();
+  }, []);
+
+  /* =========================
+     UI
+  ========================= */
   return (
     <select
-      value={value}
+      value={value || ""}
       onChange={(e) => onChange(e.target.value)}
+      disabled={loading}
       style={{
-        padding: 6,
-        minWidth: 180,
+        padding: 8,
+        minWidth: 200,
         cursor: "pointer",
+        borderRadius: 6,
+        border: "1px solid #ccc",
+        background: loading ? "#f5f5f5" : "white",
       }}
     >
-      <option value="">All</option>
+      {includeAll && <option value="">All Categories</option>}
 
-      <option value="EHuriAgh3jlwpZhvGi2N">Food</option>
-      <option value="PJYuU0ltUCkaUlRw55pm">Medicals</option>
-      <option value="Rb0wToy7ry1vsRRtdKy0">Other Services</option>
-      <option value="boaZo4fHBaPjkNDopOsn">Education</option>
-      <option value="cRjtnpg5oHQhSNt5vfCV">Hospitals</option>
-      <option value="dOculBYSS5tDphxvFvcl">Beauty & Spa</option>
-      <option value="zVBYDhPomvWi3rtBFbFj">Fashion & Clothing</option>
-      <option value="zXnSCXG0Qff8e4U4XcGX">Home Kitchen</option>
+      {categories.map((cat) => (
+        <option key={cat.id} value={cat.id}>
+          {cat.name}
+        </option>
+      ))}
+
+      {!loading && categories.length === 0 && (
+        <option value="">No Categories Found</option>
+      )}
     </select>
   );
 }

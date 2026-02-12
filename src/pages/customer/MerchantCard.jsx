@@ -1,21 +1,24 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import HoverActions from "../../components/HoverActions";
+import { fetchActiveCategories } from "../../firebase/categories";
 
 /**
  * =========================================================
- * MERCHANT CARD – CUSTOMER MODULE
+ * MERCHANT CARD – FINAL PRODUCTION VERSION
  * ---------------------------------------------------------
- * ✔ Schema-aligned (shop_name, category, location)
- * ✔ Card click → Merchant Details
- * ✔ Icons work independently
- * ✔ No bubbling / no redirect bugs
- * ✔ Safe & predictable rendering
+ * ✔ Shop Thumbnail Image Support
+ * ✔ Category Icon Support
+ * ✔ Backward Compatible
+ * ✔ Safe Rendering Guards
+ * ✔ Mobile Friendly UI
  * =========================================================
  */
 
 export default function MerchantCard({ merchant }) {
   const navigate = useNavigate();
+
+  const [categoryIcon, setCategoryIcon] = useState("🏬");
 
   if (!merchant) return null;
 
@@ -23,24 +26,65 @@ export default function MerchantCard({ merchant }) {
     id,
     shop_name,
     category,
+    categoryId,
     mobile,
     location,
+    shopImageUrl,
   } = merchant;
+
+  /* ======================
+     LOAD CATEGORY ICON
+  ====================== */
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadCategoryIcon() {
+      try {
+        const cats = await fetchActiveCategories();
+
+        let matched;
+
+        // Prefer categoryId
+        if (categoryId) {
+          matched = cats.find((c) => c.id === categoryId);
+        }
+
+        // Fallback to category name
+        if (!matched && category) {
+          matched = cats.find(
+            (c) =>
+              c.name?.toLowerCase() === category?.toLowerCase()
+          );
+        }
+
+        if (mounted && matched?.icon) {
+          // If using emoji icons store directly
+          setCategoryIcon(matched.icon);
+        }
+      } catch (err) {
+        console.error("Category icon load failed", err);
+      }
+    }
+
+    loadCategoryIcon();
+    return () => (mounted = false);
+  }, [categoryId, category]);
 
   /* ======================
      HARD GUARDS
   ====================== */
-  if (!id || !shop_name || !category) {
-    return null; // ❌ never render broken merchants
-  }
+  if (!id || !shop_name || !category) return null;
 
   /* ======================
-     OPEN DETAILS
+     NAVIGATION
   ====================== */
   const openDetails = () => {
     navigate(`/customer/merchant/${id}`);
   };
 
+  /* ======================
+     UI
+  ====================== */
   return (
     <div
       className="merchant-card"
@@ -56,31 +100,72 @@ export default function MerchantCard({ merchant }) {
       }}
       style={{
         display: "flex",
-        justifyContent: "space-between",
         alignItems: "center",
+        justifyContent: "space-between",
         padding: 14,
         marginBottom: 12,
-        borderRadius: 10,
+        borderRadius: 12,
         background: "#fff",
         cursor: "pointer",
-        boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+        boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
       }}
     >
       {/* ======================
-          MERCHANT INFO
+          LEFT SIDE (IMAGE + INFO)
       ====================== */}
-      <div className="merchant-info">
-        <h4 style={{ margin: 0 }}>{shop_name}</h4>
-        <span style={{ fontSize: 13, color: "#666" }}>
-          {category}
-        </span>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        {/* SHOP IMAGE */}
+        <div
+          style={{
+            width: 56,
+            height: 56,
+            borderRadius: 12,
+            overflow: "hidden",
+            background: "#f1f5f9",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 24,
+          }}
+        >
+          {shopImageUrl ? (
+            <img
+              src={shopImageUrl}
+              alt={shop_name}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+              }}
+            />
+          ) : (
+            categoryIcon
+          )}
+        </div>
+
+        {/* SHOP INFO */}
+        <div>
+          <h4 style={{ margin: 0 }}>{shop_name}</h4>
+
+          <span
+            style={{
+              fontSize: 13,
+              color: "#64748b",
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+            }}
+          >
+            <span>{categoryIcon}</span>
+            {category}
+          </span>
+        </div>
       </div>
 
       {/* ======================
-          ACTIONS (NO BUBBLING)
+          ACTIONS
       ====================== */}
       <div
-        className="merchant-actions"
         role="presentation"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}

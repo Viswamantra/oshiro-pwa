@@ -3,34 +3,39 @@ import { useNavigate } from "react-router-dom";
 import { registerMerchant } from "../../firebase/merchants";
 import { fetchActiveCategories } from "../../firebase/categories";
 
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+
 /**
  * =========================================================
- * MERCHANT REGISTER (MOBILE-FIRST | ROUTER SAFE)
+ * MERCHANT REGISTER (FINAL PRODUCTION READY)
  * ---------------------------------------------------------
  * ✔ +91 locked mobile input
- * ✔ 10 digits only
- * ✔ Category stored as NAME (schema-aligned)
- * ✔ Status = pending (admin approval required)
- * ✔ profileComplete = false (rules-safe)
- * ✔ No blank screen on failure
+ * ✔ Category Global Sync
+ * ✔ categoryId + categoryName saved
+ * ✔ Shop Image Upload (Firebase Storage)
+ * ✔ Pending Approval Default
+ * ✔ Backward Compatible
  * =========================================================
  */
 
 export default function MerchantRegister() {
   const navigate = useNavigate();
+  const storage = getStorage();
 
   /* ======================
      STATE
   ====================== */
   const [mobile, setMobile] = useState("+91");
   const [shopName, setShopName] = useState("");
-  const [category, setCategory] = useState("");
+  const [categoryId, setCategoryId] = useState("");
   const [categories, setCategories] = useState([]);
+  const [shopImageFile, setShopImageFile] = useState(null);
+
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   /* ======================
-     LOAD CATEGORIES (SAFE)
+     LOAD CATEGORIES
   ====================== */
   useEffect(() => {
     let mounted = true;
@@ -38,19 +43,15 @@ export default function MerchantRegister() {
     async function loadCategories() {
       try {
         const data = await fetchActiveCategories();
-        if (mounted && Array.isArray(data)) {
-          setCategories(data);
-        }
+        if (mounted) setCategories(data || []);
       } catch (err) {
-        console.error("Failed to load categories:", err);
+        console.error(err);
         if (mounted) setCategories([]);
       }
     }
 
     loadCategories();
-    return () => {
-      mounted = false;
-    };
+    return () => (mounted = false);
   }, []);
 
   /* ======================
@@ -63,8 +64,15 @@ export default function MerchantRegister() {
     value = "+91" + value.slice(3).replace(/\D/g, "");
 
     if (value.length > 13) value = value.slice(0, 13);
-
     setMobile(value);
+  };
+
+  /* ======================
+     IMAGE HANDLER
+  ====================== */
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) setShopImageFile(file);
   };
 
   /* ======================
@@ -72,6 +80,7 @@ export default function MerchantRegister() {
   ====================== */
   const handleRegister = async () => {
     if (loading) return;
+
     setError("");
 
     if (mobile.length !== 13) {
@@ -84,7 +93,7 @@ export default function MerchantRegister() {
       return;
     }
 
-    if (!category) {
+    if (!categoryId) {
       setError("Select category");
       return;
     }
@@ -92,10 +101,37 @@ export default function MerchantRegister() {
     try {
       setLoading(true);
 
+      /* ===== FIND CATEGORY NAME ===== */
+      const selectedCategory = categories.find(
+        (c) => c.id === categoryId
+      );
+
+      /* ===== UPLOAD SHOP IMAGE ===== */
+      let shopImageUrl = "";
+
+      if (shopImageFile) {
+        const storageRef = ref(
+          storage,
+          `merchant-shops/${Date.now()}_${shopImageFile.name}`
+        );
+
+        await uploadBytes(storageRef, shopImageFile);
+        shopImageUrl = await getDownloadURL(storageRef);
+      }
+
+      /* ===== REGISTER ===== */
       await registerMerchant({
-        mobile: mobile.slice(3), // digits only
+        mobile: mobile.slice(3),
         shopName: shopName.trim(),
-        category,               // category NAME
+
+        // Backward compatibility
+        category: selectedCategory?.name || "",
+
+        // Future ready
+        categoryId: categoryId,
+
+        shopImageUrl: shopImageUrl || "",
+
         status: "pending",
         profileComplete: false,
       });
@@ -106,10 +142,8 @@ export default function MerchantRegister() {
 
       navigate("/merchant/login", { replace: true });
     } catch (err) {
-      console.error("Merchant register error:", err);
-      setError(
-        err?.message || "Registration failed. Please try again."
-      );
+      console.error(err);
+      setError(err?.message || "Registration failed");
     } finally {
       setLoading(false);
     }
@@ -117,12 +151,10 @@ export default function MerchantRegister() {
 
   return (
     <div style={styles.page}>
-      {/* HOME BUTTON */}
       <div onClick={() => navigate("/")} style={styles.homeBtn}>
         ← Home
       </div>
 
-      {/* REGISTER CARD */}
       <div style={styles.card}>
         <img
           src="/logo/oshiro-logo-compact-3.png"
@@ -131,17 +163,12 @@ export default function MerchantRegister() {
         />
 
         <h2 style={styles.title}>Merchant Registration</h2>
-        <p style={styles.subtitle}>
-          Register your shop to start offering deals
-        </p>
 
         {/* MOBILE */}
         <input
           type="tel"
           value={mobile}
           onChange={handleMobileChange}
-          placeholder="+91XXXXXXXXXX"
-          onFocus={(e) => e.target.setSelectionRange(3, 3)}
           style={styles.input}
         />
 
@@ -156,17 +183,26 @@ export default function MerchantRegister() {
 
         {/* CATEGORY */}
         <select
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
+          value={categoryId}
+          onChange={(e) => setCategoryId(e.target.value)}
           style={styles.select}
         >
           <option value="">Select Category</option>
+
           {categories.map((c) => (
-            <option key={c.id} value={c.name}>
+            <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
         </select>
+
+        {/* SHOP IMAGE */}
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handleImageChange}
+          style={styles.input}
+        />
 
         {error && <div style={styles.error}>{error}</div>}
 
@@ -177,10 +213,6 @@ export default function MerchantRegister() {
         >
           {loading ? "Submitting..." : "Register"}
         </button>
-
-        <p style={styles.note}>
-          After registration, admin approval is required.
-        </p>
       </div>
     </div>
   );
@@ -192,23 +224,16 @@ export default function MerchantRegister() {
 const styles = {
   page: {
     minHeight: "100vh",
-    background: "linear-gradient(180deg, #f8fafc, #eef2ff)",
+    background: "linear-gradient(180deg,#f8fafc,#eef2ff)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     padding: 16,
-    position: "relative",
   },
   homeBtn: {
     position: "absolute",
     top: 20,
     left: 16,
-    padding: "6px 14px",
-    borderRadius: 20,
-    background: "#f1f5f9",
-    color: "#2563eb",
-    fontSize: 14,
-    fontWeight: 500,
     cursor: "pointer",
   },
   card: {
@@ -216,29 +241,15 @@ const styles = {
     maxWidth: 380,
     padding: 28,
     borderRadius: 16,
-    background: "#ffffff",
+    background: "#fff",
     textAlign: "center",
-    boxShadow: "0 16px 32px rgba(0, 0, 0, 0.1)",
   },
-  logo: {
-    height: 56,
-    marginBottom: 24,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: 600,
-    marginBottom: 6,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#6b7280",
-    marginBottom: 20,
-  },
+  logo: { height: 56, marginBottom: 24 },
+  title: { fontSize: 22, fontWeight: 600, marginBottom: 20 },
   input: {
     width: "100%",
     height: 48,
     padding: "0 14px",
-    fontSize: 16,
     borderRadius: 10,
     border: "1px solid #d1d5db",
     marginBottom: 14,
@@ -247,32 +258,18 @@ const styles = {
     width: "100%",
     height: 48,
     padding: "0 14px",
-    fontSize: 16,
     borderRadius: 10,
     border: "1px solid #d1d5db",
     marginBottom: 14,
-    background: "#fff",
   },
-  error: {
-    marginBottom: 10,
-    fontSize: 14,
-    color: "#dc2626",
-  },
+  error: { color: "red", marginBottom: 10 },
   button: {
     width: "100%",
     height: 48,
-    marginTop: 12,
     borderRadius: 10,
     border: "none",
-    background: "linear-gradient(135deg, #2563eb, #1e40af)",
+    background: "#2563eb",
     color: "#fff",
-    fontSize: 16,
-    fontWeight: 600,
     cursor: "pointer",
-  },
-  note: {
-    marginTop: 14,
-    fontSize: 13,
-    color: "#6b7280",
   },
 };
