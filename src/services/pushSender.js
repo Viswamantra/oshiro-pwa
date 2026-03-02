@@ -1,233 +1,210 @@
 /**
- * =========================================================
- * OSHIRO SMART PUSH ROUTER — FINAL ENTERPRISE VERSION
- * ---------------------------------------------------------
- * ✔ Admin → Merchant Push
- * ✔ Admin → Customer Push
- * ✔ Admin → Broadcast Push
- * ✔ Batch Push Support
- * ✔ Multi-device Merchant Support
- * ✔ Master Cloud Function Based (sendPushNotification)
- * ✔ Production error handling
- * ✔ Logging structured
- * ✔ Future Geo + Topic Ready
- * =========================================================
- */
+
+* =========================================================
+* OSHIRO SMART PUSH ROUTER — UID TOKEN ARCHITECTURE
+* =========================================================
+  */
 
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../firebase/functions";
 
 import { db } from "../firebase";
-import { doc, getDoc, collection, getDocs } from "firebase/firestore";
+import {
+doc,
+getDoc,
+collection,
+getDocs,
+query,
+where
+} from "firebase/firestore";
+
+/* ========================================================= */
+
+const MAX_BATCH_SIZE = 400;
+
+/* ========================================================= */
+
+function normalizeDataPayload(data = {}) {
+const out = {};
+Object.keys(data || {}).forEach((k) => {
+out[k] = data[k] === undefined || data[k] === null
+? ""
+: String(data[k]);
+});
+return out;
+}
+
+function dedupeTokens(tokens = []) {
+return [...new Set(tokens.filter(Boolean))];
+}
+
+function chunkArray(arr, size) {
+const chunks = [];
+for (let i = 0; i < arr.length; i += size) {
+chunks.push(arr.slice(i, i + size));
+}
+return chunks;
+}
 
 /* =========================================================
-   MASTER PUSH CALLER
+CLOUD CALL
 ========================================================= */
 
 async function callPushFunction(payload) {
+const callable = httpsCallable(functions, "sendPushNotification");
 
-  try {
+const res = await callable({
+...payload,
+dataPayload: normalizeDataPayload(payload.dataPayload),
+});
 
-    const callable = httpsCallable(
-      functions,
-      "sendPushNotification"
-    );
-
-    const res = await callable(payload);
-
-    console.log("[PUSH] ✅ Cloud push success:", res.data);
-
-    return res.data;
-
-  } catch (err) {
-
-    console.error("[PUSH] ❌ Cloud push failed:", err);
-    throw err;
-
-  }
+console.log("[PUSH] Cloud success:", res.data);
+return res.data;
 }
 
 /* =========================================================
-   TOKEN HELPERS
+TOKEN FETCH FROM fcmTokens COLLECTION
 ========================================================= */
 
-async function getMerchantTokens(merchantId) {
-
-  const snap = await getDoc(doc(db, "merchants", merchantId));
-
-  if (!snap.exists()) return [];
-
-  const data = snap.data();
-
-  return data.fcmTokens || data.fcmToken
-    ? data.fcmTokens || [data.fcmToken]
-    : [];
+async function getUserTokens(uid) {
+try {
+const snap = await getDoc(doc(db, "fcmTokens", uid));
+if (!snap.exists()) return [];
+return dedupeTokens(snap.data().tokens || []);
+} catch (err) {
+console.error("[PUSH] getUserTokens error:", err);
+return [];
 }
-
-async function getCustomerToken(customerId) {
-
-  const snap = await getDoc(doc(db, "customers", customerId));
-
-  if (!snap.exists()) return null;
-
-  return snap.data()?.fcmToken || null;
 }
 
 /* =========================================================
-   PUSH → MERCHANT
+SAFE BATCH SENDER
+========================================================= */
+
+async function sendTokenBatches({ tokens, title, body, dataPayload }) {
+
+const uniqueTokens = dedupeTokens(tokens);
+if (!uniqueTokens.length) {
+console.warn("[PUSH] No tokens to send");
+return;
+}
+
+const chunks = chunkArray(uniqueTokens, MAX_BATCH_SIZE);
+
+console.log(`[PUSH] ${uniqueTokens.length} tokens → ${chunks.length} batches`);
+
+return Promise.all(
+chunks.map(chunk =>
+callPushFunction({
+tokens: chunk,
+title,
+body,
+dataPayload
+})
+)
+);
+}
+
+/* =========================================================
+PUSH → MERCHANT (UID)
 ========================================================= */
 
 export async function sendPushToMerchant({
-  merchantId,
-  title,
-  body,
-  data = {},
+merchantId,
+title,
+body,
+data = {},
 }) {
 
-  try {
+const tokens = await getUserTokens(merchantId);
+if (!tokens.length) return;
 
-    if (!merchantId) throw new Error("Missing merchantId");
-
-    const tokens = await getMerchantTokens(merchantId);
-
-    if (!tokens.length) {
-      console.warn("[PUSH] No merchant tokens found");
-      return;
-    }
-
-    return callPushFunction({
-      tokens,
-      title,
-      body,
-      dataPayload: data,
-    });
-
-  } catch (err) {
-
-    console.error("[PUSH] Merchant push failed:", err);
-    throw err;
-
-  }
+return sendTokenBatches({
+tokens,
+title,
+body,
+dataPayload: data
+});
 }
 
 /* =========================================================
-   PUSH → CUSTOMER
+PUSH → CUSTOMER (UID)
 ========================================================= */
 
 export async function sendPushToCustomer({
-  customerId,
-  title,
-  body,
-  data = {},
+customerId,
+title,
+body,
+data = {},
 }) {
 
-  try {
+const tokens = await getUserTokens(customerId);
+if (!tokens.length) return;
 
-    if (!customerId) throw new Error("Missing customerId");
-
-    const token = await getCustomerToken(customerId);
-
-    if (!token) {
-      console.warn("[PUSH] No customer token found");
-      return;
-    }
-
-    return callPushFunction({
-      tokens: [token],
-      title,
-      body,
-      dataPayload: data,
-    });
-
-  } catch (err) {
-
-    console.error("[PUSH] Customer push failed:", err);
-    throw err;
-
-  }
+return sendTokenBatches({
+tokens,
+title,
+body,
+dataPayload: data
+});
 }
 
 /* =========================================================
-   BROADCAST PUSH
+BROADCAST PUSH
 ========================================================= */
 
 export async function sendBroadcastPush({
-  title,
-  body,
-  target = "all", // merchant | customer | all
-  data = {},
+title,
+body,
+target = "all",
+data = {},
 }) {
 
-  try {
+try {
 
-    let tokens = [];
+```
+let tokens = [];
 
-    if (target === "merchant" || target === "all") {
+let qRef = collection(db, "fcmTokens");
 
-      const snap = await getDocs(collection(db, "merchants"));
+if (target !== "all") {
+  qRef = query(qRef, where("role", "==", target));
+}
 
-      snap.forEach((d) => {
-        const data = d.data();
-        if (data.fcmTokens) tokens.push(...data.fcmTokens);
-        else if (data.fcmToken) tokens.push(data.fcmToken);
-      });
-    }
+const snap = await getDocs(qRef);
 
-    if (target === "customer" || target === "all") {
+snap.forEach(d => {
+  tokens.push(...(d.data().tokens || []));
+});
 
-      const snap = await getDocs(collection(db, "customers"));
+return sendTokenBatches({
+  tokens,
+  title,
+  body,
+  dataPayload: data
+});
+```
 
-      snap.forEach((d) => {
-        if (d.data()?.fcmToken) tokens.push(d.data().fcmToken);
-      });
-    }
-
-    if (!tokens.length) {
-      console.warn("[PUSH] Broadcast → No tokens found");
-      return;
-    }
-
-    return callPushFunction({
-      tokens,
-      title,
-      body,
-      dataPayload: data,
-    });
-
-  } catch (err) {
-
-    console.error("[PUSH] Broadcast push failed:", err);
-    throw err;
-
-  }
+} catch (err) {
+console.error("[PUSH] Broadcast failed:", err);
+}
 }
 
 /* =========================================================
-   BATCH PUSH (FOR OFFERS / GEO / AI)
+DIRECT TOKEN BATCH
 ========================================================= */
 
 export async function sendBatchPush({
-  tokens = [],
-  title,
-  body,
-  data = {},
+tokens = [],
+title,
+body,
+data = {},
 }) {
 
-  try {
-
-    if (!tokens.length) return;
-
-    return callPushFunction({
-      tokens,
-      title,
-      body,
-      dataPayload: data,
-    });
-
-  } catch (err) {
-
-    console.error("[PUSH] Batch push failed:", err);
-    throw err;
-
-  }
+return sendTokenBatches({
+tokens,
+title,
+body,
+dataPayload: data
+});
 }

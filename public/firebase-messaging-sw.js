@@ -1,51 +1,26 @@
-/* ======================================================
-   OSHIRO FIREBASE MESSAGING SERVICE WORKER
-   FINAL PRODUCTION HARDENED VERSION
-   Version: 2026.02 FINAL
-====================================================== */
+/* =========================================================
+   OSHIRO UNIVERSAL PUSH SERVICE WORKER — PRODUCTION FINAL
+   Works on: foreground, background, killed, Android Chrome
+========================================================= */
 
-const SW_VERSION = "oshiro-sw-v2026-02";
+const SW_VERSION = "oshiro-sw-v3";
 
-/* ======================================================
-   INSTALL
-====================================================== */
-self.addEventListener("install", (event) => {
-  console.log("✅ SW Installed:", SW_VERSION);
+/* ================= INSTALL ================= */
+self.addEventListener("install", () => {
+  console.log("SW Installed:", SW_VERSION);
   self.skipWaiting();
 });
 
-/* ======================================================
-   ACTIVATE
-====================================================== */
+/* ================= ACTIVATE ================= */
 self.addEventListener("activate", (event) => {
-  console.log("✅ SW Activated:", SW_VERSION);
-
-  event.waitUntil(
-    (async () => {
-      try {
-        await self.clients.claim();
-        console.log("✅ SW Clients Claimed");
-      } catch (err) {
-        console.error("❌ SW Activate Error:", err);
-      }
-    })()
-  );
+  console.log("SW Activated:", SW_VERSION);
+  event.waitUntil(self.clients.claim());
 });
 
-/* ======================================================
-   FIREBASE SDK LOAD (COMPAT FOR SW)
-====================================================== */
-importScripts(
-  "https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"
-);
+/* ================= FIREBASE ================= */
+importScripts("https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging-compat.js");
 
-importScripts(
-  "https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"
-);
-
-/* ======================================================
-   FIREBASE INIT
-====================================================== */
 firebase.initializeApp({
   apiKey: "AIzaSyBekN6ULTaosrBQzv-JvBlnMcCOMXZ-_JU",
   authDomain: "oshiro-app.firebaseapp.com",
@@ -55,115 +30,90 @@ firebase.initializeApp({
   appId: "1:1066886336420:web:458379909954c206917b31",
 });
 
-/* ======================================================
-   MESSAGING INSTANCE
-====================================================== */
-let messaging = null;
+const messaging = firebase.messaging();
 
-try {
-  messaging = firebase.messaging();
-  console.log("✅ Firebase Messaging SW Ready");
-} catch (err) {
-  console.error("❌ Messaging Init Failed:", err);
-}
+/* =========================================================
+   SAFE DISPLAY FUNCTION
+========================================================= */
+function displayNotification(payload) {
 
-/* ======================================================
-   BACKGROUND FCM PUSH HANDLER
-====================================================== */
-if (messaging) {
-  messaging.onBackgroundMessage((payload) => {
-    try {
-      console.log("📩 Background Push Received:", payload);
+  if (!payload) return;
 
-      const notification = payload?.notification || {};
-      const data = payload?.data || {};
+  const notification = payload.notification || {};
+  const data = payload.data || {};
 
-      const title =
-        notification.title ||
-        data.title ||
-        "OshirO Alert";
+  const title =
+    notification.title ||
+    data.title ||
+    "OshirO";
 
-      const options = {
-        body:
-          notification.body ||
-          data.body ||
-          "You have a new update",
-
-        icon: "/icon-192.png",
-        badge: "/badge-72.png",
-
-        tag: data.tag || "oshiro-push",
-        renotify: true,
-        requireInteraction: false,
-
-        data: {
-          url:
-            data.click_action ||
-            data.url ||
-            "/customer",
-        },
-      };
-
-      return self.registration.showNotification(title, options);
-
-    } catch (err) {
-      console.error("❌ SW Notification Error:", err);
+  const options = {
+    body:
+      notification.body ||
+      data.body ||
+      "You have a new update",
+    icon: "/icon-192.png",
+    badge: "/badge-72.png",
+    tag: data.leadId || "oshiro",
+    renotify: true,
+    requireInteraction: true,
+    data: {
+      url: data.click_action || "/merchant"
     }
-  });
+  };
+
+  return self.registration.showNotification(title, options);
 }
 
-/* ======================================================
-   NOTIFICATION CLICK HANDLER
-====================================================== */
-self.addEventListener("notificationclick", (event) => {
-  event.notification.close();
-
-  const targetUrl =
-    event.notification?.data?.url || "/customer";
-
-  console.log("🔗 Notification Click →", targetUrl);
-
-  event.waitUntil(
-    clients.matchAll({
-      type: "window",
-      includeUncontrolled: true,
-    }).then((clientList) => {
-
-      for (const client of clientList) {
-        if (
-          client.url.includes(targetUrl) &&
-          "focus" in client
-        ) {
-          return client.focus();
-        }
-      }
-
-      if (clients.openWindow) {
-        return clients.openWindow(targetUrl);
-      }
-    })
-  );
+/* =========================================================
+   FCM HANDLER (IMPORTANT)
+   Handles notification + data payload
+========================================================= */
+messaging.onBackgroundMessage((payload) => {
+  console.log("FCM Background:", payload);
+  return displayNotification(payload);
 });
 
-/* ======================================================
-   RAW PUSH FALLBACK (NON-FCM PUSH SUPPORT)
-====================================================== */
+/* =========================================================
+   RAW PUSH HANDLER (ANDROID RELIABILITY)
+========================================================= */
 self.addEventListener("push", (event) => {
+
   if (!event.data) return;
 
+  let payload = {};
+
   try {
-    const payload = event.data.json();
-    console.log("📩 Raw Push JSON:", payload);
+    payload = event.data.json();
   } catch {
-    console.log("📩 Raw Push Text:", event.data.text());
+    console.log("Push non-json");
+    return;
   }
+
+  console.log("RAW PUSH:", payload);
+
+  event.waitUntil(displayNotification(payload));
 });
 
-/* ======================================================
-   OPTIONAL: FUTURE CACHE SUPPORT PLACEHOLDER
-====================================================== */
-/*
-self.addEventListener("fetch", (event) => {
-  // Future offline caching logic can go here
+/* =========================================================
+   CLICK ACTION
+========================================================= */
+self.addEventListener("notificationclick", (event) => {
+
+  event.notification.close();
+
+  const target = event.notification?.data?.url || "/merchant";
+
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true })
+      .then((clientsArr) => {
+
+        for (const client of clientsArr) {
+          if (client.url.includes(target) && "focus" in client)
+            return client.focus();
+        }
+
+        return clients.openWindow(target);
+      })
+  );
 });
-*/

@@ -1,47 +1,107 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  getAuth,
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+} from "firebase/auth";
 import { setActiveRole } from "../../utils/activeRole";
-
-/**
- * =========================================================
- * ADMIN LOGIN – UI ALIGNED WITH CUSTOMER & MERCHANT
- * ---------------------------------------------------------
- * ✔ Same layout
- * ✔ Same card style
- * ✔ Same UX
- * ✔ No MUI
- * =========================================================
- */
 
 export default function AdminLogin() {
   const navigate = useNavigate();
+  const auth = getAuth();
 
   const [mobile, setMobile] = useState("");
-  const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
+  const [confirmation, setConfirmation] = useState(null);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const login = () => {
+  /* ================= SEND OTP ================= */
+  const sendOTP = async () => {
     setError("");
 
-    // 🔐 HARD-CODED ADMIN
-    if (mobile === "7386361725" && password === "45#67") {
+    if (!mobile || mobile.length !== 10) {
+      setError("Enter valid 10-digit mobile number");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // Prevent duplicate recaptcha
+      if (!window.recaptchaVerifier) {
+        window.recaptchaVerifier = new RecaptchaVerifier(
+          "recaptcha-container",
+          { size: "invisible" },
+          auth
+        );
+      }
+
+      const appVerifier = window.recaptchaVerifier;
+
+      const result = await signInWithPhoneNumber(
+        auth,
+        "+91" + mobile,
+        appVerifier
+      );
+
+      setConfirmation(result);
+      alert("OTP sent. Use Firebase test OTP if configured.");
+
+    } catch (err) {
+      console.error("OTP Error:", err);
+      setError("Failed to send OTP");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* ================= VERIFY OTP ================= */
+  const verifyOTP = async () => {
+    setError("");
+
+    if (!otp) {
+      setError("Enter OTP");
+      return;
+    }
+
+    if (!confirmation) {
+      setError("Send OTP first");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const result = await confirmation.confirm(otp);
+      const user = result.user;
+
+      console.log("✅ Admin Logged In UID:", user.uid);
+
+      // Store mobile for session
       localStorage.setItem("mobile", mobile);
+
+      // 🔒 IMPORTANT: Set role properly
       setActiveRole("admin");
+
       navigate("/admin", { replace: true });
-    } else {
-      setError("Invalid admin credentials");
+
+    } catch (err) {
+      console.error("OTP Verify Error:", err);
+      setError("Invalid OTP");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div style={styles.page}>
-      {/* HOME */}
       <div onClick={() => navigate("/")} style={styles.homeBtn}>
         ← Home
       </div>
 
       <div style={styles.card}>
-        {/* LOGO */}
         <img
           src="/logo/oshiro-logo-compact-3.png"
           alt="OshirO"
@@ -49,11 +109,8 @@ export default function AdminLogin() {
         />
 
         <h2 style={styles.title}>Admin Login</h2>
-        <p style={styles.subtitle}>
-          Authorized access only
-        </p>
+        <p style={styles.subtitle}>Authorized access only</p>
 
-        {/* MOBILE */}
         <input
           type="tel"
           value={mobile}
@@ -62,29 +119,39 @@ export default function AdminLogin() {
           style={styles.input}
         />
 
-        {/* PASSWORD */}
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Password"
-          style={styles.input}
-        />
+        {!confirmation ? (
+          <button onClick={sendOTP} style={styles.button} disabled={loading}>
+            {loading ? "Sending..." : "Send OTP →"}
+          </button>
+        ) : (
+          <>
+            <input
+              type="text"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+              placeholder="Enter OTP"
+              style={styles.input}
+            />
+
+            <button
+              onClick={verifyOTP}
+              style={styles.button}
+              disabled={loading}
+            >
+              {loading ? "Verifying..." : "Verify OTP →"}
+            </button>
+          </>
+        )}
 
         {error && <div style={styles.error}>{error}</div>}
 
-        {/* CTA */}
-        <button onClick={login} style={styles.button}>
-          Login →
-        </button>
+        <div id="recaptcha-container"></div>
       </div>
     </div>
   );
 }
 
-/* ======================
-   STYLES (SAME AS OTHERS)
-====================== */
+/* ================= STYLES ================= */
 
 const styles = {
   page: {

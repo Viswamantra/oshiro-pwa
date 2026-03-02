@@ -1,8 +1,11 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
+import { getFunctions } from "firebase/functions";
 
-/* ================= CONFIG ================= */
+/* =========================================================
+   FIREBASE CONFIG
+========================================================= */
 
 const firebaseConfig = {
   apiKey: "AIzaSyBekN6ULTaosrBQzv-JvBlnMcCOMXZ-_JU",
@@ -13,53 +16,46 @@ const firebaseConfig = {
   appId: "1:1066886336420:web:458379909954c206917b31",
 };
 
-/* ================= APP ================= */
+/* =========================================================
+   SAFE APP INIT
+========================================================= */
 
 export const app =
-  getApps().length === 0
-    ? initializeApp(firebaseConfig)
-    : getApp();
+  getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-/* ================= CORE ================= */
+/* =========================================================
+   CORE EXPORTS
+========================================================= */
 
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 
-/* ================= MESSAGING ================= */
+/* 🔥 FIX — REGION MATCH */
+export const functions = getFunctions(app, "asia-south1");
 
-let _messaging = null;
-let _initPromise = null;
+/* =========================================================
+   MESSAGING (LAZY + SAFE)
+========================================================= */
+
+let messagingInstance = null;
 
 export async function getFirebaseMessaging() {
+  try {
+    if (typeof window === "undefined") return null;
 
-  if (typeof window === "undefined") return null;
+    const { getMessaging, isSupported } =
+      await import("firebase/messaging");
 
-  if (!("serviceWorker" in navigator)) return null;
-  if (!("Notification" in window)) return null;
-  if (!("PushManager" in window)) return null;
+    const supported = await isSupported();
+    if (!supported) return null;
 
-  if (_messaging) return _messaging;
-  if (_initPromise) return _initPromise;
-
-  _initPromise = (async () => {
-
-    try {
-
-      const { isSupported, getMessaging } =
-        await import("firebase/messaging");
-
-      const supported = await isSupported();
-      if (!supported) return null;
-
-      _messaging = getMessaging(app);
-      return _messaging;
-
-    } catch (err) {
-      console.error("Messaging init error:", err);
-      return null;
+    if (!messagingInstance) {
+      messagingInstance = getMessaging(app);
     }
 
-  })();
-
-  return _initPromise;
+    return messagingInstance;
+  } catch (err) {
+    console.warn("Messaging not available:", err.message);
+    return null;
+  }
 }

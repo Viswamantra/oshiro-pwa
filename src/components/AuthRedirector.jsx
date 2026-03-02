@@ -1,101 +1,71 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { collection, query, where, getDocs, doc, getDoc } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
+import { useAuth } from "../context/AuthContext";
 import { ROUTES } from "../constants/routes";
-import { getActiveRole } from "../utils/activeRole";
 
 /**
- * PUBLIC ROUTES — never blocked
+ * FINAL STABLE AUTH REDIRECTOR
+ * Handles login routes correctly
  */
-const PUBLIC_ROUTES = [
-  ROUTES.HOME,
-  ROUTES.MERCHANT_LOGIN,
-  ROUTES.MERCHANT_REGISTER,
-  ROUTES.CUSTOMER_LOGIN,
-  ROUTES.ADMIN_LOGIN,
-];
 
 export default function AuthRedirector({ children }) {
+  const { user, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    async function guard() {
-      const path = location.pathname;
+    if (loading) return;
 
-      const mobile = localStorage.getItem("mobile");
-      const activeRole = getActiveRole();
+    const path = location.pathname;
 
-      /* ===============================
-         0️⃣ Always allow public routes
-      =============================== */
-      if (PUBLIC_ROUTES.includes(path)) {
-        setChecking(false);
+    if (!user) return;
+
+    const checkRole = async () => {
+      const uid = user.uid;
+
+      // ===== ADMIN =====
+      const adminSnap = await getDoc(doc(db, "admins", uid));
+      if (adminSnap.exists()) {
+        if (path === "/admin/login") {
+          navigate("/admin", { replace: true });
+        }
         return;
       }
 
-      /* ===============================
-         1️⃣ NOT LOGGED IN
-      =============================== */
-      if (!mobile || !activeRole) {
-        navigate(ROUTES.HOME, { replace: true });
-        setChecking(false);
-        return;
-      }
+      // ===== MERCHANT =====
+      const merchantSnap = await getDoc(doc(db, "merchants", uid));
+      if (merchantSnap.exists()) {
 
-      /* ===============================
-         2️⃣ ADMIN (no Firestore)
-      =============================== */
-      if (activeRole === "admin") {
-        setChecking(false);
-        return;
-      }
-
-      /* ===============================
-         3️⃣ MERCHANT
-      =============================== */
-      if (activeRole === "merchant") {
-        const q = query(
-          collection(db, "merchants"),
-          where("mobile", "==", mobile)
-        );
-        const snap = await getDocs(q);
-
-        if (snap.empty) {
-          navigate(ROUTES.HOME, { replace: true });
-          setChecking(false);
+        // 🔥 THIS FIXES YOUR ISSUE
+        if (path === "/merchant/login") {
+          navigate("/merchant", { replace: true });
           return;
         }
 
-        setChecking(false);
         return;
       }
 
-      /* ===============================
-         4️⃣ CUSTOMER
-      =============================== */
-      if (activeRole === "customer") {
-        const ref = doc(db, "customers", mobile);
-        const snap = await getDoc(ref);
+      // ===== CUSTOMER =====
+      const customerSnap = await getDoc(doc(db, "customers", uid));
+      if (customerSnap.exists()) {
 
-        if (!snap.exists()) {
-          navigate(ROUTES.HOME, { replace: true });
-          setChecking(false);
+        if (path === "/customer-login") {
+          navigate("/customer", { replace: true });
           return;
         }
 
-        setChecking(false);
         return;
       }
 
-      setChecking(false);
-    }
+    };
 
-    guard();
-  }, [location.pathname, navigate]);
+    checkRole();
 
-  if (checking) return null;
+  }, [user, loading, location.pathname, navigate]);
+
+  if (loading) return null;
+
   return children;
 }

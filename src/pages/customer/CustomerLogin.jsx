@@ -1,236 +1,230 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { setActiveRole } from "../../utils/activeRole";
-
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "../../firebase";
-
 import {
-  initMessaging,
-  updateFCMToken,
-} from "../../firebase";
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+} from "firebase/auth";
+import {
+  doc,
+  setDoc,
+  serverTimestamp,
+  getDoc,
+} from "firebase/firestore";
+
+import { auth, db } from "../../firebase/barrel.js";
+import { generateAndSaveToken } from "../../services/fcmToken";
 
 export default function CustomerLogin() {
-
   const navigate = useNavigate();
 
   const [mobile, setMobile] = useState("");
   const [name, setName] = useState("");
-  const [nameError, setNameError] = useState("");
+  const [otp, setOtp] = useState("");
+  const [confirmation, setConfirmation] = useState(null);
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  /* ================= CLEANUP RECAPTCHA ================= */
+  useEffect(() => {
+    return () => {
+      if (window.recaptchaVerifier) {
+        window.recaptchaVerifier.clear();
+        window.recaptchaVerifier = null;
+      }
+    };
+  }, []);
+
+  /* ================= MOBILE VALIDATION ================= */
+  const handleMobileChange = (e) => {
+    const digits = e.target.value.replace(/\D/g, "");
+    setMobile(digits.slice(0, 10));
+  };
 
   /* ================= NAME VALIDATION ================= */
   const handleNameChange = (e) => {
     const value = e.target.value;
-
-    if (!/^[A-Za-z]*$/.test(value)) {
-      setNameError("Only English letters allowed");
-      return;
-    }
-
-    if (value.length > 10) {
-      setNameError("Maximum 10 characters");
-      return;
-    }
-
-    setNameError("");
+    if (!/^[A-Za-z ]*$/.test(value)) return;
+    if (value.length > 30) return;
     setName(value);
   };
 
-  /* ================= MOBILE VALIDATION ================= */
-  const handleMobileChange = (e) => {
-    const value = e.target.value.replace(/\D/g, "");
-    if (value.length <= 10) setMobile(value);
-  };
-
-  /* ================= SAFE LOCATION ================= */
-  const getLocationSafe = () => {
-    return new Promise((resolve, reject) => {
-
-      if (!navigator.geolocation) {
-        reject("No GPS");
-        return;
-      }
-
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          resolve({
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-          });
-        },
-        () => {
-          navigator.geolocation.getCurrentPosition(
-            (pos2) => {
-              resolve({
-                lat: pos2.coords.latitude,
-                lng: pos2.coords.longitude,
-              });
-            },
-            reject,
-            { enableHighAccuracy: false, timeout: 15000 }
-          );
-        },
-        { enableHighAccuracy: true, timeout: 7000 }
+  /* ================= SETUP RECAPTCHA ================= */
+  const setupRecaptcha = () => {
+    if (!window.recaptchaVerifier) {
+      window.recaptchaVerifier = new RecaptchaVerifier(
+        "recaptcha-container",
+        { size: "invisible" },
+        auth
       );
-    });
+    }
   };
 
-  /* ================= LOGIN ================= */
-  const handleSubmit = async () => {
+  /* ================= SEND OTP ================= */
+  const sendOTP = async () => {
+    if (loading) return;
 
-    if (!name || mobile.length !== 10) {
-      setNameError("Valid name and mobile required");
+    if (!name.trim()) {
+      setError("Name is required");
+      return;
+    }
+
+    if (mobile.length !== 10) {
+      setError("Enter valid 10-digit mobile number");
       return;
     }
 
     try {
-
       setLoading(true);
-      console.log("🔥 Customer login start");
+      setError("");
 
-      /* ================= SAVE CUSTOMER ================= */
-      await setDoc(
-        doc(db, "customers", mobile),
-        {
-          mobile,
-          name,
-          role: "customer",
-          lastLoginAt: serverTimestamp(),
-        },
-        { merge: true }
+      setupRecaptcha();
+
+      const formattedPhone = `+91${mobile}`;
+
+      const confirmationResult = await signInWithPhoneNumber(
+        auth,
+        formattedPhone,
+        window.recaptchaVerifier
       );
 
-      console.log("✅ Customer base saved");
-
-      /* ================= SESSION ================= */
-      localStorage.setItem("mobile", mobile);
-      localStorage.setItem("name", name);
-      setActiveRole("customer");
-
-      /* ================= FCM TOKEN (CRITICAL — DO BEFORE NAV) ================= */
-      try {
-
-        console.log("📲 Initializing Messaging...");
-
-        await initMessaging();
-
-        console.log("📲 Updating FCM Token...");
-
-        await updateFCMToken({
-          userId: mobile,
-          role: "customers",
-        });
-
-        console.log("✅ Customer token saved");
-
-      } catch (e) {
-        console.log("⚠ Token setup failed (non-blocking)", e);
-      }
-
-      /* ================= NAVIGATE ================= */
-      navigate("/customer", { replace: true });
-
-      /* ================= BACKGROUND JOBS ================= */
-      setTimeout(async () => {
-
-        try {
-
-          console.log("🌍 Background jobs start");
-
-          /* LOCATION SAVE */
-          try {
-
-            const loc = await getLocationSafe();
-
-            await setDoc(
-              doc(db, "customers", mobile),
-              {
-                lat: loc.lat,
-                lng: loc.lng,
-                selectedDistanceKm: 3,
-                lastLocationUpdate: serverTimestamp(),
-              },
-              { merge: true }
-            );
-
-            console.log("✅ Location saved");
-
-          } catch (e) {
-            console.log("⚠ Location skipped", e);
-          }
-
-        } catch (err) {
-          console.log("Background job error", err);
-        }
-
-      }, 1500);
-
+      setConfirmation(confirmationResult);
     } catch (err) {
-
-      console.error("Login failed:", err);
-      setNameError("Something went wrong. Please try again.");
-
+      console.error("OTP send failed:", err);
+      setError(err.message || "OTP send failed. Try again.");
     } finally {
-
       setLoading(false);
-
     }
   };
 
-  const isFormValid =
-    mobile.length === 10 && name && !nameError && !loading;
+  /* ================= VERIFY OTP ================= */
+  const verifyOTP = async () => {
+    if (loading) return;
+
+    if (otp.length !== 6) {
+      setError("Enter valid 6-digit OTP");
+      return;
+    }
+
+    if (!confirmation) {
+      setError("Session expired. Request OTP again.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError("");
+
+      const result = await confirmation.confirm(otp);
+      const user = result.user;
+      const uid = user.uid;
+
+      /* ===== CREATE / UPDATE CUSTOMER DOC ===== */
+      const ref = doc(db, "customers", uid);
+      const snap = await getDoc(ref);
+
+      if (!snap.exists()) {
+        await setDoc(ref, {
+          uid,
+          mobile: user.phoneNumber,
+          name: name.trim(),
+          role: "customer",
+          createdAt: serverTimestamp(),
+          lastLoginAt: serverTimestamp(),
+        });
+      } else {
+        await setDoc(
+          ref,
+          {
+            name: name.trim(),
+            lastLoginAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
+
+      /* =====================================================
+         🔥 FCM FIRST — CRITICAL FIX (NO RACE CONDITION)
+      ====================================================== */
+      try {
+        await generateAndSaveToken(uid, "customer");
+        console.log("[LOGIN] FCM token generated before navigation");
+      } catch (e) {
+        console.log("[LOGIN] FCM failed but login unaffected:", e.message);
+      }
+
+      /* ===== NAVIGATE AFTER TOKEN ===== */
+      navigate("/customer", { replace: true });
+
+    } catch (err) {
+      console.error("OTP verification failed:", err);
+      setError("Invalid or expired OTP.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div style={styles.page}>
-
-      <div onClick={() => navigate("/")} style={styles.homeBtn}>
-        ← Home
-      </div>
-
       <div style={styles.card}>
+        <h2 style={styles.title}>Customer Login</h2>
 
-        <img
-          src="/logo/oshiro-logo-compact-3.png"
-          alt="OshirO"
-          style={styles.logo}
-        />
+        {!confirmation && (
+          <>
+            <input
+              type="tel"
+              value={mobile}
+              onChange={handleMobileChange}
+              placeholder="Enter 10-digit mobile number"
+              maxLength={10}
+              style={styles.input}
+            />
 
-        <h2 style={styles.title}>Welcome to OshirO 👋</h2>
+            <input
+              type="text"
+              value={name}
+              onChange={handleNameChange}
+              placeholder="Enter your name"
+              style={styles.input}
+            />
 
-        <p style={styles.subtitle}>
-          Where every corner has a discount
-        </p>
+            {error && <div style={styles.error}>{error}</div>}
 
-        <input
-          type="tel"
-          value={mobile}
-          onChange={handleMobileChange}
-          placeholder="Mobile number"
-          style={styles.input}
-        />
+            <button
+              onClick={sendOTP}
+              style={styles.button}
+              disabled={loading}
+            >
+              {loading ? "Sending..." : "Send OTP"}
+            </button>
+          </>
+        )}
 
-        <input
-          type="text"
-          value={name}
-          onChange={handleNameChange}
-          placeholder="Your name (Eg: Ravi)"
-          style={styles.input}
-        />
+        {confirmation && (
+          <>
+            <input
+              type="text"
+              value={otp}
+              onChange={(e) =>
+                setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
+              }
+              placeholder="Enter 6-digit OTP"
+              maxLength={6}
+              style={styles.input}
+            />
 
-        {nameError && <div style={styles.error}>{nameError}</div>}
+            {error && <div style={styles.error}>{error}</div>}
 
-        <button
-          onClick={handleSubmit}
-          disabled={!isFormValid}
-          style={{
-            ...styles.button,
-            opacity: isFormValid ? 1 : 0.6,
-          }}
-        >
-          {loading ? "Please wait..." : "Continue →"}
-        </button>
+            <button
+              onClick={verifyOTP}
+              style={styles.button}
+              disabled={loading}
+            >
+              {loading ? "Verifying..." : "Verify & Continue"}
+            </button>
+          </>
+        )}
 
+        <div id="recaptcha-container"></div>
       </div>
     </div>
   );
@@ -241,72 +235,40 @@ export default function CustomerLogin() {
 const styles = {
   page: {
     minHeight: "100vh",
-    background: "linear-gradient(180deg, #f8fafc, #eef2ff)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: 16,
-    position: "relative",
-  },
-  homeBtn: {
-    position: "absolute",
-    top: 20,
-    left: 16,
-    padding: "6px 14px",
-    borderRadius: 20,
-    background: "#f1f5f9",
-    color: "#2563eb",
-    fontSize: 14,
-    fontWeight: 500,
-    cursor: "pointer",
+    background: "#f5f7fb",
   },
   card: {
-    width: "100%",
-    maxWidth: 360,
-    padding: 28,
-    borderRadius: 16,
-    background: "#ffffff",
-    textAlign: "center",
-    boxShadow: "0 16px 32px rgba(0, 0, 0, 0.1)",
+    width: 340,
+    padding: 24,
+    borderRadius: 14,
+    background: "#fff",
+    boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
   },
-  logo: {
-    height: 56,
-    marginBottom: 24,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: 600,
-    marginBottom: 6,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#6b7280",
-    marginBottom: 20,
-  },
+  title: { marginBottom: 16 },
   input: {
     width: "100%",
-    height: 48,
-    padding: "0 14px",
-    fontSize: 16,
-    borderRadius: 10,
-    border: "1px solid #d1d5db",
-    marginBottom: 14,
-  },
-  error: {
-    marginBottom: 10,
-    fontSize: 14,
-    color: "#dc2626",
+    height: 44,
+    marginBottom: 12,
+    padding: "0 10px",
+    borderRadius: 8,
+    border: "1px solid #ccc",
   },
   button: {
     width: "100%",
-    height: 48,
-    marginTop: 12,
-    borderRadius: 10,
+    height: 44,
+    borderRadius: 8,
     border: "none",
-    background: "linear-gradient(135deg, #2563eb, #1e40af)",
+    background: "#2563eb",
     color: "#fff",
-    fontSize: 16,
     fontWeight: 600,
     cursor: "pointer",
+  },
+  error: {
+    color: "red",
+    fontSize: 14,
+    marginBottom: 10,
   },
 };

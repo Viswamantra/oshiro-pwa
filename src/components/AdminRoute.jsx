@@ -1,23 +1,47 @@
-import React from "react";
-import { Navigate } from "react-router-dom";
-
 /**
  * =========================================================
- * ADMIN ROUTE GUARD (ISOLATED)
+ * ADMIN ROUTE GUARD — UID BASED PRODUCTION VERSION
  * ---------------------------------------------------------
- * ✔ Only checks admin session
- * ✔ Does NOT touch merchant / customer
+ * ✔ Uses AuthContext (single source of truth)
+ * ✔ Role from Firestore
+ * ✔ No localStorage dependency
+ * ✔ Isolated from merchant/customer dashboards
  * ✔ Prevents cross-dashboard breakage
  * =========================================================
  */
 
-export default function AdminRoute({ children }) {
-  const adminRaw = localStorage.getItem("admin");
-  const admin = adminRaw ? JSON.parse(adminRaw) : null;
+import React from "react";
+import { Navigate, useLocation } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
 
-  if (!admin || admin.role !== "admin") {
+export default function AdminRoute({ children }) {
+  const { user, role, loading } = useAuth();
+  const location = useLocation();
+
+  /* ===============================
+     1️⃣ AUTH LOADING
+  =============================== */
+  if (loading) {
+    return null; // silent bootstrap
+  }
+
+  /* ===============================
+     2️⃣ NOT LOGGED IN
+  =============================== */
+  if (!user) {
+    return <Navigate to="/admin/login" replace state={{ from: location }} />;
+  }
+
+  /* ===============================
+     3️⃣ ROLE VALIDATION
+  =============================== */
+  if (role !== "admin") {
+    console.warn("[ROUTE] Unauthorized admin access attempt");
     return <Navigate to="/admin/login" replace />;
   }
 
+  /* ===============================
+     4️⃣ AUTHORIZED
+  =============================== */
   return children;
 }

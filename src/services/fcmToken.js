@@ -1,198 +1,134 @@
 /**
  * =========================================================
- * OSHIRO FCM TOKEN SERVICE — ENTERPRISE PRODUCTION VERSION
- * ---------------------------------------------------------
- * ✔ Merchant + Customer + Admin unified
- * ✔ Multi-device merchant token array (deduplicated)
- * ✔ Token refresh safe
- * ✔ Single foreground listener attach
- * ✔ Service Worker verified
- * ✔ Permission safe
- * ✔ Mobile browser safe
- * ✔ Silent data push ready
- * ✔ Production logging structured
+ * OSHIRO FCM TOKEN SERVICE — FINAL STABLE VERSION
+ * =========================================================
+ * ✔ Tokens stored in fcmTokens/{uid}
+ * ✔ Multi-device safe
+ * ✔ Reinstall safe
+ * ✔ Role safe
+ * ✔ Cloud Function friendly
+ * ✔ Prevent duplicate writes
+ * ✔ Vite-safe dynamic imports
  * =========================================================
  */
 
-import { getToken, onMessage } from "firebase/messaging";
 import {
   doc,
   setDoc,
   serverTimestamp,
   arrayUnion,
+  arrayRemove,
   getDoc,
+  updateDoc,
 } from "firebase/firestore";
 
 import { db, getFirebaseMessaging } from "../firebase/index";
 
-/* =========================================================
-   INTERNAL FLAGS
-========================================================= */
-let _foregroundListenerAttached = false;
+/* ========================================================= */
+let listenerAttached = false;
+let currentToken = null;
 
 /* =========================================================
-   WAIT FOR SERVICE WORKER READY
+   WAIT FOR SERVICE WORKER
 ========================================================= */
-async function waitForServiceWorkerReady() {
+async function waitForSW() {
+  if (!("serviceWorker" in navigator)) return null;
   try {
-    if (!("serviceWorker" in navigator)) {
-      console.log("[FCM] ❌ Service Worker not supported");
-      return null;
-    }
-
-    const registration = await navigator.serviceWorker.ready;
-
-    if (!registration) {
-      console.log("[FCM] ❌ SW ready returned null");
-      return null;
-    }
-
-    console.log("[FCM] ✅ SW READY:", registration.scope);
-    return registration;
-
-  } catch (err) {
-    console.error("[FCM] ❌ SW READY ERROR:", err);
+    return await navigator.serviceWorker.ready;
+  } catch {
     return null;
   }
 }
 
 /* =========================================================
-   SAVE TOKEN SAFELY (DEDUPLICATE FOR MERCHANT)
+   SAVE TOKEN → fcmTokens/{uid}
 ========================================================= */
-async function saveTokenToFirestore(id, role, token) {
-
-  const collectionMap = {
-    merchant: "merchants",
-    customer: "customers",
-    admin: "admins",
-  };
-
-  const collectionName = collectionMap[role] || "customers";
-
-  const ref = doc(db, collectionName, id);
+async function saveToken(uid, role, token) {
+  const ref = doc(db, "fcmTokens", uid);
   const snap = await getDoc(ref);
 
-  const basePayload = {
-    fcmToken: token,
-    tokenUpdatedAt: serverTimestamp(),
-  };
-
-  /* ---------- MERCHANT MULTI DEVICE SAFE ---------- */
-
-  if (role === "merchant") {
-
-    let tokens = [];
-
-    if (snap.exists()) {
-      tokens = snap.data()?.fcmTokens || [];
-    }
-
-    if (!tokens.includes(token)) {
-      basePayload.fcmTokens = arrayUnion(token);
-    }
-
-    await setDoc(ref, basePayload, { merge: true });
-
-    console.log("[FCM] ✅ Merchant token saved (dedup)");
-
-  } else {
-
-    await setDoc(ref, basePayload, { merge: true });
-
-    console.log(`[FCM] ✅ ${role} token saved`);
+  if (!snap.exists()) {
+    await setDoc(ref, {
+      role,
+      tokens: [token],
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    console.log("[FCM] New device registered");
+    return;
   }
+
+  await updateDoc(ref, {
+    role,
+    tokens: arrayUnion(token),
+    updatedAt: serverTimestamp(),
+  });
+
+  console.log("[FCM] Device added");
 }
 
 /* =========================================================
-   FOREGROUND LISTENER
+   REMOVE INVALID TOKEN
 ========================================================= */
-function attachForegroundListener(messaging) {
+export async function removeInvalidToken(uid, token) {
+  try {
+    const ref = doc(db, "fcmTokens", uid);
 
-  if (_foregroundListenerAttached) return;
+    await updateDoc(ref, {
+      tokens: arrayRemove(token),
+      updatedAt: serverTimestamp(),
+    });
 
-  _foregroundListenerAttached = true;
+    console.log("[FCM] Invalid token removed");
+  } catch {}
+}
+
+/* =========================================================
+   ATTACH FOREGROUND LISTENER
+========================================================= */
+async function attachListener(messaging) {
+  if (listenerAttached) return;
+  listenerAttached = true;
+
+  const { onMessage } = await import("firebase/messaging");
 
   onMessage(messaging, (payload) => {
-
-    console.log("[FCM] 📩 Foreground Push:", payload);
-
-    /* ---------- OPTIONAL GLOBAL EVENT ---------- */
+    console.log("[FCM] Foreground push:", payload);
 
     window.dispatchEvent(
       new CustomEvent("oshiro:push", { detail: payload })
     );
-
-    /* ---------- FALLBACK ALERT ---------- */
-
-    if (payload?.notification?.title) {
-      console.log(
-        `[FCM] Notification → ${payload.notification.title}`
-      );
-    }
   });
-
-  console.log("[FCM] ✅ Foreground listener attached");
 }
 
 /* =========================================================
-   MAIN TOKEN FUNCTION
-   role = merchant | customer | admin
+   MAIN TOKEN FLOW
 ========================================================= */
 export async function generateAndSaveToken(
-  id,
+  uid,
   role = "customer"
 ) {
-
-  console.log("[FCM] 🚀 TOKEN FLOW START", { id, role });
-
   try {
+    if (!uid) return null;
+    if (!("Notification" in window)) return null;
 
-    /* ================= BASIC GUARDS ================= */
-
-    if (!id) {
-      console.log("[FCM] ❌ Missing ID");
-      return null;
-    }
-
-    if (!("Notification" in window)) {
-      console.log("[FCM] ❌ Notification API not available");
-      return null;
-    }
-
-    /* ================= PERMISSION ================= */
-
+    /* ---------- PERMISSION ---------- */
     let permission = Notification.permission;
-
     if (permission !== "granted") {
-      console.log("[FCM] 🔔 Requesting permission...");
       permission = await Notification.requestPermission();
     }
+    if (permission !== "granted") return null;
 
-    if (permission !== "granted") {
-      console.log("[FCM] ❌ Permission denied");
-      return null;
-    }
-
-    console.log("[FCM] ✅ Permission granted");
-
-    /* ================= MESSAGING ================= */
-
+    /* ---------- MESSAGING ---------- */
     const messaging = await getFirebaseMessaging();
+    if (!messaging) return null;
 
-    if (!messaging) {
-      console.log("[FCM] ❌ Messaging not available");
-      return null;
-    }
-
-    /* ================= SERVICE WORKER ================= */
-
-    const registration = await waitForServiceWorkerReady();
-
+    /* ---------- SERVICE WORKER ---------- */
+    const registration = await waitForSW();
     if (!registration) return null;
 
-    /* ================= TOKEN ================= */
-
-    console.log("[FCM] 📡 Requesting token...");
+    /* ---------- DYNAMIC IMPORT ---------- */
+    const { getToken } = await import("firebase/messaging");
 
     const token = await getToken(messaging, {
       vapidKey:
@@ -200,28 +136,45 @@ export async function generateAndSaveToken(
       serviceWorkerRegistration: registration,
     });
 
-    if (!token) {
-      console.log("[FCM] ❌ Token null");
-      return null;
+    if (!token) return null;
+
+    /* ---------- PREVENT DUPLICATE WRITE ---------- */
+    if (token === currentToken) {
+      await attachListener(messaging);
+      return token;
     }
 
-    console.log("[FCM] 📦 TOKEN:", token);
+    currentToken = token;
 
-    /* ================= SAVE ================= */
+    await saveToken(uid, role, token);
 
-    await saveTokenToFirestore(id, role, token);
+    await attachListener(messaging);
 
-    /* ================= FOREGROUND LISTENER ================= */
-
-    attachForegroundListener(messaging);
-
-    console.log("[FCM] 🎉 TOKEN FLOW COMPLETE");
+    console.log("[FCM] Token active for UID:", uid);
 
     return token;
-
   } catch (err) {
-
-    console.error("[FCM] ❌ TOKEN FLOW CRASH:", err);
+    console.error("[FCM] Token error:", err);
     return null;
   }
+}
+
+/* =========================================================
+   FORCE TOKEN REFRESH
+========================================================= */
+export async function refreshFCMToken(uid, role) {
+  try {
+    const messaging = await getFirebaseMessaging();
+    if (!messaging) return;
+
+    const { deleteToken } = await import("firebase/messaging");
+
+    await deleteToken(messaging);
+
+    currentToken = null;
+
+    await generateAndSaveToken(uid, role);
+
+    console.log("[FCM] Token refreshed");
+  } catch {}
 }

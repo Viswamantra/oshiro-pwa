@@ -1,67 +1,45 @@
 /**
- * 🔒 LOCKED AFTER PHASE 2.6
- * Central Firebase exports
- * Only ADD new exports – do NOT rename or remove
- */
-
-/**
  * =========================================================
- * FIREBASE BARREL (SINGLE ENTRY POINT)
- * ---------------------------------------------------------
- * ✔ Rollup / Vite / Vercel safe
- * ✔ Explicit named exports only
- * ✔ Prevents import/export mismatches
- * ✔ Synced with unified Leads system (2.7.x)
+ * OSHIRO FIREBASE BARREL
+ * CLEAN & STABLE EXPORTS
  * =========================================================
  */
 
-/* ======================
-   CORE FIREBASE
-====================== */
-export { db, auth } from "./index";
+/* ================= CORE ================= */
+export * from "./index.js";
+export * from "./functions.js";
 
-/* ======================
-   MERCHANT API (CRITICAL)
-====================== */
+/* ================= MESSAGING ================= */
 export {
-  getMerchantByMobile,
+  initMessaging,
+  updateFCMToken,
+} from "./messaging.js";
+
+/* ================= CATEGORY ================= */
+export {
+  fetchActiveCategories,
+} from "./categories.js";
+
+/* ================= CUSTOMER ================= */
+export * from "./customer.js";
+
+/* ================= MERCHANT ================= */
+export {
   registerMerchant,
+  getMerchantByUid,
+  getMerchantByMobile,
   fetchNearbyMerchants,
-} from "./merchants";
+} from "./merchants.js";
 
-/* ======================
-   CUSTOMER API
-====================== */
-// Includes:
-// - fetchCategories
-// - logCustomerVisit
-// - upsertCustomer
-export * from "./customer";
+/* ================= LEADS ================= */
+export * from "./leads.js";
 
-/* ======================
-   CATEGORIES
-====================== */
-export * from "./categories";
-
-/* ======================
-   OFFERS
-====================== */
-export * from "./offers";
-
-/* ======================
-   LEADS (NEW UNIFIED SYSTEM)
-====================== */
-// Exports:
-// - createLead
-// - fetchLeadsByMerchant
-// - LEAD_TYPES
-export * from "./leads";
-
-/* ======================
-   NOTIFICATIONS
-====================== */
-// Exports:
-// - enablePushNotifications
-// - saveMerchantFcmToken
-// - listenToForegroundMessages
-
+/* ================= OFFERS ================= */
+export {
+  createOffer,
+  fetchMerchantOffers,
+  fetchOffersByMerchantIds,
+  updateOffer,
+  deleteOffer,
+  autoExpireOffers,
+} from "./offers.js";

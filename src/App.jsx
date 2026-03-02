@@ -1,29 +1,26 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useEffect } from "react";
+import { onAuthStateChanged } from "firebase/auth";
 
-/* ========= FIREBASE MESSAGING ========= */
-import {
-  initMessaging,
-  listenForegroundMessages,
-  updateFCMToken,
-} from "./firebase";
+/* ================= FIREBASE ================= */
+import { auth, initMessaging, updateFCMToken } from "./firebase/barrel.js";
 
-/* ========= CONFIG ========= */
+/* ================= CONFIG ================= */
 import { APP_CONFIG } from "./config/appConfig";
 
-/* ========= HOME ========= */
+/* ================= HOME ================= */
 import Home from "./pages/Home.jsx";
 
-/* ========= AUTH (PUBLIC) ========= */
+/* ================= AUTH (PUBLIC) ================= */
 import AdminLogin from "./pages/auth/AdminLogin.jsx";
 import CustomerLogin from "./pages/customer/CustomerLogin.jsx";
 import MerchantLogin from "./pages/merchant/MerchantLogin.jsx";
 import MerchantRegister from "./pages/merchant/MerchantRegister.jsx";
 
-/* ========= ROUTE GUARD ========= */
+/* ================= ROUTE GUARD ================= */
 import RouteGuard from "./guards/RouteGuard.jsx";
 
-/* ========= ADMIN ========= */
+/* ================= ADMIN ================= */
 import AdminLayout from "./components/AdminLayout.jsx";
 import Dashboard from "./pages/admin/Dashboard.jsx";
 import Customers from "./pages/admin/Customers.jsx";
@@ -33,13 +30,13 @@ import Offers from "./pages/admin/Offers.jsx";
 import GeoAlerts from "./pages/admin/GeoAlerts.jsx";
 import Notifications from "./pages/admin/Notifications.jsx";
 
-/* ========= CUSTOMER ========= */
+/* ================= CUSTOMER ================= */
 import CustomerLayout from "./components/CustomerLayout.jsx";
 import CustomerDashboard from "./pages/customer/CustomerDashboard.jsx";
 import OfferDetails from "./pages/customer/OfferDetails.jsx";
 import CustomerLocked from "./pages/customer/CustomerLocked.jsx";
 
-/* ========= MERCHANT ========= */
+/* ================= MERCHANT ================= */
 import MerchantLayout from "./components/MerchantLayout.jsx";
 import MerchantDashboard from "./pages/merchant/MerchantDashboard.jsx";
 import MerchantOffers from "./pages/merchant/MerchantOffers.jsx";
@@ -49,87 +46,59 @@ import MerchantLocation from "./pages/merchant/MerchantLocation.jsx";
 
 export default function App() {
 
-  /* ================= APP START FCM INIT + TOKEN REFRESH ================= */
+  /* =========================================================
+     AUTH + FCM BOOTSTRAP (ENTERPRISE SAFE)
+  ========================================================= */
   useEffect(() => {
 
-    const startMessaging = async () => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+
+      if (!user) {
+        console.log("🔓 No authenticated user");
+        return;
+      }
+
+      console.log("🔐 Authenticated UID:", user.uid);
 
       try {
 
-        console.log("🚀 App Start → Init Messaging");
-
-        /* INIT MESSAGING */
-        await initMessaging();
-
-        /* FOREGROUND LISTENER */
-        listenForegroundMessages();
-
-        console.log("✅ Messaging Initialized");
-
-        /* ================= TOKEN REFRESH ON APP START ================= */
-
-        const role = localStorage.getItem("activeRole");
-
-        if (!role) {
-          console.log("ℹ No active role found");
+        /* ================= SAFE NOTIFICATION CHECK ================= */
+        if (typeof Notification === "undefined") {
+          console.warn("⚠️ Notification API not supported in this browser");
           return;
         }
 
-        console.log("👤 Active Role:", role);
+        const permission = await Notification.requestPermission();
 
-        /* CUSTOMER TOKEN REFRESH */
-        if (role === "customer") {
-
-          const mobile = localStorage.getItem("mobile");
-
-          if (mobile) {
-
-            console.log("📲 Refreshing Customer Token");
-
-            await updateFCMToken({
-              userId: mobile,
-              role: "customers",
-            });
-
-            console.log("✅ Customer Token Synced");
-
-          }
-
+        if (permission !== "granted") {
+          console.warn("🔕 Notification permission not granted");
+          return;
         }
 
-        /* MERCHANT TOKEN REFRESH */
-        if (role === "merchant") {
+        console.log("🔔 Notification permission granted");
 
-          const merchantStr = localStorage.getItem("merchant");
+        /* ================= INIT FCM ================= */
+        const token = await initMessaging();
 
-          if (merchantStr) {
-
-            const merchant = JSON.parse(merchantStr);
-
-            console.log("📲 Refreshing Merchant Token");
-
-            await updateFCMToken({
-              userId: merchant.id,
-              role: "merchants",
-            });
-
-            console.log("✅ Merchant Token Synced");
-
-          }
-
+        if (!token) {
+          console.warn("⚠️ FCM token not generated");
+          return;
         }
 
-        console.log("🎉 App Start Messaging Flow Complete");
+        console.log("📲 FCM Token generated");
+
+        /* ================= STORE TOKEN ================= */
+        await updateFCMToken(user.uid, token);
+
+        console.log("✅ FCM Token updated in Firestore");
 
       } catch (err) {
-
-        console.log("⚠ App Start Messaging Error:", err);
-
+        console.error("❌ Messaging bootstrap failed:", err);
       }
 
-    };
+    });
 
-    startMessaging();
+    return () => unsubscribe();
 
   }, []);
 
@@ -138,23 +107,22 @@ export default function App() {
 
       {/* ================= PUBLIC ================= */}
       <Route path="/" element={<Home />} />
-
-      {/* ================= AUTH ================= */}
       <Route path="/admin-login" element={<AdminLogin />} />
       <Route path="/customer-login" element={<CustomerLogin />} />
       <Route path="/merchant/login" element={<MerchantLogin />} />
-      <Route path="/merchant/register" element={<MerchantRegister />} />
+      <Route path="/merchant-register" element={<MerchantRegister />} />
 
       {/* ================= ADMIN ================= */}
       <Route
-        path="/admin"
+        path="/admin/*"
         element={
-          <RouteGuard allowedRoles={["admin"]}>
+          <RouteGuard>
             <AdminLayout />
           </RouteGuard>
         }
       >
         <Route index element={<Dashboard />} />
+        <Route path="dashboard" element={<Dashboard />} />
         <Route path="customers" element={<Customers />} />
         <Route path="merchants" element={<Merchants />} />
         <Route path="categories" element={<Categories />} />
@@ -168,7 +136,7 @@ export default function App() {
         path="/customer/*"
         element={
           APP_CONFIG.CUSTOMER_ENABLED ? (
-            <RouteGuard allowedRoles={["customer"]}>
+            <RouteGuard>
               <CustomerLayout />
             </RouteGuard>
           ) : (
@@ -182,9 +150,9 @@ export default function App() {
 
       {/* ================= MERCHANT ================= */}
       <Route
-        path="/merchant"
+        path="/merchant/*"
         element={
-          <RouteGuard allowedRoles={["merchant"]}>
+          <RouteGuard>
             <MerchantLayout />
           </RouteGuard>
         }

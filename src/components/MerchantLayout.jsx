@@ -1,41 +1,82 @@
-import React from "react";
-import { Outlet, NavLink } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "../firebase";
 import { clearActiveRole } from "../utils/activeRole";
 
 /**
  * =========================================================
- * MERCHANT LAYOUT
+ * MERCHANT LAYOUT – UID BASED (FINAL CLEAN VERSION)
  * ---------------------------------------------------------
- * ✔ UI-only component
- * ✔ Logout clears history (UX-safe)
- * ✔ No auth logic inside layout
+ * ✔ No localStorage merchant object
+ * ✔ Firebase UID is single source of truth
+ * ✔ Fetches merchant document safely
+ * ✔ Approval badge supported
+ * ✔ Clean logout
  * =========================================================
  */
 
 export default function MerchantLayout() {
-  /* ======================
-     READ MERCHANT (UI ONLY)
-  ====================== */
-  let merchant = null;
-  try {
-    merchant = JSON.parse(localStorage.getItem("merchant"));
-  } catch {
-    merchant = null;
-  }
+  const navigate = useNavigate();
 
-  const isApproved = merchant?.status === "approved";
+  const [uid, setUid] = useState(null);
+  const [merchant, setMerchant] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
 
   /* ======================
-     LOGOUT (HARD RESET)
+     AUTH LISTENER
   ====================== */
-  const logout = () => {
-    localStorage.removeItem("merchant");
-    localStorage.removeItem("mobile");
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setUid(user.uid);
+      } else {
+        setUid(null);
+      }
+      setAuthReady(true);
+    });
+
+    return () => unsub();
+  }, []);
+
+  /* ======================
+     FETCH MERCHANT DOC
+  ====================== */
+  useEffect(() => {
+    if (!uid) return;
+
+    const fetchMerchant = async () => {
+      try {
+        const snap = await getDoc(doc(db, "merchants", uid));
+        if (snap.exists()) {
+          setMerchant(snap.data());
+        }
+      } catch (err) {
+        console.error("Failed to fetch merchant:", err);
+      }
+    };
+
+    fetchMerchant();
+  }, [uid]);
+
+  /* ======================
+     LOGOUT
+  ====================== */
+  const logout = async () => {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.warn("Signout error:", err);
+    }
+
     clearActiveRole();
-
-    // 🔥 UX-CORRECT: clears browser history
     window.location.replace("/");
   };
+
+  if (!authReady) return null;
+
+  const isApproved = merchant?.status === "approved";
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
@@ -90,6 +131,10 @@ export default function MerchantLayout() {
 
         <NavLink to="location" style={linkStyle}>
           Location
+        </NavLink>
+
+        <NavLink to="leads" style={linkStyle}>
+          Leads
         </NavLink>
       </nav>
 

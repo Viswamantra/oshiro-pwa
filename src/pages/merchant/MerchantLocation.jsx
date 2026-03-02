@@ -1,32 +1,25 @@
 import React, { useEffect, useState } from "react";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "../../firebase";
-
-/**
- * PRODUCTION SAFE LOCATION FILE
- */
+import { onAuthStateChanged } from "firebase/auth";
+import { db, auth } from "../../firebase";
 
 export default function MerchantLocation() {
-  let merchant = null;
-
-  try {
-    merchant = JSON.parse(localStorage.getItem("merchant"));
-  } catch {
-    merchant = null;
-  }
-
-  const merchantId =
-    merchant?.id ||
-    merchant?.uid ||
-    merchant?.docId ||
-    merchant?.merchantId ||
-    null;
-
+  const [uid, setUid] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
   const [lat, setLat] = useState(null);
   const [lng, setLng] = useState(null);
   const [address, setAddress] = useState("");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      setUid(user?.uid || null);
+      setAuthReady(true);
+    });
+
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -44,7 +37,7 @@ export default function MerchantLocation() {
   }, []);
 
   const saveLocation = async () => {
-    if (!merchantId) {
+    if (!uid) {
       setMsg("Merchant not logged in");
       return;
     }
@@ -58,15 +51,10 @@ export default function MerchantLocation() {
       setLoading(true);
 
       await setDoc(
-        doc(db, "merchants", merchantId),
+        doc(db, "merchants", uid),
         {
-          location: {
-            lat,
-            lng,
-            address: address || "",
-          },
+          location: { lat, lng, address: address || "" },
           profileComplete: true,
-          updatedAt: serverTimestamp(),
           locationUpdatedAt: serverTimestamp(),
         },
         { merge: true }
@@ -80,6 +68,8 @@ export default function MerchantLocation() {
       setLoading(false);
     }
   };
+
+  if (!authReady) return null;
 
   return (
     <div style={{ padding: 20 }}>

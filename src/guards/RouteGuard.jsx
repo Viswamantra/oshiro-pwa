@@ -1,48 +1,62 @@
+import { useEffect, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { getActiveRole } from "../utils/activeRole";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "../firebase/barrel.js";
+import { getActiveRole, clearActiveRole } from "../utils/activeRole";
 
-/**
- * =========================================================
- * ROUTE GUARD – FINAL & STABLE
- * ---------------------------------------------------------
- * ✔ Single source of truth: activeRole + mobile
- * ✔ Prevents role leakage
- * ✔ Refresh safe
- * ✔ No OTP / no auth provider
- * =========================================================
- */
-
-export default function RouteGuard({ allowedRoles, children }) {
+export default function RouteGuard({ children }) {
+  const [user, setUser] = useState(undefined);
   const location = useLocation();
 
-  const role = getActiveRole();
-  const mobile = localStorage.getItem("mobile");
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
 
-  /* ======================
-     NO SESSION
-  ====================== */
-  if (!role || !mobile) {
-    return (
-      <Navigate
-        to="/"
-        replace
-        state={{ from: location.pathname }}
-      />
-    );
+      // If Firebase user is gone, clear role
+      if (!firebaseUser) {
+        clearActiveRole();
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  /* ================= LOADING ================= */
+  if (user === undefined) {
+    return null;
   }
 
-  /* ======================
-     ROLE NOT ALLOWED
-  ====================== */
-  if (
-    !Array.isArray(allowedRoles) ||
-    !allowedRoles.includes(role)
-  ) {
+  /* ================= NOT LOGGED IN ================= */
+  if (!user) {
+    if (location.pathname.startsWith("/admin")) {
+      return <Navigate to="/admin-login" replace />;
+    }
+
+    if (location.pathname.startsWith("/merchant")) {
+      return <Navigate to="/merchant/login" replace />;
+    }
+
+    return <Navigate to="/customer-login" replace />;
+  }
+
+  /* ================= ROLE CHECK ================= */
+  const activeRole = getActiveRole();
+
+  if (!activeRole) {
     return <Navigate to="/" replace />;
   }
 
-  /* ======================
-     ACCESS GRANTED
-  ====================== */
+  if (location.pathname.startsWith("/admin") && activeRole !== "admin") {
+    return <Navigate to="/" replace />;
+  }
+
+  if (location.pathname.startsWith("/merchant") && activeRole !== "merchant") {
+    return <Navigate to="/" replace />;
+  }
+
+  if (location.pathname.startsWith("/customer") && activeRole !== "customer") {
+    return <Navigate to="/" replace />;
+  }
+
   return children;
 }

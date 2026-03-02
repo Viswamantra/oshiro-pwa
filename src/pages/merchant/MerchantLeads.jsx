@@ -1,43 +1,67 @@
 /**
- * 🔒 LOCKED AFTER PHASE 2.6
+ * 🔒 LOCKED AFTER PHASE 2.6 (UID VERSION)
  * Merchant Leads (My Leads)
  * Bulk delete implemented & tested
- * Do not modify during Phase 2.7
+ * Identity system upgraded to Firebase UID
  */
 
 import React, { useEffect, useState } from "react";
 import { fetchLeadsByMerchant } from "../../firebase/barrel";
 import { writeBatch, doc } from "firebase/firestore";
-import { db } from "../../firebase";
+import { db, auth } from "../../firebase";
+import { onAuthStateChanged } from "firebase/auth";
 
 /**
  * =========================================================
- * MERCHANT LEADS – MOBILE FIRST
+ * MERCHANT LEADS – UID BASED (MOBILE FIRST)
  * ---------------------------------------------------------
  * ✔ Shows customer leads
  * ✔ Sorted latest first
  * ✔ Select multiple leads
  * ✔ Bulk delete (merchant-owned only)
- * ✔ Clean & readable
+ * ✔ Uses Firebase UID (no localStorage merchant)
+ * ✔ Clean & stable
  * =========================================================
  */
 
 export default function MerchantLeads() {
-  const merchant =
-    JSON.parse(localStorage.getItem("merchant")) || {};
-  const merchantId = merchant.id;
+  const [uid, setUid] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
 
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedLeads, setSelectedLeads] = useState([]);
 
+  /* ======================
+     AUTH LISTENER
+  ====================== */
   useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      setUid(user?.uid || null);
+      setAuthReady(true);
+    });
+
+    return () => unsub();
+  }, []);
+
+  /* ======================
+     LOAD LEADS
+  ====================== */
+  useEffect(() => {
+    if (!authReady) return;
+
+    if (!uid) {
+      setLeads([]);
+      setLoading(false);
+      return;
+    }
+
     let mounted = true;
 
     async function loadLeads() {
       try {
         setLoading(true);
-        const data = await fetchLeadsByMerchant(merchantId);
+        const data = await fetchLeadsByMerchant(uid);
         mounted && setLeads(data);
       } catch (err) {
         console.error(err);
@@ -49,7 +73,7 @@ export default function MerchantLeads() {
 
     loadLeads();
     return () => (mounted = false);
-  }, [merchantId]);
+  }, [uid, authReady]);
 
   /* ======================
      SELECTION HANDLERS
@@ -105,6 +129,19 @@ export default function MerchantLeads() {
       alert("Failed to delete leads");
     }
   };
+
+  /* ======================
+     UI STATES
+  ====================== */
+
+  if (!authReady) return null;
+
+  if (!uid)
+    return (
+      <div style={styles.page}>
+        <p style={styles.helper}>Merchant not logged in</p>
+      </div>
+    );
 
   return (
     <div style={styles.page}>

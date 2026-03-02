@@ -1,222 +1,218 @@
 import React, { useEffect, useState } from "react";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "../../firebase";
+import { useNavigate } from "react-router-dom";
 import {
-  Box,
-  Typography,
-  TextField,
-  Button,
-  Card,
-  CardContent,
-  Divider,
-} from "@mui/material";
-
-import {
-  collection,
-  query,
-  where,
-  onSnapshot,
-  updateDoc,
-  doc,
-  Timestamp,
-} from "firebase/firestore";
-
-import { db } from "../../firebase";
-
-/* ⭐ NEW — GEO SAFE OFFER CREATE */
-import { createOfferWithGeo } from "../../firebase/offers";
+  createOffer,
+  fetchMerchantOffers,
+  deleteOffer,
+  autoExpireOffers,
+  fetchActiveCategories,
+} from "../../firebase/barrel";
 
 /**
  * =========================================================
- * MERCHANT OFFERS – GEO PUSH READY VERSION
+ * MERCHANT OFFERS – FULL PRODUCTION VERSION
  * =========================================================
  */
 
 export default function MerchantOffers() {
+  const navigate = useNavigate();
 
-  /* ======================
-     LOAD MERCHANT SESSION
-  ====================== */
-  const merchantRaw = localStorage.getItem("merchant");
-  const merchant = merchantRaw ? JSON.parse(merchantRaw) : null;
+  const [user, setUser] = useState(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  const [offers, setOffers] = useState([]);
+  const [categories, setCategories] = useState([]);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [discountText, setDiscountText] = useState("");
+  const [categoryId, setCategoryId] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
-  const [offers, setOffers] = useState([]);
 
-  if (!merchant?.id) {
-    return (
-      <Typography sx={{ p: 3 }} color="error">
-        Merchant not logged in
-      </Typography>
-    );
+  /* ================= AUTH ================= */
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
+      setCheckingAuth(false);
+    });
+    return () => unsub();
+  }, []);
+
+  /* ================= LOAD DATA ================= */
+  useEffect(() => {
+    if (!user) return;
+    loadOffers();
+    loadCategories();
+    autoExpireOffers(user.uid);
+  }, [user]);
+
+  async function loadOffers() {
+    const data = await fetchMerchantOffers(user.uid);
+    setOffers(data);
   }
 
-  /* ======================
-     LOAD MERCHANT OFFERS
-  ====================== */
-  useEffect(() => {
-    const q = query(
-      collection(db, "offers"),
-      where("merchantId", "==", merchant.id)
-    );
+  async function loadCategories() {
+    const cats = await fetchActiveCategories();
+    setCategories(cats);
+  }
 
-    return onSnapshot(q, (snap) => {
-      const list = snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
-      setOffers(list);
-    });
-  }, [merchant.id]);
-
-  /* ======================
-     ⭐ CREATE OFFER (WITH GEO)
-  ====================== */
-  const createOffer = async () => {
-
-    if (!title || !discountText || !expiryDate) {
-      alert("Title, discount & expiry are required");
+  /* ================= CREATE OFFER ================= */
+  async function handleCreate() {
+    if (!title || !discountText || !categoryId || !expiryDate) {
+      alert("Please fill all required fields");
       return;
     }
 
-    try {
+    const selectedCategory = categories.find(c => c.id === categoryId);
 
-      const expiry = new Date(expiryDate);
-      expiry.setHours(23, 59, 59, 999);
+    await createOffer({
+      ownerId: user.uid,
+      title,
+      description,
+      discountText,
+      categoryId,
+      categoryName: selectedCategory?.name || "",
+      expiryDate: new Date(expiryDate),
+    });
 
-      await createOfferWithGeo({
-        merchantId: merchant.id,
-        mobile: merchant.mobile,
-        shop_name: merchant.shopName || "",
-        category: merchant.category || "",
-        title: title.trim(),
-        description: description.trim(),
-        discountText: discountText.trim(),
-        expiryDate: Timestamp.fromDate(expiry),
-      });
+    setTitle("");
+    setDescription("");
+    setDiscountText("");
+    setCategoryId("");
+    setExpiryDate("");
 
-      /* RESET FORM */
-      setTitle("");
-      setDescription("");
-      setDiscountText("");
-      setExpiryDate("");
+    loadOffers();
+  }
 
-      alert("Offer published successfully 🚀");
+  /* ================= DELETE OFFER ================= */
+  async function handleDelete(id) {
+    await deleteOffer(id);
+    loadOffers();
+  }
 
-    } catch (err) {
-      console.error("Create offer failed:", err);
-      alert(err.message || "Failed to create offer");
-    }
-  };
+  /* ================= AUTH STATES ================= */
+  if (checkingAuth) return <p>Loading...</p>;
 
-  /* ======================
-     TOGGLE OFFER STATUS
-  ====================== */
-  const toggleOffer = async (id, isActive) => {
-    try {
-      await updateDoc(doc(db, "offers", id), {
-        isActive: !isActive,
-      });
-    } catch (err) {
-      console.error("Toggle offer failed:", err);
-    }
-  };
+  if (!user) {
+    return (
+      <div style={styles.center}>
+        <p style={{ color: "red" }}>Merchant not logged in</p>
+        <button onClick={() => navigate("/merchant/login")}>
+          Go to Login
+        </button>
+      </div>
+    );
+  }
 
-  /* ======================
-     UI
-  ====================== */
+  /* ================= UI ================= */
   return (
-    <Box sx={{ mt: 4 }}>
+    <div style={styles.page}>
+      <h2>Create Offer</h2>
 
-      <Typography variant="h6">Create New Offer</Typography>
+      <input
+        placeholder="Offer Title"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        style={styles.input}
+      />
 
-      <Card sx={{ my: 2 }}>
-        <CardContent>
+      <input
+        placeholder="Discount (e.g 20%)"
+        value={discountText}
+        onChange={(e) => setDiscountText(e.target.value)}
+        style={styles.input}
+      />
 
-          <TextField
-            label="Offer Title"
-            fullWidth
-            sx={{ mt: 2 }}
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
+      <textarea
+        placeholder="Description"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        style={styles.textarea}
+      />
 
-          <TextField
-            label="Description"
-            fullWidth
-            multiline
-            rows={2}
-            sx={{ mt: 2 }}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
+      <select
+        value={categoryId}
+        onChange={(e) => setCategoryId(e.target.value)}
+        style={styles.input}
+      >
+        <option value="">Select Category</option>
+        {categories.map(c => (
+          <option key={c.id} value={c.id}>
+            {c.name}
+          </option>
+        ))}
+      </select>
 
-          <TextField
-            label="Discount / Deal"
-            fullWidth
-            sx={{ mt: 2 }}
-            value={discountText}
-            onChange={(e) => setDiscountText(e.target.value)}
-          />
+      <input
+        type="date"
+        value={expiryDate}
+        onChange={(e) => setExpiryDate(e.target.value)}
+        style={styles.input}
+      />
 
-          <TextField
-            type="date"
-            label="Expiry Date"
-            fullWidth
-            sx={{ mt: 2 }}
-            InputLabelProps={{ shrink: true }}
-            value={expiryDate}
-            onChange={(e) => setExpiryDate(e.target.value)}
-          />
+      <button onClick={handleCreate} style={styles.button}>
+        Create Offer
+      </button>
 
-          <Button
-            sx={{ mt: 3 }}
-            variant="contained"
-            onClick={createOffer}
-          >
-            Publish Offer
-          </Button>
+      <hr />
 
-        </CardContent>
-      </Card>
+      <h3>Your Offers</h3>
 
-      <Divider />
+      {offers.length === 0 && <p>No offers yet</p>}
 
-      <Typography sx={{ mt: 2 }}>My Offers</Typography>
-
-      {!offers.length && <p>No offers created yet</p>}
-
-      {offers.map((o) => (
-        <Card key={o.id} sx={{ my: 1 }}>
-          <CardContent>
-
-            <Typography fontWeight="bold">{o.title}</Typography>
-
-            {o.description && (
-              <Typography variant="body2">{o.description}</Typography>
-            )}
-
-            <Typography variant="body2">{o.discountText}</Typography>
-
-            <Typography variant="caption">
-              Status: {o.isActive ? "Active" : "Disabled"}
-            </Typography>
-
-            <Box sx={{ mt: 1 }}>
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={() => toggleOffer(o.id, o.isActive)}
-              >
-                {o.isActive ? "Disable" : "Enable"}
-              </Button>
-            </Box>
-
-          </CardContent>
-        </Card>
+      {offers.map(offer => (
+        <div key={offer.id} style={styles.card}>
+          <strong>{offer.title}</strong>
+          <div>{offer.discountText}</div>
+          <div>Status: {offer.status}</div>
+          <button onClick={() => handleDelete(offer.id)}>
+            Delete
+          </button>
+        </div>
       ))}
-
-    </Box>
+    </div>
   );
 }
+
+/* ================= STYLES ================= */
+const styles = {
+  page: { padding: 20 },
+  center: {
+    minHeight: "60vh",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  input: {
+    display: "block",
+    marginBottom: 10,
+    padding: 8,
+    width: "100%",
+    maxWidth: 400,
+  },
+  textarea: {
+    display: "block",
+    marginBottom: 10,
+    padding: 8,
+    width: "100%",
+    maxWidth: 400,
+    height: 80,
+  },
+  button: {
+    padding: 10,
+    marginBottom: 20,
+    background: "#2563eb",
+    color: "#fff",
+    border: "none",
+    cursor: "pointer",
+  },
+  card: {
+    border: "1px solid #ddd",
+    padding: 10,
+    marginBottom: 10,
+    maxWidth: 400,
+  },
+};

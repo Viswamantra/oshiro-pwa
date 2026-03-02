@@ -1,181 +1,199 @@
-import React, { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { getMerchantByMobile } from "../../firebase/barrel";
-import { setActiveRole } from "../../utils/activeRole";
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 
 import {
-  initMessaging,
-  updateFCMToken,
-} from "../../firebase";
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+} from "firebase/auth";
+
+import {
+  doc,
+  getDoc,
+  setDoc,
+  serverTimestamp,
+} from "firebase/firestore";
+
+import { auth, db } from "../../firebase/barrel.js";
+
+/**
+ * ==========================================
+ * OSHIRO MERCHANT LOGIN — FINAL FIXED
+ * ==========================================
+ * ✔ Proper navigation after OTP
+ * ✔ No redirect loop
+ * ✔ Strict 10-digit validation
+ * ✔ Recaptcha safe cleanup
+ */
 
 export default function MerchantLogin() {
-
   const navigate = useNavigate();
 
-  const [mobile, setMobile] = useState("+91");
+  const [mobile, setMobile] = useState("");
+  const [otp, setOtp] = useState("");
+  const [confirmation, setConfirmation] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  /* ================= MOBILE ================= */
+  /* ================= CLEANUP RECAPTCHA ================= */
+  useEffect(() => {
+    return () => {
+      if (window.recaptchaVerifier) {
+        window.recaptchaVerifier.clear();
+        window.recaptchaVerifier = null;
+      }
+    };
+  }, []);
+
+  /* ================= MOBILE INPUT ================= */
   const handleMobileChange = (e) => {
-    let value = e.target.value;
-
-    if (!value.startsWith("+91")) value = "+91";
-    value = "+91" + value.slice(3).replace(/\D/g, "");
-
-    if (value.length > 13) value = value.slice(0, 13);
-    setMobile(value);
+    const value = e.target.value.replace(/\D/g, "");
+    if (value.length <= 10) {
+      setMobile(value);
+    }
   };
 
-  /* ================= LOGIN ================= */
-  const login = async () => {
+  /* ================= SETUP RECAPTCHA ================= */
+  const setupRecaptcha = () => {
+    if (!window.recaptchaVerifier) {
+      window.recaptchaVerifier = new RecaptchaVerifier(
+        "recaptcha-container",
+        { size: "invisible" },
+        auth
+      );
+    }
+  };
 
-    setError("");
+  /* ================= SEND OTP ================= */
+  const sendOTP = async () => {
+    if (loading) return;
 
-    if (mobile.length !== 13) {
-      setError("Enter valid mobile number (+91XXXXXXXXXX)");
+    if (mobile.length !== 10) {
+      setError("Enter valid 10-digit mobile number");
       return;
     }
 
-    const plainMobile = mobile.slice(3);
-
     try {
-
       setLoading(true);
+      setError("");
 
-      console.log("🔍 Checking merchant for:", plainMobile);
+      setupRecaptcha();
 
-      const merchant = await getMerchantByMobile(plainMobile);
+      const formattedPhone = `+91${mobile}`;
 
-      if (!merchant) {
-        setError("Merchant not registered");
-        return;
-      }
-
-      if (merchant.status === "pending") {
-        setError("Waiting for admin approval");
-        return;
-      }
-
-      if (merchant.status === "rejected") {
-        setError("Your account has been rejected");
-        return;
-      }
-
-      if (merchant.status !== "approved") {
-        setError("Merchant account inactive");
-        return;
-      }
-
-      /* ================= SESSION ================= */
-
-      localStorage.setItem("mobile", plainMobile);
-      setActiveRole("merchant");
-
-      localStorage.setItem(
-        "merchant",
-        JSON.stringify({
-          id: merchant.id,
-          mobile: plainMobile,
-          shopName: merchant.shop_name || "",
-          status: merchant.status,
-          profileComplete: merchant.profileComplete === true,
-        })
+      const confirmationResult = await signInWithPhoneNumber(
+        auth,
+        formattedPhone,
+        window.recaptchaVerifier
       );
 
-      /* ================= 🔥 FCM TOKEN SAVE (CRITICAL) ================= */
-
-      try {
-
-        console.log("📲 Initializing Messaging...");
-
-        await initMessaging();
-
-        console.log("📲 Updating Merchant FCM Token...");
-
-        await updateFCMToken({
-          userId: merchant.id,
-          role: "merchants",
-        });
-
-        console.log("✅ Merchant token saved");
-
-      } catch (tokenErr) {
-
-        console.warn(
-          "⚠ FCM failed but allowing login:",
-          tokenErr
-        );
-
-      }
-
-      /* ================= NAVIGATION ================= */
-
-      if (merchant.profileComplete !== true) {
-        navigate("/merchant/location", { replace: true });
-        return;
-      }
-
-      navigate("/merchant", { replace: true });
+      setConfirmation(confirmationResult);
 
     } catch (err) {
-
-      console.error("❌ Merchant login error:", err);
-      setError("Login failed. Please try again.");
-
+      console.error("OTP send failed:", err);
+      setError("OTP send failed. Try again.");
     } finally {
-
       setLoading(false);
+    }
+  };
 
+  /* ================= VERIFY OTP ================= */
+  const verifyOTP = async () => {
+    if (loading) return;
+
+    if (!otp || otp.length !== 6) {
+      setError("Enter valid 6-digit OTP");
+      return;
+    }
+
+    if (!confirmation) {
+      setError("Session expired. Request OTP again.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError("");
+
+      const result = await confirmation.confirm(otp);
+      const user = result.user;
+      const uid = user.uid;
+
+      /* ===== CREATE / UPDATE MERCHANT DOC ===== */
+      const merchantRef = doc(db, "merchants", uid);
+      const merchantSnap = await getDoc(merchantRef);
+
+      if (!merchantSnap.exists()) {
+        await setDoc(merchantRef, {
+          uid,
+          mobile: user.phoneNumber,
+          role: "merchant",
+          createdAt: serverTimestamp(),
+          lastLoginAt: serverTimestamp(),
+        });
+      } else {
+        await setDoc(
+          merchantRef,
+          { lastLoginAt: serverTimestamp() },
+          { merge: true }
+        );
+      }
+
+      /* ================= FIXED PART ================= */
+      // 🔥 Explicit navigation (required because you're using RouteGuard)
+      navigate("/merchant/dashboard", { replace: true });
+
+    } catch (err) {
+      console.error("OTP verification failed:", err);
+      setError("Invalid or expired OTP.");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div style={styles.page}>
-
-      <div onClick={() => navigate("/")} style={styles.homeBtn}>
-        ← Home
-      </div>
-
       <div style={styles.card}>
-
-        <img
-          src="/logo/oshiro-logo-compact-3.png"
-          alt="OshirO"
-          style={styles.logo}
-        />
-
         <h2 style={styles.title}>Merchant Login</h2>
-        <p style={styles.subtitle}>
-          Login to manage your shop & offers
-        </p>
 
-        <input
-          type="tel"
-          value={mobile}
-          onChange={handleMobileChange}
-          placeholder="+91XXXXXXXXXX"
-          onFocus={(e) => e.target.setSelectionRange(3, 3)}
-          style={styles.input}
-        />
+        {!confirmation && (
+          <>
+            <input
+              type="tel"
+              value={mobile}
+              onChange={handleMobileChange}
+              placeholder="Enter 10-digit mobile number"
+              style={styles.input}
+            />
 
-        {error && <div style={styles.error}>{error}</div>}
+            {error && <div style={styles.error}>{error}</div>}
 
-        <button
-          onClick={login}
-          disabled={loading}
-          style={styles.button}
-        >
-          {loading ? "Checking..." : "Login"}
-        </button>
+            <button onClick={sendOTP} style={styles.button}>
+              {loading ? "Sending..." : "Send OTP"}
+            </button>
+          </>
+        )}
 
-        <p style={styles.register}>
-          New merchant?{" "}
-          <Link to="/merchant/register" style={styles.link}>
-            Register
-          </Link>
-        </p>
+        {confirmation && (
+          <>
+            <input
+              type="text"
+              value={otp}
+              onChange={(e) =>
+                setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
+              }
+              placeholder="Enter 6-digit OTP"
+              style={styles.input}
+            />
 
+            {error && <div style={styles.error}>{error}</div>}
+
+            <button onClick={verifyOTP} style={styles.button}>
+              {loading ? "Verifying..." : "Verify OTP"}
+            </button>
+          </>
+        )}
+
+        <div id="recaptcha-container"></div>
       </div>
     </div>
   );
@@ -186,80 +204,40 @@ export default function MerchantLogin() {
 const styles = {
   page: {
     minHeight: "100vh",
-    background: "linear-gradient(180deg, #f8fafc, #eef2ff)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: 16,
-    position: "relative",
-  },
-  homeBtn: {
-    position: "absolute",
-    top: 20,
-    left: 16,
-    padding: "6px 14px",
-    borderRadius: 20,
-    background: "#f1f5f9",
-    color: "#2563eb",
-    fontSize: 14,
-    fontWeight: 500,
-    cursor: "pointer",
+    background: "#f5f7fb",
   },
   card: {
-    width: "100%",
-    maxWidth: 360,
-    padding: 28,
-    borderRadius: 16,
-    background: "#ffffff",
-    textAlign: "center",
-    boxShadow: "0 16px 32px rgba(0, 0, 0, 0.1)",
+    width: 340,
+    padding: 24,
+    borderRadius: 14,
+    background: "#fff",
+    boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
   },
-  logo: {
-    height: 56,
-    marginBottom: 24,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: 600,
-    marginBottom: 6,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#6b7280",
-    marginBottom: 20,
-  },
+  title: { marginBottom: 16 },
   input: {
     width: "100%",
-    height: 48,
-    padding: "0 14px",
-    fontSize: 16,
-    borderRadius: 10,
-    border: "1px solid #d1d5db",
-  },
-  error: {
-    marginTop: 10,
-    fontSize: 14,
-    color: "#dc2626",
+    height: 44,
+    marginBottom: 12,
+    padding: "0 10px",
+    borderRadius: 8,
+    border: "1px solid #ccc",
   },
   button: {
     width: "100%",
-    height: 48,
-    marginTop: 24,
-    borderRadius: 10,
+    height: 44,
+    borderRadius: 8,
     border: "none",
-    background: "linear-gradient(135deg, #2563eb, #1e40af)",
+    background: "#2e7d32",
     color: "#fff",
-    fontSize: 16,
     fontWeight: 600,
     cursor: "pointer",
   },
-  register: {
-    marginTop: 16,
+  error: {
+    color: "red",
     fontSize: 14,
-  },
-  link: {
-    color: "#2563eb",
-    fontWeight: 500,
-    textDecoration: "none",
+    marginBottom: 10,
   },
 };

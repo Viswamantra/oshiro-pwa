@@ -1,17 +1,18 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react"; 
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../auth/AuthContext";
+
 import {
   fetchNearbyMerchants,
   fetchOffersByMerchantIds,
 } from "../../firebase/barrel";
 
-import { hybridUpdateCustomerLocation } from "../../services/locationHybrid";
+import { startLocationHybrid } from "../../services/locationHybrid";
+
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../../firebase";
 
-/* =========================================================
-   CUSTOMER DASHBOARD – FINAL PRODUCTION FIX
-========================================================= */
+/* ========================================================= */
 
 const DISTANCES = [
   { label: "300 m", value: 300 },
@@ -21,48 +22,43 @@ const DISTANCES = [
   { label: "10 km", value: 10000 },
 ];
 
+/* ========================================================= */
+
 export default function CustomerDashboard() {
   const navigate = useNavigate();
+  const { user, role, loading: authLoading } = useAuth();
 
-  const customerName = localStorage.getItem("name") || "Customer";
-
-  // ⭐ FIX — Use mobile as ID
-  const customerId = localStorage.getItem("mobile");
+  const [customerId, setCustomerId] = useState(null);
+  const [customerName, setCustomerName] = useState("Customer");
 
   const [category, setCategory] = useState("");
   const [distance, setDistance] = useState(3000);
   const [shops, setShops] = useState([]);
   const [offersMap, setOffersMap] = useState({});
   const [loading, setLoading] = useState(true);
-  const [customerLocation, setCustomerLocation] = useState(null);
 
-  /* ======================================================
-     HYBRID LOCATION UPDATE
-  ====================================================== */
+  /* ================= AUTH VALIDATION ================= */
+  useEffect(() => {
+    if (authLoading) return;
+
+    if (!user || role !== "customer") {
+      navigate("/customer-login", { replace: true });
+      return;
+    }
+
+    setCustomerId(user.uid);
+    setCustomerName("Customer");
+  }, [user, role, authLoading, navigate]);
+
+  /* ================= GEO ENGINE ================= */
   useEffect(() => {
     if (!customerId) return;
 
-    async function updateLocation() {
-      try {
-        const finalLocation = await hybridUpdateCustomerLocation(
-          customerId,
-          null
-        );
-
-        setCustomerLocation(finalLocation);
-
-        console.log("📍 Customer Location Updated:", finalLocation);
-      } catch (err) {
-        console.log("Location update skipped", err);
-      }
-    }
-
-    updateLocation();
+    const stopTracking = startLocationHybrid(customerId);
+    return () => stopTracking && stopTracking();
   }, [customerId]);
 
-  /* ======================================================
-     SAVE SELECTED DISTANCE
-  ====================================================== */
+  /* ================= SAVE DISTANCE ================= */
   useEffect(() => {
     if (!customerId) return;
 
@@ -71,20 +67,18 @@ export default function CustomerDashboard() {
         await updateDoc(doc(db, "customers", customerId), {
           selectedDistanceKm: distance / 1000,
         });
-
-        console.log("📏 Distance saved:", distance / 1000, "km");
       } catch (err) {
-        console.log("Distance save skipped", err);
+        console.log("Distance save skipped:", err.message);
       }
     }
 
     saveDistance();
   }, [distance, customerId]);
 
-  /* ======================
-     LOAD SHOPS + OFFERS
-  ====================== */
+  /* ================= LOAD DATA ================= */
   useEffect(() => {
+    if (!customerId) return;
+
     let mounted = true;
 
     async function loadData() {
@@ -104,19 +98,33 @@ export default function CustomerDashboard() {
 
         const offers = await fetchOffersByMerchantIds(merchantIds);
 
-        mounted && setOffersMap(offers || {});
+        if (!mounted) return;
+
+        /* 🔥 GROUP OFFERS BY merchantId (FIX) */
+        const grouped = {};
+
+        for (const offer of offers || []) {
+          if (!grouped[offer.ownerId]) {
+            grouped[offer.ownerId] = [];
+          }
+          grouped[offer.ownerId].push(offer);
+        }
+
+        setOffersMap(grouped);
+
       } catch (err) {
-        console.error(err);
-        mounted && setShops([]);
+        console.error("CustomerDashboard load error:", err);
+        if (mounted) setShops([]);
       } finally {
-        mounted && setLoading(false);
+        if (mounted) setLoading(false);
       }
     }
 
     loadData();
     return () => (mounted = false);
-  }, [category, distance]);
+  }, [category, distance, customerId]);
 
+  /* ================= RENDER ================= */
   return (
     <div style={styles.page}>
       <section style={styles.hero}>
@@ -175,71 +183,34 @@ export default function CustomerDashboard() {
           shops.map((shop) => {
             const offerCount = offersMap[shop.id]?.length || 0;
 
-            const cleanMobile = shop.mobile
-              ? shop.mobile.toString().replace(/\D/g, "").slice(-10)
-              : null;
-
             return (
               <div
                 key={shop.id}
                 style={styles.card}
                 onClick={() =>
-                  offerCount > 0 && navigate(`/customer/offers/${shop.id}`)
+                  offerCount > 0 &&
+                  navigate(`/customer/offers/${shop.id}`)
                 }
               >
                 <div style={styles.cardTop}>
                   <div>
                     <div style={styles.shopName}>
-                      {shop.shop_name || "Unnamed Shop"}
+                      {shop.shopName || "Unnamed Shop"}
                     </div>
 
-                    <span style={styles.offerBadge}>
-                      🎁 {offerCount} OFFER{offerCount !== 1 ? "S" : ""}
-                    </span>
+                    {offerCount > 0 ? (
+                      <span style={styles.offerBadge}>
+                        🎁 {offerCount} OFFER
+                        {offerCount !== 1 ? "S" : ""}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: "12px", color: "#999" }}>
+                        No active offers
+                      </span>
+                    )}
                   </div>
 
                   <span style={styles.status}>OPEN</span>
-                </div>
-
-                <div style={styles.actionsRow}>
-                  {cleanMobile && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        window.location.href = `tel:${cleanMobile}`;
-                      }}
-                      style={styles.actionBtn}
-                    >
-                      📞
-                    </button>
-                  )}
-
-                  {cleanMobile && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        window.open(`https://wa.me/91${cleanMobile}`, "_blank");
-                      }}
-                      style={styles.actionBtn}
-                    >
-                      💬
-                    </button>
-                  )}
-
-                  {shop.location && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        window.open(
-                          `https://www.google.com/maps?q=${shop.location.lat},${shop.location.lng}`,
-                          "_blank"
-                        );
-                      }}
-                      style={styles.actionBtn}
-                    >
-                      🧭
-                    </button>
-                  )}
                 </div>
               </div>
             );
@@ -249,93 +220,47 @@ export default function CustomerDashboard() {
   );
 }
 
-/* ====================== STYLES ====================== */
+/* ================= SIMPLE STYLES ================= */
 
 const styles = {
-  page: { background: "#f8fafc", minHeight: "100vh" },
-  hero: { padding: 16 },
-  greeting: { fontSize: 22, fontWeight: 700 },
-  subText: { fontSize: 14, color: "#6b7280" },
-
-  stickyFilters: {
-    position: "sticky",
-    top: 56,
-    zIndex: 8,
-    background: "#ffffff",
-    padding: 12,
-    boxShadow: "0 2px 10px rgba(0,0,0,.08)",
-  },
-
-  filterBlock: { marginBottom: 10 },
-  label: { fontSize: 13, fontWeight: 600 },
-  select: {
-    width: "100%",
-    height: 40,
-    borderRadius: 8,
-    border: "1px solid #d1d5db",
-    padding: "0 10px",
-  },
-
-  distanceRow: { display: "flex", gap: 8, flexWrap: "wrap" },
+  page: { padding: "20px" },
+  hero: { marginBottom: "20px" },
+  greeting: { margin: 0 },
+  subText: { color: "#555" },
+  stickyFilters: { marginBottom: "20px" },
+  filterBlock: { marginBottom: "15px" },
+  label: { fontWeight: "600", display: "block", marginBottom: "5px" },
+  select: { padding: "6px", width: "100%" },
+  distanceRow: { display: "flex", flexWrap: "wrap", gap: "8px" },
   distanceBtn: {
-    padding: "6px 12px",
-    borderRadius: 20,
-    border: "1px solid #d1d5db",
-    background: "#f8fafc",
+    padding: "6px 10px",
+    border: "1px solid #ccc",
+    borderRadius: "6px",
     cursor: "pointer",
+    background: "#f5f5f5",
   },
   distanceActive: {
-    background: "#16a34a",
+    background: "#2563eb",
     color: "#fff",
-    borderColor: "#16a34a",
+    borderColor: "#2563eb",
   },
-
-  list: { padding: 16, maxWidth: 720, margin: "0 auto" },
-  sectionTitle: { fontSize: 16, fontWeight: 600 },
-  helper: { fontSize: 14, color: "#6b7280" },
-
+  list: { marginTop: "20px" },
+  sectionTitle: { marginBottom: "10px" },
+  helper: { color: "#777" },
   card: {
-    background: "#ffffff",
-    padding: 14,
-    borderRadius: 16,
-    marginBottom: 14,
-    boxShadow: "0 6px 20px rgba(0,0,0,.08)",
+    padding: "15px",
+    borderRadius: "8px",
+    background: "#fff",
+    marginBottom: "10px",
+    boxShadow: "0 4px 10px rgba(0,0,0,0.05)",
     cursor: "pointer",
   },
-
-  cardTop: { display: "flex", justifyContent: "space-between" },
-  shopName: { fontSize: 16, fontWeight: 600 },
-
-  offerBadge: {
-    marginTop: 4,
-    display: "inline-block",
-    padding: "4px 10px",
-    borderRadius: 12,
-    fontSize: 12,
-    fontWeight: 600,
-    background: "#ecfeff",
-    color: "#0f766e",
-  },
-
-  status: {
-    fontSize: 12,
-    color: "#ffffff",
-    padding: "4px 10px",
-    borderRadius: 12,
-    background: "#16a34a",
-  },
-
-  actionsRow: {
+  cardTop: {
     display: "flex",
-    justifyContent: "flex-end",
-    gap: 18,
-    marginTop: 12,
+    justifyContent: "space-between",
+    alignItems: "center",
   },
-
-  actionBtn: {
-    fontSize: 22,
-    background: "none",
-    border: "none",
-    cursor: "pointer",
-  },
+  shopName: { fontWeight: "600" },
+  offerBadge: { fontSize: "12px", color: "#2563eb" },
+  status: { fontSize: "12px", color: "green" },
 };

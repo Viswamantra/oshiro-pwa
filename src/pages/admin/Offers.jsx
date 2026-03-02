@@ -22,8 +22,6 @@ export default function Offers() {
   const [lastDoc, setLastDoc] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
-
-  // ✅ NEW: selection state
   const [selected, setSelected] = useState([]);
 
   /* ======================
@@ -55,18 +53,22 @@ export default function Offers() {
 
       let computedStatus = (o.status || "active").toLowerCase();
 
+      /* ✅ FIXED EXPIRY HANDLING */
       let expiryText = "—";
-      if (o.expiryDate && !isNaN(new Date(o.expiryDate))) {
-        const expiry = new Date(o.expiryDate);
-        expiryText = expiry.toLocaleDateString();
-        if (expiry < now) computedStatus = "expired";
+      if (o.expiryDate && o.expiryDate.toDate) {
+        const expiry = o.expiryDate.toDate();
+        expiryText = expiry.toLocaleDateString("en-IN");
+
+        if (expiry < now) {
+          computedStatus = "expired";
+        }
       }
 
       return {
         id: d.id,
-        shopName: o.shopName || o.shop_name || "—",
-        merchantMobile: o.merchantMobile || o.mobile || "—",
-        categoryName: o.categoryName || o.category || "—",
+        shopName: o.shopName || "—",
+        merchantMobile: o.merchantMobile || "—",
+        categoryName: o.categoryName || "—",
         title: o.title || "—",
         description: o.description || "—",
         expiry: expiryText,

@@ -5,12 +5,12 @@ import { createLead, LEAD_TYPES } from "../../firebase/leads";
 
 /**
  * =========================================================
- * OFFER DETAILS – PHASE 2.7 (ROW 1)
+ * OFFER DETAILS – PHASE 2.7 (ENHANCED)
  * ---------------------------------------------------------
- * ✔ Lead created ONCE on page open
- * ✔ Session-guarded (no double fire)
- * ✔ Uses central createLead()
- * ✔ Safe for dedup & notifications
+ * ✔ Correct offer loading
+ * ✔ Lead created once on page open
+ * ✔ Call / WhatsApp / Directions buttons
+ * ✔ Mobile-first UI
  * =========================================================
  */
 
@@ -23,7 +23,6 @@ export default function OfferDetails() {
 
   /* ======================
      CUSTOMER IDENTITY
-     (SINGLE SOURCE)
   ====================== */
   const customerMobile =
     localStorage.getItem("customerMobile") ||
@@ -38,7 +37,6 @@ export default function OfferDetails() {
 
   /* ======================
      SESSION GUARD
-     (ONE LEAD PER OPEN)
   ====================== */
   const leadFiredRef = useRef(false);
 
@@ -51,12 +49,13 @@ export default function OfferDetails() {
     async function loadOffers() {
       try {
         setLoading(true);
+
         const data = await fetchOffersByMerchantIds([
           merchantId,
         ]);
 
         if (mounted) {
-          setOffers(data?.[merchantId] || []);
+          setOffers(data || []);
         }
       } catch (err) {
         console.error("Failed to load offers:", err);
@@ -71,8 +70,7 @@ export default function OfferDetails() {
   }, [merchantId]);
 
   /* ======================
-     PHASE 2.7 – ROW 1
-     OFFER VIEW LEAD
+     AUTO LEAD – OFFER VIEW
   ====================== */
   useEffect(() => {
     if (
@@ -89,7 +87,7 @@ export default function OfferDetails() {
       customerName,
       type: LEAD_TYPES.OFFER_VIEW,
       source: "customer",
-      offerId: merchantId, // merchant-scoped view
+      offerId: merchantId,
     });
 
     leadFiredRef.current = true;
@@ -97,7 +95,7 @@ export default function OfferDetails() {
 
   return (
     <div style={styles.page}>
-      {/* STICKY HEADER */}
+      {/* HEADER */}
       <header style={styles.header}>
         <button
           onClick={() => navigate(-1)}
@@ -129,9 +127,7 @@ export default function OfferDetails() {
                 </h3>
 
                 {offer.discountText && (
-                  <span
-                    style={styles.discountBadge}
-                  >
+                  <span style={styles.discountBadge}>
                     {offer.discountText}% OFF
                   </span>
                 )}
@@ -152,9 +148,45 @@ export default function OfferDetails() {
                 </p>
               )}
 
+              {/* ACTION BUTTONS */}
+              <div style={styles.actionRow}>
+                {offer.merchantMobile && (
+                  <a
+                    href={`tel:${offer.merchantMobile}`}
+                    style={styles.actionBtn}
+                  >
+                    📞 Call
+                  </a>
+                )}
+
+                {offer.merchantMobile && (
+                  <a
+                    href={`https://wa.me/${offer.merchantMobile.replace(
+                      "+",
+                      ""
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={styles.actionBtn}
+                  >
+                    💬 WhatsApp
+                  </a>
+                )}
+
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                    offer.shopName
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={styles.actionBtn}
+                >
+                  📍 Directions
+                </a>
+              </div>
+
               <div style={styles.tapHint}>
-                👀 Viewing this offer notifies the
-                merchant
+                👀 Viewing this offer notifies the merchant
               </div>
             </div>
           ))}
@@ -164,7 +196,7 @@ export default function OfferDetails() {
 }
 
 /* ======================
-   STYLES – MOBILE FIRST
+   STYLES
 ====================== */
 const styles = {
   page: {
@@ -253,6 +285,24 @@ const styles = {
     fontSize: 12,
     marginTop: 10,
     color: "#6b7280",
+  },
+
+  actionRow: {
+    display: "flex",
+    gap: 10,
+    marginTop: 12,
+    flexWrap: "wrap",
+  },
+
+  actionBtn: {
+    fontSize: 13,
+    padding: "6px 10px",
+    background: "#f1f5f9",
+    borderRadius: 8,
+    textDecoration: "none",
+    color: "#111827",
+    fontWeight: 500,
+    border: "1px solid #e2e8f0",
   },
 
   tapHint: {

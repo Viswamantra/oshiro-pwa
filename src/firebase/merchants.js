@@ -3,88 +3,120 @@ import {
   getDocs,
   query,
   where,
-  addDoc,
+  doc,
+  setDoc,
+  getDoc,
   serverTimestamp,
 } from "firebase/firestore";
 
-import { db } from "./index.js";
+import { auth, db } from "./index.js";
 
 /* =========================================================
-   GET MERCHANT BY MOBILE
+   HELPER – Normalize Indian Mobile (+91XXXXXXXXXX)
 ========================================================= */
-export async function getMerchantByMobile(mobile) {
+function normalizeMobile(phone) {
+  if (!phone) return null;
 
+  let digits = phone.replace(/\D/g, "");
+
+  if (digits.length > 10) {
+    digits = digits.slice(-10);
+  }
+
+  if (digits.length !== 10) {
+    console.warn("Invalid mobile length:", digits);
+    return null;
+  }
+
+  return "+91" + digits;
+}
+
+/* =========================================================
+   GET MERCHANT BY UID
+========================================================= */
+export async function getMerchantByUid(uid) {
   try {
+    if (!uid) return null;
 
-    if (!mobile || typeof mobile !== "string") {
-      console.log("❌ Invalid mobile input");
-      return null;
-    }
+    const snap = await getDoc(doc(db, "merchants", uid));
+    if (!snap.exists()) return null;
 
-    console.log("🔎 Searching merchant by mobile:", mobile);
+    const data = snap.data();
 
-    const q = query(
-      collection(db, "merchants"),
-      where("mobile", "==", mobile)
-    );
-
-    const snapshot = await getDocs(q);
-
-    if (snapshot.empty) {
-      console.log("❌ No merchant found");
-      return null;
-    }
-
-    const docSnap = snapshot.docs[0];
-
-    const merchant = {
-      id: docSnap.id,
-      ...docSnap.data(),
+    return {
+      id: snap.id,
+      shopName: data.shopName || "",
+      mobile: data.mobile || "",
+      category: data.category || "",
+      categoryId: data.categoryId || "",
+      shopImageUrl: data.shopImageUrl || "",
+      status: data.status || "pending",
+      profileComplete: data.profileComplete || false,
+      approved: data.approved || false,
+      createdAt: data.createdAt || null,
+      updatedAt: data.updatedAt || null,
     };
 
-    console.log("✅ Merchant Found:", merchant.id);
-
-    return merchant;
-
   } catch (err) {
-    console.error("❌ getMerchantByMobile error:", err);
+    console.error("❌ getMerchantByUid error:", err);
     return null;
   }
 }
 
 /* =========================================================
-   REGISTER MERCHANT
+   REGISTER / UPDATE MERCHANT (SECURE – UID BASED)
 ========================================================= */
 export async function registerMerchant({
-  mobile,
   shopName,
   category,
+  categoryId,
+  shopImageUrl,
 }) {
-
   try {
+    const user = auth.currentUser;
+    if (!user) throw new Error("User not authenticated");
 
-    if (!mobile || !shopName || !category) {
+    const uid = user.uid;
+    const normalizedMobile = normalizeMobile(user.phoneNumber);
+
+    if (!shopName || !category) {
       throw new Error("Missing required merchant fields");
     }
 
-    console.log("🆕 Registering merchant:", mobile);
+    const merchantRef = doc(db, "merchants", uid);
+    const existingSnap = await getDoc(merchantRef);
 
-    const docRef = await addDoc(
-      collection(db, "merchants"),
-      {
-        mobile,
-        shop_name: shopName,
-        category,
-        status: "pending",
-        profileComplete: false,
+    const basePayload = {
+      mobile: normalizedMobile,
+      shopName: shopName.trim(),
+      category: category.trim(),
+      categoryId: categoryId || "",
+      shopImageUrl: shopImageUrl || "",
+      updatedAt: serverTimestamp(),
+    };
+
+    /* =========================
+       NEW MERCHANT
+    ========================= */
+    if (!existingSnap.exists()) {
+      await setDoc(merchantRef, {
+        ...basePayload,
+        status: "pending",      // 🔒 Admin approval required
+        profileComplete: true,
+        approved: false,
         createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      }
-    );
+      });
+    }
 
-    console.log("✅ Merchant registered ID:", docRef.id);
+    /* =========================
+       EXISTING MERCHANT
+       (No approval control)
+    ========================= */
+    else {
+      await setDoc(merchantRef, basePayload, { merge: true });
+    }
 
-    return docRef;
+    console.log("✅ Merchant registered/updated:", uid);
 
   } catch (err) {
     console.error("❌ registerMerchant error:", err);
@@ -93,84 +125,76 @@ export async function registerMerchant({
 }
 
 /* =========================================================
-   DISTANCE HELPER
+   FETCH APPROVED MERCHANTS (Customer Side)
 ========================================================= */
-function calculateDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371000;
-  const toRad = (v) => (v * Math.PI) / 180;
-
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) *
-    Math.cos(toRad(lat2)) *
-    Math.sin(dLon / 2) ** 2;
-
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-/* =========================================================
-   FETCH NEARBY MERCHANTS
-========================================================= */
-export async function fetchNearbyMerchants({
-  userLat,
-  userLng,
-  category = "",
-  distance = 3000,
-} = {}) {
-
+export async function fetchNearbyMerchants({ category = "" } = {}) {
   try {
 
-    let q = query(
+    let baseQuery = query(
       collection(db, "merchants"),
-      where("status", "==", "approved"),
+      where("approved", "==", true),
       where("profileComplete", "==", true)
     );
 
     if (category) {
-      q = query(
+      baseQuery = query(
         collection(db, "merchants"),
-        where("status", "==", "approved"),
+        where("approved", "==", true),
         where("profileComplete", "==", true),
         where("category", "==", category)
       );
     }
 
-    const snapshot = await getDocs(q);
+    const snapshot = await getDocs(baseQuery);
 
-    const merchants = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
+    return snapshot.docs.map((docSnap) => {
+      const data = docSnap.data();
 
-    if (
-      typeof userLat !== "number" ||
-      typeof userLng !== "number"
-    ) {
-      return merchants.slice(0, 20);
-    }
-
-    return merchants.filter((m) => {
-
-      if (
-        typeof m.location?.lat !== "number" ||
-        typeof m.location?.lng !== "number"
-      ) return false;
-
-      const d = calculateDistance(
-        userLat,
-        userLng,
-        m.location.lat,
-        m.location.lng
-      );
-
-      return d <= distance;
+      return {
+        id: docSnap.id,
+        shopName: data.shopName || "",
+        mobile: data.mobile || "",
+        category: data.category || "",
+        categoryId: data.categoryId || "",
+        shopImageUrl: data.shopImageUrl || "",
+        status: data.status || "",
+        profileComplete: data.profileComplete || false,
+        approved: data.approved || false,
+      };
     });
 
   } catch (err) {
     console.error("❌ fetchNearbyMerchants error:", err);
     return [];
+  }
+}
+
+/* =========================================================
+   GET MERCHANT BY MOBILE
+========================================================= */
+export async function getMerchantByMobile(mobile) {
+  try {
+    if (!mobile) return null;
+
+    const normalizedMobile = normalizeMobile(mobile);
+    if (!normalizedMobile) return null;
+
+    const q = query(
+      collection(db, "merchants"),
+      where("mobile", "==", normalizedMobile)
+    );
+
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return null;
+
+    const docSnap = snapshot.docs[0];
+    return {
+      id: docSnap.id,
+      ...docSnap.data(),
+    };
+
+  } catch (err) {
+    console.error("❌ getMerchantByMobile error:", err);
+    return null;
   }
 }

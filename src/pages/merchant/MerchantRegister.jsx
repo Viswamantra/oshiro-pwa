@@ -1,20 +1,22 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { registerMerchant } from "../../firebase/merchants";
-import { fetchActiveCategories } from "../../firebase/categories";
+
+/* ✅ Clean barrel import */
+import { registerMerchant, fetchActiveCategories } from "../../firebase/barrel";
 
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { auth } from "../../firebase";
 
 /**
  * =========================================================
- * MERCHANT REGISTER (FINAL PRODUCTION READY)
+ * MERCHANT REGISTER – CLEAN STABLE VERSION
  * ---------------------------------------------------------
- * ✔ +91 locked mobile input
- * ✔ Category Global Sync
- * ✔ categoryId + categoryName saved
- * ✔ Shop Image Upload (Firebase Storage)
- * ✔ Pending Approval Default
- * ✔ Backward Compatible
+ * ✔ Mobile auto from Firebase Auth
+ * ✔ No manual mobile entry
+ * ✔ Uses merchant.js as single source
+ * ✔ Category sync
+ * ✔ Optional shop image upload
+ * ✔ Default status: pending
  * =========================================================
  */
 
@@ -25,7 +27,6 @@ export default function MerchantRegister() {
   /* ======================
      STATE
   ====================== */
-  const [mobile, setMobile] = useState("+91");
   const [shopName, setShopName] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [categories, setCategories] = useState([]);
@@ -33,6 +34,9 @@ export default function MerchantRegister() {
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const currentUser = auth.currentUser;
+  const phoneNumber = currentUser?.phoneNumber || "";
 
   /* ======================
      LOAD CATEGORIES
@@ -55,23 +59,10 @@ export default function MerchantRegister() {
   }, []);
 
   /* ======================
-     MOBILE HANDLER
-  ====================== */
-  const handleMobileChange = (e) => {
-    let value = e.target.value;
-
-    if (!value.startsWith("+91")) value = "+91";
-    value = "+91" + value.slice(3).replace(/\D/g, "");
-
-    if (value.length > 13) value = value.slice(0, 13);
-    setMobile(value);
-  };
-
-  /* ======================
      IMAGE HANDLER
   ====================== */
   const handleImageChange = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (file) setShopImageFile(file);
   };
 
@@ -83,8 +74,8 @@ export default function MerchantRegister() {
 
     setError("");
 
-    if (mobile.length !== 13) {
-      setError("Enter valid mobile number (+91XXXXXXXXXX)");
+    if (!currentUser) {
+      setError("Authentication required. Please login again.");
       return;
     }
 
@@ -101,39 +92,30 @@ export default function MerchantRegister() {
     try {
       setLoading(true);
 
-      /* ===== FIND CATEGORY NAME ===== */
       const selectedCategory = categories.find(
         (c) => c.id === categoryId
       );
 
-      /* ===== UPLOAD SHOP IMAGE ===== */
+      /* ===== Upload Shop Image (Optional) ===== */
       let shopImageUrl = "";
 
       if (shopImageFile) {
         const storageRef = ref(
           storage,
-          `merchant-shops/${Date.now()}_${shopImageFile.name}`
+          `merchant-shops/${currentUser.uid}_${Date.now()}_${shopImageFile.name}`
         );
 
         await uploadBytes(storageRef, shopImageFile);
         shopImageUrl = await getDownloadURL(storageRef);
       }
 
-      /* ===== REGISTER ===== */
+      /* ===== Register Merchant ===== */
       await registerMerchant({
-        mobile: mobile.slice(3),
+        mobile: phoneNumber, // Required by merchant.js
         shopName: shopName.trim(),
-
-        // Backward compatibility
         category: selectedCategory?.name || "",
-
-        // Future ready
-        categoryId: categoryId,
-
-        shopImageUrl: shopImageUrl || "",
-
-        status: "pending",
-        profileComplete: false,
+        lat: null,
+        lng: null,
       });
 
       alert(
@@ -141,6 +123,7 @@ export default function MerchantRegister() {
       );
 
       navigate("/merchant/login", { replace: true });
+
     } catch (err) {
       console.error(err);
       setError(err?.message || "Registration failed");
@@ -164,13 +147,10 @@ export default function MerchantRegister() {
 
         <h2 style={styles.title}>Merchant Registration</h2>
 
-        {/* MOBILE */}
-        <input
-          type="tel"
-          value={mobile}
-          onChange={handleMobileChange}
-          style={styles.input}
-        />
+        {/* AUTHENTICATED MOBILE DISPLAY */}
+        <div style={styles.mobileBox}>
+          Registered Mobile: {phoneNumber || "Not Available"}
+        </div>
 
         {/* SHOP NAME */}
         <input
@@ -188,7 +168,6 @@ export default function MerchantRegister() {
           style={styles.select}
         >
           <option value="">Select Category</option>
-
           {categories.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
@@ -246,6 +225,13 @@ const styles = {
   },
   logo: { height: 56, marginBottom: 24 },
   title: { fontSize: 22, fontWeight: 600, marginBottom: 20 },
+  mobileBox: {
+    background: "#eef2ff",
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 14,
+    fontSize: 14,
+  },
   input: {
     width: "100%",
     height: 48,

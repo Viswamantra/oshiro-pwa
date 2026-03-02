@@ -2,21 +2,45 @@
  * 🔒 LOCKED AFTER PHASE 2.6
  * Merchant routing stable
  * Do not change route paths
+ *
+ * ✔ Role from AuthContext
+ * ✔ No localStorage dependency
+ * ✔ Safe redirect
+ * ✔ Production hardened
  */
 
-import { Navigate } from "react-router-dom";
+import React from "react";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 
 export default function MerchantRoute({ children }) {
-  const { user, loading } = useAuth();
-  const role = localStorage.getItem("oshiro_role");
+  const { user, role, loading } = useAuth();
+  const location = useLocation();
 
-  if (loading) return null;
+  /* ===============================
+     1️⃣ AUTH LOADING STATE
+  =============================== */
+  if (loading) {
+    return null; // Prevent flicker during auth bootstrap
+  }
 
-  if (!user || role !== "merchant") {
-    localStorage.clear();
+  /* ===============================
+     2️⃣ NOT LOGGED IN
+  =============================== */
+  if (!user) {
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+
+  /* ===============================
+     3️⃣ ROLE VALIDATION
+  =============================== */
+  if (role !== "merchant") {
+    console.warn("[ROUTE] Unauthorized access attempt to merchant route");
     return <Navigate to="/login" replace />;
   }
 
+  /* ===============================
+     4️⃣ AUTHORIZED
+  =============================== */
   return children;
 }

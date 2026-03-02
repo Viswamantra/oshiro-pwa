@@ -1,16 +1,3 @@
-/**
- * =========================================================
- * OSHIRO AUTH CONTEXT — PRODUCTION VERSION
- * ---------------------------------------------------------
- * ✔ Firebase Auth listener
- * ✔ Role detection support
- * ✔ Auto FCM token registration after login
- * ✔ Loading safe
- * ✔ Future multi-role ready
- * ✔ Production logging
- * =========================================================
- */
-
 import {
   createContext,
   useContext,
@@ -19,36 +6,14 @@ import {
 } from "react";
 
 import { onAuthStateChanged } from "firebase/auth";
-import { auth } from "../firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "../firebase";
 
-import { generateAndSaveToken } from "../services/fcmToken";
-
-/* =========================================================
-   CONTEXT
-========================================================= */
+/* ========================================================= */
 
 const AuthContext = createContext();
 
-/* =========================================================
-   ROLE HELPER
-   Priority:
-   1️⃣ localStorage activeRole
-   2️⃣ fallback = customer
-========================================================= */
-
-function resolveUserRole() {
-  try {
-    const role = localStorage.getItem("activeRole");
-    if (role) return role;
-    return "customer";
-  } catch {
-    return "customer";
-  }
-}
-
-/* =========================================================
-   PROVIDER
-========================================================= */
+/* ========================================================= */
 
 export function AuthProvider({ children }) {
 
@@ -56,67 +21,65 @@ export function AuthProvider({ children }) {
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  /* =========================================================
-     AUTH LISTENER
-  ========================================================= */
-
   useEffect(() => {
 
-    console.log("[AUTH] 🔐 Attaching auth listener");
+    console.log("[AUTH] 🔐 Session observer started");
 
-    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
 
-      console.log("[AUTH] Auth state changed", firebaseUser?.uid);
+      if (firebaseUser) {
 
-      if (!firebaseUser) {
+        console.log("[AUTH] ✅ Authenticated UID:", firebaseUser.uid);
+        setUser(firebaseUser);
+
+        try {
+          // 🔎 Check customers collection
+          const customerSnap = await getDoc(
+            doc(db, "customers", firebaseUser.uid)
+          );
+
+          if (customerSnap.exists()) {
+            setRole("customer");
+            setLoading(false);
+            return;
+          }
+
+          // 🔎 Check merchants collection
+          const merchantSnap = await getDoc(
+            doc(db, "merchants", firebaseUser.uid)
+          );
+
+          if (merchantSnap.exists()) {
+            setRole("merchant");
+            setLoading(false);
+            return;
+          }
+
+          // 🔎 No role found
+          setRole(null);
+
+        } catch (error) {
+          console.error("[AUTH] Role detection failed:", error);
+          setRole(null);
+        }
+
+      } else {
+        console.log("[AUTH] ❌ No authenticated user");
         setUser(null);
         setRole(null);
-        setLoading(false);
-        return;
-      }
-
-      setUser(firebaseUser);
-
-      /* ---------- ROLE ---------- */
-
-      const resolvedRole = resolveUserRole();
-      setRole(resolvedRole);
-
-      console.log("[AUTH] Role resolved:", resolvedRole);
-
-      /* ---------- FCM TOKEN AUTO REGISTER ---------- */
-
-      try {
-
-        console.log("[AUTH] Generating FCM token...");
-
-        await generateAndSaveToken(
-          firebaseUser.uid,
-          resolvedRole
-        );
-
-        console.log("[AUTH] FCM token registration complete");
-
-      } catch (err) {
-        console.error("[AUTH] FCM registration failed", err);
       }
 
       setLoading(false);
+
     });
 
-    return () => {
-      console.log("[AUTH] 🔌 Detaching auth listener");
-      unsub();
-    };
+    return () => unsubscribe();
 
   }, []);
 
-  /* =========================================================
-     CONTEXT VALUE
-  ========================================================= */
-
   const value = {
     user,
+    uid: user?.uid || null,
     role,
     loading,
     isAuthenticated: !!user,
@@ -129,9 +92,7 @@ export function AuthProvider({ children }) {
   );
 }
 
-/* =========================================================
-   HOOK
-========================================================= */
+/* ========================================================= */
 
 export function useAuth() {
   return useContext(AuthContext);
