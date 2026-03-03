@@ -1,8 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 /* ========== AUTH ========== */
-import AdminLogin from "./pages/auth/AdminLogin";
-
+import AdminLogin from "./auth/AdminLogin";
 /* ========== ADMIN ========== */
 import AdminLayout from "./components/AdminLayout";
 import ProtectedRoute from "./components/ProtectedRoute";
