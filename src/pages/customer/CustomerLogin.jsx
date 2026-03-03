@@ -1,28 +1,38 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
+import { auth } from "../../firebase/barrel";
 
 /**
  * =========================================================
- * CUSTOMER LOGIN (MOBILE-FIRST)
+ * CUSTOMER LOGIN (PHONE AUTH - UID BASED)
  * ---------------------------------------------------------
- * ✔ +91 locked mobile input
- * ✔ Allows only 10 digits after +91
- * ✔ Prevents deleting +91
- * ✔ Stores customer_mobile in localStorage
- * ✔ Triggers notification permission screen (one-time)
- * ✔ Clean, modern UI
- * ✔ Public logo usage (Vercel-safe)
+ * ✔ Uses Firebase Phone Authentication
+ * ✔ UID-based session (NO mobile localStorage logic)
+ * ✔ Prevents login loop
+ * ✔ Production-ready
  * =========================================================
  */
 
 export default function CustomerLogin() {
   const navigate = useNavigate();
 
-  /* ======================
-     STATE
-  ====================== */
   const [mobile, setMobile] = useState("+91");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  /* ======================
+     AUTO REDIRECT IF LOGGED IN
+  ====================== */
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (user) {
+        navigate("/customer", { replace: true });
+      }
+    });
+
+    return () => unsubscribe();
+  }, [navigate]);
 
   /* ======================
      MOBILE INPUT HANDLER
@@ -42,9 +52,6 @@ export default function CustomerLogin() {
     setMobile("+91" + digits);
   };
 
-  /* ======================
-     LOCK CURSOR AFTER +91
-  ====================== */
   const lockCursor = (e) => {
     if (e.target.selectionStart < 3) {
       e.target.setSelectionRange(3, 3);
@@ -54,7 +61,7 @@ export default function CustomerLogin() {
   /* ======================
      LOGIN HANDLER
   ====================== */
-  const handleLogin = () => {
+  const handleLogin = async () => {
     setError("");
 
     if (mobile.length !== 13) {
@@ -62,42 +69,49 @@ export default function CustomerLogin() {
       return;
     }
 
-    const customerMobile = mobile.slice(3);
+    try {
+      setLoading(true);
 
-    /* ======================
-       STORE SESSION
-    ====================== */
-    localStorage.setItem("customer_mobile", customerMobile);
+      // Setup invisible recaptcha
+      window.recaptchaVerifier = new RecaptchaVerifier(
+        auth,
+        "recaptcha-container",
+        { size: "invisible" }
+      );
 
-    /* ======================
-       NOTIFICATION PERMISSION FLOW
-       (ONE-TIME ONLY)
-    ====================== */
-    const notificationPermission =
-      localStorage.getItem("notification_permission");
+      const confirmationResult = await signInWithPhoneNumber(
+        auth,
+        mobile,
+        window.recaptchaVerifier
+      );
 
-    if (!notificationPermission) {
-      navigate("/customer/notifications", {
-        replace: true,
-      });
-    } else {
+      const otp = window.prompt("Enter OTP");
+
+      if (!otp) {
+        setError("OTP required");
+        return;
+      }
+
+      await confirmationResult.confirm(otp);
+
+      // Firebase session will persist automatically
       navigate("/customer", { replace: true });
+
+    } catch (err) {
+      console.error(err);
+      setError("Login failed. Try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div style={styles.page}>
-      {/* HOME BUTTON */}
-      <div
-        onClick={() => navigate("/")}
-        style={styles.homeBtn}
-      >
+      <div onClick={() => navigate("/")} style={styles.homeBtn}>
         ← Home
       </div>
 
-      {/* LOGIN CARD */}
       <div style={styles.card}>
-        {/* LOGO */}
         <img
           src="/logo/oshiro-logo-compact-3.png"
           alt="Oshiro"
@@ -123,16 +137,20 @@ export default function CustomerLogin() {
         {error && <div style={styles.error}>{error}</div>}
 
         <button onClick={handleLogin} style={styles.button}>
-          Login
+          {loading ? "Please wait..." : "Login"}
         </button>
+
+        {/* Invisible Recaptcha */}
+        <div id="recaptcha-container"></div>
       </div>
     </div>
   );
 }
 
 /* ======================
-   STYLES (MOBILE-FIRST)
+   STYLES
 ====================== */
+
 const styles = {
   page: {
     minHeight: "100vh",
@@ -143,7 +161,6 @@ const styles = {
     padding: 16,
     position: "relative",
   },
-
   homeBtn: {
     position: "absolute",
     top: 20,
@@ -156,7 +173,6 @@ const styles = {
     fontWeight: 500,
     cursor: "pointer",
   },
-
   card: {
     width: "100%",
     maxWidth: 360,
@@ -166,25 +182,20 @@ const styles = {
     textAlign: "center",
     boxShadow: "0 16px 32px rgba(0, 0, 0, 0.1)",
   },
-
   logo: {
     height: 56,
-    width: "auto",
     marginBottom: 24,
   },
-
   title: {
     fontSize: 22,
     fontWeight: 600,
     marginBottom: 6,
   },
-
   subtitle: {
     fontSize: 14,
     color: "#6b7280",
     marginBottom: 20,
   },
-
   input: {
     width: "100%",
     height: 48,
@@ -192,15 +203,12 @@ const styles = {
     fontSize: 16,
     borderRadius: 10,
     border: "1px solid #d1d5db",
-    outline: "none",
   },
-
   error: {
     marginTop: 10,
     fontSize: 14,
     color: "#dc2626",
   },
-
   button: {
     width: "100%",
     height: 48,
@@ -212,6 +220,5 @@ const styles = {
     fontSize: 16,
     fontWeight: 600,
     cursor: "pointer",
-    boxShadow: "0 6px 14px rgba(37, 99, 235, 0.35)",
   },
 };
